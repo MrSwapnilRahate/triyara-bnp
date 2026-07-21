@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: triyara-bnp-postgres
+    environment:
+      POSTGRES_USER: triyara
+      POSTGRES_PASSWORD: triyara
+      POSTGRES_DB: triyara_bnp
+    ports:
+      - '5432:5432'
+    volumes:
+      - triyara_pg:/var/lib/postgresql/data
+
+volumes:
+  triyara_pg:

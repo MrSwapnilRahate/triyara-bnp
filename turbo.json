@@ -1,12 +1,13 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
-  "globalEnv": ["NODE_ENV", "LOG_LEVEL"],
+  "globalEnv": ["NODE_ENV", "LOG_LEVEL", "AUTH_SECRET", "AUTH_TRUST_HOST", "DATABASE_URL"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
+    "@triyara/db#build": { "cache": false },
     "dev": { "cache": false, "persistent": true },
     "start": { "dependsOn": ["build"], "cache": false, "persistent": true },
     "lint": {},

@@ -1,3 +1,5 @@
-// Data-access layer: Prisma client + repositories.
-// No schema yet (TRY-BNP-DB-01 defines the logical model; physical schema is a later phase).
-export {}
+export { prisma } from './client'
+export { organizationRepository } from './repositories/organization.repository'
+export { passwordResetRepository } from './repositories/password-reset.repository'
+export { userRepository, type UserWithRoles } from './repositories/user.repository'
+export type { Organization, Role, RoleName, User, UserRole, UserStatus } from '@prisma/client'

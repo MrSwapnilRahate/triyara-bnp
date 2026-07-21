@@ -1,2 +1,6 @@
-// Authentication (Auth.js) + RBAC (CASL) per TRY-BNP-TDR-01. Not implemented in the scaffold.
-export {}
+export { type Action, type AppAbility, buildAbilityFor, type Subject } from './abilities'
+export { assertAbility, assertRole, type AuthContext, resolveContext } from './guards'
+export { hashPassword, verifyPassword } from './password'
+export { createInMemoryRateLimiter, type RateLimiter } from './rate-limit'
+export { isRole, type Role, ROLES } from './roles'
+export { type AuthUser, type SessionLike } from './session'

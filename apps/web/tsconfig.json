@@ -11,6 +11,8 @@
     "moduleResolution": "Bundler",
     "allowJs": true,
     "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
     "composite": false,
     "paths": {
       "@/*": ["./src/*"]
