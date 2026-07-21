@@ -11,9 +11,18 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf .turbo dist"
+    "test": "vitest run",
+    "clean": "rm -rf .turbo dist coverage"
+  },
+  "dependencies": {
+    "@triyara/auth": "workspace:*",
+    "@triyara/db": "workspace:*",
+    "@triyara/events": "workspace:*",
+    "@triyara/lib": "workspace:*",
+    "@triyara/validation": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
   }
 }

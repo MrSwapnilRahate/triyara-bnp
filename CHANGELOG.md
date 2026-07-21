@@ -3,6 +3,34 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.2.0-account-aggregate] - 2026-07-21
+
+### Added
+
+- **Account aggregate** (TRY-BNP-ACCOUNT-01) — the canonical Partner entity every
+  future module extends:
+  - Prisma `Account` + `AuditLog` models and `RelationshipStatus` enum (Account only;
+    no Supplier/Buyer profiles, Contacts, Addresses, Documents or Verification).
+  - Repository with explicit selects, **cursor keyset pagination** (never offset),
+    versioned + audited **transactional** mutations, organization-scoped queries.
+  - Domain service (`@triyara/core`): create / read / list / update / soft-delete /
+    restore / assign / status / bulk — ability-checked, org-isolated, emitting
+    `account.*` events.
+  - Shared Zod DTOs (create/update/list/assign/status/bulk) with strict inference.
+  - API `/api/v1/accounts` (9 endpoints): standard envelope, **ETag / If-Match / 412**,
+    version increments, per-user write rate limiting.
+  - UI: accounts list, table, filters, create/edit/delete/restore dialogs, bulk toolbar,
+    cursor pagination, and loading / empty / error / success states.
+  - **AuditLog** row on every mutation (actor, org, before, after, requestId, timestamp).
+  - Tests: service unit (4) + guarded repository integration + Playwright e2e.
+
+### Notes
+
+- SupplierProfile / BuyerProfile / Contacts / Addresses / Documents / Verification
+  remain unimplemented (future modules attach to Account).
+- `country` is an ISO-3166 alpha-2 string for now (future FK to a Country table).
+- See `docs/09-decisions/ADR-0002-account-aggregate.md`.
+
 ## [0.1.0-auth-foundation] - 2026-07-21
 
 ### Added

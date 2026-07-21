@@ -1,6 +1,7 @@
-// Identity-only schema (TRY-BNP-AUTH-01). Business entities (Account, Supplier,
-// Buyer, Verification, Documents) are defined logically in TRY-BNP-DB-01 and land
-// in a later phase. This file intentionally contains ONLY identity + access.
+// Identity (TRY-BNP-AUTH-01) + Account aggregate (TRY-BNP-ACCOUNT-01).
+// Only entities implemented to date. Business sub-entities (Supplier/Buyer profiles,
+// Contacts, Addresses, Documents, Verification) are logical in TRY-BNP-DB-01 and land
+// with their own modules. Account is the aggregate root every future module extends.
 
 generator client {
   provider = "prisma-client-js"
@@ -25,6 +26,14 @@ enum RoleName {
   READ_ONLY
 }
 
+enum RelationshipStatus {
+  PROSPECT
+  ACTIVE
+  PREFERRED
+  DORMANT
+  BLACKLISTED
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -32,7 +41,8 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users User[]
+  users    User[]
+  accounts Account[]
 }
 
 model User {
@@ -46,9 +56,10 @@ model User {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  roles        UserRole[]
-  resetTokens  PasswordResetToken[]
+  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roles         UserRole[]
+  resetTokens   PasswordResetToken[]
+  ownedAccounts Account[]            @relation("AccountOwner")
 
   @@index([organizationId])
 }
@@ -82,4 +93,49 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// The canonical Partner record. Aggregate root (TRY-BNP-DB-01).
+model Account {
+  id                 String             @id @default(cuid())
+  organizationId     String
+  legalName          String
+  displayName        String?
+  country            String? // ISO 3166 alpha-2; future FK to a Country reference table
+  relationshipStatus RelationshipStatus @default(PROSPECT)
+  source             String?
+  ownerId            String?
+  createdById        String
+  updatedById        String
+  deletedById        String?
+  version            Int                @default(1)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  deletedAt          DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner        User?        @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, relationshipStatus])
+  @@index([organizationId, legalName])
+  @@index([organizationId, ownerId])
+  @@index([organizationId, createdAt])
+}
+
+// Immutable change log (TRY-BNP-DB-01). Written on every governed mutation.
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  entityType     String
+  entityId       String
+  actorId        String
+  action         String
+  before         Json?
+  after          Json?
+  requestId      String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, createdAt])
 }

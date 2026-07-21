@@ -1,6 +1,5 @@
 // Typed application error hierarchy. Every error maps to an HTTP status and a
-// stable machine code (see TRY-BNP-API-01 error format). The underlying cause is
-// carried via the native Error `cause` option, not a parameter property.
+// stable machine code (see TRY-BNP-API-01 error format).
 export class AppError extends Error {
   readonly code: string
   readonly httpStatus: number
@@ -40,5 +39,17 @@ export class ForbiddenError extends AppError {
 export class ConflictError extends AppError {
   constructor(message = 'Conflict') {
     super(message, 'CONFLICT', 409)
+  }
+}
+
+export class PreconditionFailedError extends AppError {
+  constructor(message = 'Precondition failed (stale version)') {
+    super(message, 'PRECONDITION_FAILED', 412)
+  }
+}
+
+export class PreconditionRequiredError extends AppError {
+  constructor(message = 'If-Match header required') {
+    super(message, 'PRECONDITION_REQUIRED', 428)
   }
 }
