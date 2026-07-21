@@ -2,6 +2,7 @@
 
 import type { AccountRecord } from '@triyara/db'
 import { RELATIONSHIP_STATUSES } from '@triyara/validation'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useActionState, useEffect, useState } from 'react'
 

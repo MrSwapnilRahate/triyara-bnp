@@ -34,6 +34,15 @@ enum RelationshipStatus {
   BLACKLISTED
 }
 
+enum ManufacturingType {
+  MANUFACTURER
+  PROCESSOR
+  TRADER
+  FARMER_PRODUCER
+  CONTRACT_MANUFACTURER
+  OTHER
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -113,8 +122,9 @@ model Account {
   updatedAt          DateTime           @updatedAt
   deletedAt          DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner        User?        @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner           User?            @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  supplierProfile SupplierProfile?
 
   @@index([organizationId, deletedAt])
   @@index([organizationId, relationshipStatus])
@@ -138,4 +148,71 @@ model AuditLog {
 
   @@index([organizationId, entityType, entityId])
   @@index([organizationId, createdAt])
+}
+
+// 1:1 extension of Account. Account owns identity; SupplierProfile owns supplier
+// capabilities (TRY-BNP-SUPPLIER-01 / TRY-BNP-EXT-01). accountId is unique -> exactly
+// one profile per account. Cannot exist without its Account (cascade).
+model SupplierProfile {
+  id             String @id @default(cuid())
+  accountId      String @unique
+  organizationId String
+
+  manufacturingType     ManufacturingType?
+  businessType          String?
+  factorySizeSqm        Int?
+  employees             Int?
+  productionCapacity    String?
+  annualTurnoverBand    String?
+  exportExperienceYears Int?
+
+  primaryMarkets     String[]
+  exportCountries    String[]
+  languages          String[]
+  incoterms          String[]
+  paymentTerms       String[]
+  supportedDocuments String[]
+  certifications     String[]
+
+  leadTimeDays Int?
+  moq          String?
+  packaging    String?
+
+  oem          Boolean @default(false)
+  odm          Boolean @default(false)
+  privateLabel Boolean @default(false)
+
+  website     String?
+  socialLinks Json?
+  description String?
+
+  version     Int       @default(1)
+  createdById String
+  updatedById String
+  deletedById String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  account  Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  products SupplierProduct[]
+
+  @@index([organizationId, deletedAt])
+}
+
+// Supplier x Product capability (EXT-01 capability-matrix seed). Product is a code/name
+// until a Product master table lands.
+model SupplierProduct {
+  id                String   @id @default(cuid())
+  supplierProfileId String
+  product           String
+  capacityPerMonth  String?
+  moq               String?
+  leadTimeDays      Int?
+  createdAt         DateTime @default(now())
+
+  supplierProfile SupplierProfile @relation(fields: [supplierProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierProfileId, product])
+  @@index([supplierProfileId])
 }

@@ -3,6 +3,37 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.3.0-supplier-profile] - 2026-07-21
+
+### Added
+
+- **SupplierProfile** (TRY-BNP-SUPPLIER-01) — a **1:1 extension of Account**; Account
+  owns identity, SupplierProfile owns supplier capabilities:
+  - Prisma `SupplierProfile` + `SupplierProduct` + `ManufacturingType` enum. The Account
+    model gains only a **column-less back-relation** (Prisma requirement); the Account
+    table is unchanged.
+  - Repository: explicit select, versioned + audited **transactional** mutations,
+    product-capability add/remove, org-scoped; one profile per account enforced.
+  - Service (`@triyara/core`): create / read / update / delete / restore + product
+    capabilities; CASL-checked, org-isolated; emits `supplier.created / updated /
+deleted / restored / capability_changed`.
+  - Shared Zod DTOs; API `/accounts/:id/supplier-profile` (+ `/restore`, `/products`,
+    `/products/:productId`) with **ETag / If-Match / 412** and version increments.
+  - UI: tabbed supplier profile (Overview / Capabilities / Markets / Documents /
+    Certifications / Settings) with create / edit / delete / restore, product
+    management, and loading / error / success states.
+  - **Audit** row + domain event on every mutation.
+  - Tests: service unit (5) + guarded repository integration + Playwright e2e.
+
+### Notes
+
+- The **Account aggregate is unchanged** — only a Prisma back-relation was added (no
+  column, no behaviour change).
+- BuyerProfile, Contacts, Addresses, Documents, Verification remain unimplemented.
+- `certifications`, `supportedDocuments`, `exportCountries` are string arrays for now
+  (future FKs to reference tables); `socialLinks` is JSON.
+- See `docs/09-decisions/ADR-0003-supplier-profile.md`.
+
 ## [0.2.0-account-aggregate] - 2026-07-21
 
 ### Added

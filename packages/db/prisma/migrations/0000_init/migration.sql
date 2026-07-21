@@ -10,6 +10,9 @@ CREATE TYPE "RoleName" AS ENUM ('ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONL
 -- CreateEnum
 CREATE TYPE "RelationshipStatus" AS ENUM ('PROSPECT', 'ACTIVE', 'PREFERRED', 'DORMANT', 'BLACKLISTED');
 
+-- CreateEnum
+CREATE TYPE "ManufacturingType" AS ENUM ('MANUFACTURER', 'PROCESSOR', 'TRADER', 'FARMER_PRODUCER', 'CONTRACT_MANUFACTURER', 'OTHER');
+
 -- CreateTable
 CREATE TABLE "Organization" (
     "id" TEXT NOT NULL,
@@ -102,6 +105,58 @@ CREATE TABLE "AuditLog" (
     CONSTRAINT "AuditLog_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "SupplierProfile" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "manufacturingType" "ManufacturingType",
+    "businessType" TEXT,
+    "factorySizeSqm" INTEGER,
+    "employees" INTEGER,
+    "productionCapacity" TEXT,
+    "annualTurnoverBand" TEXT,
+    "exportExperienceYears" INTEGER,
+    "primaryMarkets" TEXT[],
+    "exportCountries" TEXT[],
+    "languages" TEXT[],
+    "incoterms" TEXT[],
+    "paymentTerms" TEXT[],
+    "supportedDocuments" TEXT[],
+    "certifications" TEXT[],
+    "leadTimeDays" INTEGER,
+    "moq" TEXT,
+    "packaging" TEXT,
+    "oem" BOOLEAN NOT NULL DEFAULT false,
+    "odm" BOOLEAN NOT NULL DEFAULT false,
+    "privateLabel" BOOLEAN NOT NULL DEFAULT false,
+    "website" TEXT,
+    "socialLinks" JSONB,
+    "description" TEXT,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "createdById" TEXT NOT NULL,
+    "updatedById" TEXT NOT NULL,
+    "deletedById" TEXT,
+    "deletedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "SupplierProfile_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "SupplierProduct" (
+    "id" TEXT NOT NULL,
+    "supplierProfileId" TEXT NOT NULL,
+    "product" TEXT NOT NULL,
+    "capacityPerMonth" TEXT,
+    "moq" TEXT,
+    "leadTimeDays" INTEGER,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "SupplierProduct_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
 
@@ -141,6 +196,18 @@ CREATE INDEX "AuditLog_organizationId_entityType_entityId_idx" ON "AuditLog"("or
 -- CreateIndex
 CREATE INDEX "AuditLog_organizationId_createdAt_idx" ON "AuditLog"("organizationId", "createdAt");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "SupplierProfile_accountId_key" ON "SupplierProfile"("accountId");
+
+-- CreateIndex
+CREATE INDEX "SupplierProfile_organizationId_deletedAt_idx" ON "SupplierProfile"("organizationId", "deletedAt");
+
+-- CreateIndex
+CREATE INDEX "SupplierProduct_supplierProfileId_idx" ON "SupplierProduct"("supplierProfileId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SupplierProduct_supplierProfileId_product_key" ON "SupplierProduct"("supplierProfileId", "product");
+
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -158,4 +225,10 @@ ALTER TABLE "Account" ADD CONSTRAINT "Account_organizationId_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "Account" ADD CONSTRAINT "Account_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SupplierProfile" ADD CONSTRAINT "SupplierProfile_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SupplierProduct" ADD CONSTRAINT "SupplierProduct_supplierProfileId_fkey" FOREIGN KEY ("supplierProfileId") REFERENCES "SupplierProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
