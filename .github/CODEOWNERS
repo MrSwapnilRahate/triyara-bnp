@@ -1,0 +1,7 @@
+# Default owners for everything in the repo.
+*                   @triyara/platform
+
+/docs/              @triyara/tech-leads
+/packages/ui/       @triyara/design
+/packages/db/       @triyara/backend
+/.github/           @triyara/platform

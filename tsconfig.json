@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "noEmit": true },
+  "include": [],
+  "references": [
+    { "path": "apps/web" },
+    { "path": "packages/lib" },
+    { "path": "packages/validation" },
+    { "path": "packages/ui" },
+    { "path": "packages/core" },
+    { "path": "packages/events" },
+    { "path": "packages/db" },
+    { "path": "packages/auth" }
+  ]
+}

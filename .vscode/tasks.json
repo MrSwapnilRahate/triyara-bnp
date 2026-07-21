@@ -1,0 +1,9 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "dev", "type": "shell", "command": "pnpm dev", "problemMatcher": [] },
+    { "label": "lint", "type": "shell", "command": "pnpm lint", "problemMatcher": [] },
+    { "label": "typecheck", "type": "shell", "command": "pnpm typecheck", "problemMatcher": [] },
+    { "label": "test", "type": "shell", "command": "pnpm test", "problemMatcher": [] }
+  ]
+}

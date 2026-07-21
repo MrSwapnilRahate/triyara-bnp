@@ -1,0 +1,17 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+# Preview deploys run per-PR via the Vercel Git integration.
+# Production deploys on merge to main. Configure secrets:
+#   VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+jobs:
+  production:
+    name: Production deploy
+    runs-on: ubuntu-latest
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Vercel production deploy runs here once secrets are configured."
