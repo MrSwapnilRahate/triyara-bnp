@@ -3,6 +3,48 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.4.0-documents] - 2026-07-21
+
+### Added
+
+- **Document Management module** (TRY-BNP-DOCUMENT-01) - the foundation for
+  verification, compliance and trust:
+  - **Storage abstraction** (`@triyara/storage`): a `StorageProvider` interface with a
+    **Local** provider (HMAC-signed URLs, zero-config, fully browser-demonstrable) and an
+    **S3-compatible** adapter serving both **AWS S3 and Cloudflare R2** (presigned). No
+    provider-specific logic ever enters services.
+  - **Presigned upload flow**: presign &rarr; PUT to storage &rarr; confirm &rarr; create
+    record; size + sha256 checksum read from storage; mime/size validation; duplicate
+    detection by checksum per account + type.
+  - **Versioning**: every replacement adds an immutable `DocumentVersion` with its own
+    storage key - binaries are never overwritten; history is preserved.
+  - Prisma `Document` + `DocumentVersion` + `DocumentType` / `DocumentStatus`; owners
+    referenced by **plain ID** so Account and SupplierProfile are **untouched**.
+  - Repository: explicit selects, versioned + audited transactional mutations, cursor
+    list with filters (type / status / expiry / search / account), `markExpired`.
+  - Service (`@triyara/core`): CRUD + restore + replace-version + download/preview URLs;
+    CASL-checked, org-isolated, storage-key org-scoped; emits `document.uploaded /
+updated / deleted / restored / version_created / expired`.
+  - API: `presign`, `POST/GET /documents`, `GET/PATCH/DELETE /documents/:id`,
+    `/restore`, `/version`, `/download` + token-authed local `storage/upload|download`;
+    ETag / If-Match / 412.
+  - UI: **Documents page** - upload dialog (full presign flow), table, filters, preview,
+    download, replace-version, delete, restore, pagination, and loading/empty/error/success.
+  - Audit row + domain event on every mutation.
+  - Tests: storage unit (3) + service unit (6) + guarded repository integration + a real
+    upload e2e.
+
+### Notes
+
+- **Account and SupplierProfile are unchanged** - documents reference them by ID (no
+  Prisma relations, no back-relations).
+- **DocumentAudit** is realized via the central `AuditLog` (`entityType = 'Document'`)
+  per DB-01 - the audit mechanism is not duplicated per entity.
+- Default storage is **Local** (no cloud creds needed); set `STORAGE_PROVIDER=s3|r2` +
+  credentials for cloud.
+- `document.expired` is emitted by `service.markExpired`; wire it to a scheduler later.
+- See `docs/09-decisions/ADR-0004-document-management.md`.
+
 ## [0.3.0-supplier-profile] - 2026-07-21
 
 ### Added

@@ -24,7 +24,8 @@
     "react-dom": "^19.0.0",
     "zod": "^3.24.1",
     "@triyara/core": "workspace:*",
-    "@triyara/events": "workspace:*"
+    "@triyara/events": "workspace:*",
+    "@triyara/storage": "workspace:*"
   },
   "devDependencies": {
     "@triyara/config": "workspace:*",

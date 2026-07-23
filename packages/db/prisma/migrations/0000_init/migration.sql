@@ -13,6 +13,12 @@ CREATE TYPE "RelationshipStatus" AS ENUM ('PROSPECT', 'ACTIVE', 'PREFERRED', 'DO
 -- CreateEnum
 CREATE TYPE "ManufacturingType" AS ENUM ('MANUFACTURER', 'PROCESSOR', 'TRADER', 'FARMER_PRODUCER', 'CONTRACT_MANUFACTURER', 'OTHER');
 
+-- CreateEnum
+CREATE TYPE "DocumentType" AS ENUM ('GST', 'IEC', 'FSSAI', 'APEDA', 'ISO', 'HACCP', 'BRC', 'FACTORY_LICENSE', 'COMPANY_REGISTRATION', 'IMPORT_EXPORT_LICENSE', 'PAN', 'MSME', 'PRODUCT_CATALOGUE', 'COMPANY_PROFILE', 'OTHER');
+
+-- CreateEnum
+CREATE TYPE "DocumentStatus" AS ENUM ('PENDING', 'RECEIVED', 'VERIFIED', 'EXPIRED', 'REJECTED');
+
 -- CreateTable
 CREATE TABLE "Organization" (
     "id" TEXT NOT NULL,
@@ -157,6 +163,50 @@ CREATE TABLE "SupplierProduct" (
     CONSTRAINT "SupplierProduct_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Document" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "supplierProfileId" TEXT,
+    "type" "DocumentType" NOT NULL,
+    "status" "DocumentStatus" NOT NULL DEFAULT 'PENDING',
+    "title" TEXT NOT NULL,
+    "issuedDate" TIMESTAMP(3),
+    "expiryDate" TIMESTAMP(3),
+    "currentFileVersion" INTEGER NOT NULL DEFAULT 1,
+    "currentStorageKey" TEXT NOT NULL,
+    "currentMimeType" TEXT NOT NULL,
+    "currentOriginalFilename" TEXT NOT NULL,
+    "currentFileSize" INTEGER NOT NULL,
+    "currentChecksum" TEXT NOT NULL,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "createdById" TEXT NOT NULL,
+    "updatedById" TEXT NOT NULL,
+    "deletedById" TEXT,
+    "deletedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Document_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "DocumentVersion" (
+    "id" TEXT NOT NULL,
+    "documentId" TEXT NOT NULL,
+    "versionNumber" INTEGER NOT NULL,
+    "storageKey" TEXT NOT NULL,
+    "mimeType" TEXT NOT NULL,
+    "originalFilename" TEXT NOT NULL,
+    "fileSize" INTEGER NOT NULL,
+    "checksum" TEXT NOT NULL,
+    "uploadedById" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "DocumentVersion_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
 
@@ -208,6 +258,30 @@ CREATE INDEX "SupplierProduct_supplierProfileId_idx" ON "SupplierProduct"("suppl
 -- CreateIndex
 CREATE UNIQUE INDEX "SupplierProduct_supplierProfileId_product_key" ON "SupplierProduct"("supplierProfileId", "product");
 
+-- CreateIndex
+CREATE INDEX "Document_organizationId_accountId_deletedAt_idx" ON "Document"("organizationId", "accountId", "deletedAt");
+
+-- CreateIndex
+CREATE INDEX "Document_organizationId_supplierProfileId_idx" ON "Document"("organizationId", "supplierProfileId");
+
+-- CreateIndex
+CREATE INDEX "Document_organizationId_type_idx" ON "Document"("organizationId", "type");
+
+-- CreateIndex
+CREATE INDEX "Document_organizationId_status_idx" ON "Document"("organizationId", "status");
+
+-- CreateIndex
+CREATE INDEX "Document_organizationId_expiryDate_idx" ON "Document"("organizationId", "expiryDate");
+
+-- CreateIndex
+CREATE INDEX "Document_organizationId_currentChecksum_idx" ON "Document"("organizationId", "currentChecksum");
+
+-- CreateIndex
+CREATE INDEX "DocumentVersion_documentId_idx" ON "DocumentVersion"("documentId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DocumentVersion_documentId_versionNumber_key" ON "DocumentVersion"("documentId", "versionNumber");
+
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -231,4 +305,7 @@ ALTER TABLE "SupplierProfile" ADD CONSTRAINT "SupplierProfile_accountId_fkey" FO
 
 -- AddForeignKey
 ALTER TABLE "SupplierProduct" ADD CONSTRAINT "SupplierProduct_supplierProfileId_fkey" FOREIGN KEY ("supplierProfileId") REFERENCES "SupplierProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DocumentVersion" ADD CONSTRAINT "DocumentVersion_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

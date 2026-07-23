@@ -23,3 +23,6 @@ test-results/
 .DS_Store
 *.log
 .vercel
+
+# local file storage
+.storage/

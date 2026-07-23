@@ -216,3 +216,92 @@ model SupplierProduct {
   @@unique([supplierProfileId, product])
   @@index([supplierProfileId])
 }
+
+enum DocumentType {
+  GST
+  IEC
+  FSSAI
+  APEDA
+  ISO
+  HACCP
+  BRC
+  FACTORY_LICENSE
+  COMPANY_REGISTRATION
+  IMPORT_EXPORT_LICENSE
+  PAN
+  MSME
+  PRODUCT_CATALOGUE
+  COMPANY_PROFILE
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  RECEIVED
+  VERIFIED
+  EXPIRED
+  REJECTED
+}
+
+// Document attached to an Account (and optionally a SupplierProfile). Owners are
+// referenced by plain ID (no Prisma relation) so the FROZEN Account/SupplierProfile
+// models are not modified at all; referential integrity + org isolation are enforced
+// in the service layer. Binary files are never overwritten - each replacement adds a
+// DocumentVersion; current-file metadata is denormalized here for list/detail (no N+1).
+model Document {
+  id                String  @id @default(cuid())
+  organizationId    String
+  accountId         String
+  supplierProfileId String?
+
+  type   DocumentType
+  status DocumentStatus @default(PENDING)
+  title  String
+
+  issuedDate DateTime?
+  expiryDate DateTime?
+
+  currentFileVersion      Int    @default(1)
+  currentStorageKey       String
+  currentMimeType         String
+  currentOriginalFilename String
+  currentFileSize         Int
+  currentChecksum         String
+
+  version     Int       @default(1)
+  createdById String
+  updatedById String
+  deletedById String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  versions DocumentVersion[]
+
+  @@index([organizationId, accountId, deletedAt])
+  @@index([organizationId, supplierProfileId])
+  @@index([organizationId, type])
+  @@index([organizationId, status])
+  @@index([organizationId, expiryDate])
+  @@index([organizationId, currentChecksum])
+}
+
+// Immutable file-revision history. Every replacement creates a new row with its own
+// storageKey; prior binaries are preserved.
+model DocumentVersion {
+  id               String   @id @default(cuid())
+  documentId       String
+  versionNumber    Int
+  storageKey       String
+  mimeType         String
+  originalFilename String
+  fileSize         Int
+  checksum         String
+  uploadedById     String
+  createdAt        DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId])
+}

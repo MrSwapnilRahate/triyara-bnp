@@ -11,6 +11,16 @@ export {
   type MutateData,
   type MutationCtx,
 } from './repositories/account.repository'
+export {
+  type CreateDocumentInput,
+  type DocumentListItem,
+  type DocumentRecord,
+  type DocumentRepository,
+  documentRepository,
+  type ListDocumentsParams,
+  type NewVersionInput,
+  type UpdateDocumentInput,
+} from './repositories/document.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
 export {
@@ -23,6 +33,8 @@ export {
 export { userRepository, type UserWithRoles } from './repositories/user.repository'
 export type {
   Account,
+  DocumentStatus,
+  DocumentType,
   ManufacturingType,
   Organization,
   RelationshipStatus,

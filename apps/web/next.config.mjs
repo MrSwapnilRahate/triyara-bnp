@@ -9,6 +9,7 @@ const nextConfig = {
     '@triyara/events',
     '@triyara/auth',
     '@triyara/db',
+    '@triyara/storage',
   ],
   serverExternalPackages: ['@prisma/client', 'bcryptjs'],
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@triyara/core",
+  "name": "@triyara/storage",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,15 +15,12 @@
     "clean": "rm -rf .turbo dist coverage"
   },
   "dependencies": {
-    "@triyara/auth": "workspace:*",
-    "@triyara/db": "workspace:*",
-    "@triyara/events": "workspace:*",
-    "@triyara/lib": "workspace:*",
-    "@triyara/validation": "workspace:*",
-    "@triyara/storage": "workspace:*"
+    "@aws-sdk/client-s3": "^3.717.0",
+    "@aws-sdk/s3-request-presigner": "^3.717.0"
   },
   "devDependencies": {
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "@types/node": "^22.10.5"
   }
 }
