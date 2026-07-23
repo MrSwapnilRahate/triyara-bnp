@@ -17,3 +17,10 @@ export {
   type SupplierServiceCtx,
   type SupplierServiceDeps,
 } from './supplier/supplier.service'
+export {
+  createVerificationService,
+  type ReviewerLookup,
+  type VerificationService,
+  type VerificationServiceCtx,
+  type VerificationServiceDeps,
+} from './verification/verification.service'

@@ -305,3 +305,104 @@ model DocumentVersion {
   @@unique([documentId, versionNumber])
   @@index([documentId])
 }
+
+enum VerificationStatus {
+  DRAFT
+  PENDING_REVIEW
+  DOCUMENTS_REQUESTED
+  IN_REVIEW
+  VERIFIED
+  REJECTED
+  SUSPENDED
+  EXPIRED
+}
+
+enum VerificationDecision {
+  APPROVED
+  REJECTED
+}
+
+enum VerificationItemStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// A supplier verification attempt. Consumes SupplierProfile + Documents by ID ONLY -
+// it never stores files and holds no Prisma relations to the frozen Account / User /
+// SupplierProfile / Document models (all references are plain IDs). One supplier may
+// have many attempts; only one may be "active" (enforced in the service).
+model Verification {
+  id                    String                @id @default(cuid())
+  organizationId        String
+  accountId             String
+  supplierProfileId     String?
+  status                VerificationStatus    @default(DRAFT)
+  decision              VerificationDecision?
+  reason                String?
+  reviewerId            String?
+  requiredDocumentTypes String[]
+  submittedAt           DateTime?
+  decidedAt             DateTime?
+  expiresAt             DateTime?
+  version               Int                   @default(1)
+  createdById           String
+  updatedById           String
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  reviews VerificationReview[]
+  notes   VerificationNote[]
+  history VerificationHistory[]
+
+  @@index([organizationId, accountId])
+  @@index([organizationId, status])
+  @@index([organizationId, reviewerId])
+}
+
+// Per-document checklist item. References a Document by ID; documentType is denormalized
+// for the required-documents checklist. No relation to the frozen Document model.
+model VerificationReview {
+  id             String                 @id @default(cuid())
+  verificationId String
+  documentId     String
+  documentType   String
+  status         VerificationItemStatus @default(PENDING)
+  note           String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime               @default(now())
+
+  verification Verification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+
+  @@unique([verificationId, documentId])
+  @@index([verificationId])
+}
+
+model VerificationNote {
+  id             String   @id @default(cuid())
+  verificationId String
+  authorId       String
+  body           String
+  createdAt      DateTime @default(now())
+
+  verification Verification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+
+  @@index([verificationId])
+}
+
+// Immutable state-transition / decision history (never edited or deleted).
+model VerificationHistory {
+  id             String              @id @default(cuid())
+  verificationId String
+  fromStatus     VerificationStatus?
+  toStatus       VerificationStatus
+  action         String
+  actorId        String
+  reason         String?
+  createdAt      DateTime            @default(now())
+
+  verification Verification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+
+  @@index([verificationId])
+}

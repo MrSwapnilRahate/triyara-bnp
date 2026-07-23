@@ -3,6 +3,45 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.5.0-verification] - 2026-07-21
+
+### Added
+
+- **Supplier Verification workflow** (TRY-BNP-VERIFICATION-01) - a guarded state machine
+  over the frozen SupplierProfile + Documents modules:
+  - Prisma `Verification` + `VerificationReview` (per-document checklist) +
+    `VerificationNote` + `VerificationHistory` (immutable) + enums. All references to
+    Account / SupplierProfile / Document / User are **plain IDs** (no relations) - the
+    frozen modules are untouched.
+  - **8 states** (Draft, Pending Review, Documents Requested, In Review, Verified,
+    Rejected, Suspended, Expired) with guarded transitions: submit, assign, request
+    documents, approve, reject, suspend, reopen, expire.
+  - **Consumes documents by reference only** - verification never stores files; the
+    checklist references `documentId`, and approval validates required types + document
+    ownership + expiry against the Documents module.
+  - Business rules: one active verification per supplier; reviewer must be Verifier/Admin;
+    approval requires every required document type to have an accepted, unexpired document.
+  - Repository: explicit selects, versioned + audited transitions that also write the
+    immutable history, checklist reviews, notes, cursor list, `markExpired`.
+  - Service (`@triyara/core`): the full state machine; CASL-checked (only Verifier/Admin
+    approve), org-isolated; emits all nine `verification.*` events.
+  - API: create / list / get / patch / submit / request-documents / assign / approve /
+    reject / suspend / reopen / history / notes / review-document; ETag / If-Match / 412.
+  - UI: **Verification Queue** + **Verification Details** - supplier summary, required-docs
+    checklist with accept/reject, review notes, status history timeline, and approve /
+    reject / request-documents / assign / suspend dialogs; loading / empty / error / success.
+  - Audit row + immutable history entry on every transition.
+  - Tests: state-machine service unit (7) + guarded repository integration + a full
+    workflow e2e (create -> accept document -> approve).
+
+### Notes
+
+- Account, SupplierProfile, Documents and Authentication are unchanged.
+- Per the frozen AUTH-01 ability matrix, creating a verification requires the `create`
+  ability on `Verification` (Admin); Verifier/Admin drive the review + decisions.
+- `verification.expired` is emitted by `service.markExpired` (wire to a scheduler later).
+- See `docs/09-decisions/ADR-0005-verification-workflow.md`.
+
 ## [0.4.0-documents] - 2026-07-21
 
 ### Added

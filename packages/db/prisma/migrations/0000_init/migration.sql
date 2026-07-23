@@ -19,6 +19,15 @@ CREATE TYPE "DocumentType" AS ENUM ('GST', 'IEC', 'FSSAI', 'APEDA', 'ISO', 'HACC
 -- CreateEnum
 CREATE TYPE "DocumentStatus" AS ENUM ('PENDING', 'RECEIVED', 'VERIFIED', 'EXPIRED', 'REJECTED');
 
+-- CreateEnum
+CREATE TYPE "VerificationStatus" AS ENUM ('DRAFT', 'PENDING_REVIEW', 'DOCUMENTS_REQUESTED', 'IN_REVIEW', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'EXPIRED');
+
+-- CreateEnum
+CREATE TYPE "VerificationDecision" AS ENUM ('APPROVED', 'REJECTED');
+
+-- CreateEnum
+CREATE TYPE "VerificationItemStatus" AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
+
 -- CreateTable
 CREATE TABLE "Organization" (
     "id" TEXT NOT NULL,
@@ -207,6 +216,69 @@ CREATE TABLE "DocumentVersion" (
     CONSTRAINT "DocumentVersion_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Verification" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "supplierProfileId" TEXT,
+    "status" "VerificationStatus" NOT NULL DEFAULT 'DRAFT',
+    "decision" "VerificationDecision",
+    "reason" TEXT,
+    "reviewerId" TEXT,
+    "requiredDocumentTypes" TEXT[],
+    "submittedAt" TIMESTAMP(3),
+    "decidedAt" TIMESTAMP(3),
+    "expiresAt" TIMESTAMP(3),
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "createdById" TEXT NOT NULL,
+    "updatedById" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Verification_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "VerificationReview" (
+    "id" TEXT NOT NULL,
+    "verificationId" TEXT NOT NULL,
+    "documentId" TEXT NOT NULL,
+    "documentType" TEXT NOT NULL,
+    "status" "VerificationItemStatus" NOT NULL DEFAULT 'PENDING',
+    "note" TEXT,
+    "reviewedById" TEXT,
+    "reviewedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "VerificationReview_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "VerificationNote" (
+    "id" TEXT NOT NULL,
+    "verificationId" TEXT NOT NULL,
+    "authorId" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "VerificationNote_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "VerificationHistory" (
+    "id" TEXT NOT NULL,
+    "verificationId" TEXT NOT NULL,
+    "fromStatus" "VerificationStatus",
+    "toStatus" "VerificationStatus" NOT NULL,
+    "action" TEXT NOT NULL,
+    "actorId" TEXT NOT NULL,
+    "reason" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "VerificationHistory_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
 
@@ -282,6 +354,27 @@ CREATE INDEX "DocumentVersion_documentId_idx" ON "DocumentVersion"("documentId")
 -- CreateIndex
 CREATE UNIQUE INDEX "DocumentVersion_documentId_versionNumber_key" ON "DocumentVersion"("documentId", "versionNumber");
 
+-- CreateIndex
+CREATE INDEX "Verification_organizationId_accountId_idx" ON "Verification"("organizationId", "accountId");
+
+-- CreateIndex
+CREATE INDEX "Verification_organizationId_status_idx" ON "Verification"("organizationId", "status");
+
+-- CreateIndex
+CREATE INDEX "Verification_organizationId_reviewerId_idx" ON "Verification"("organizationId", "reviewerId");
+
+-- CreateIndex
+CREATE INDEX "VerificationReview_verificationId_idx" ON "VerificationReview"("verificationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "VerificationReview_verificationId_documentId_key" ON "VerificationReview"("verificationId", "documentId");
+
+-- CreateIndex
+CREATE INDEX "VerificationNote_verificationId_idx" ON "VerificationNote"("verificationId");
+
+-- CreateIndex
+CREATE INDEX "VerificationHistory_verificationId_idx" ON "VerificationHistory"("verificationId");
+
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -308,4 +401,13 @@ ALTER TABLE "SupplierProduct" ADD CONSTRAINT "SupplierProduct_supplierProfileId_
 
 -- AddForeignKey
 ALTER TABLE "DocumentVersion" ADD CONSTRAINT "DocumentVersion_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VerificationReview" ADD CONSTRAINT "VerificationReview_verificationId_fkey" FOREIGN KEY ("verificationId") REFERENCES "Verification"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VerificationNote" ADD CONSTRAINT "VerificationNote_verificationId_fkey" FOREIGN KEY ("verificationId") REFERENCES "Verification"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "VerificationHistory" ADD CONSTRAINT "VerificationHistory_verificationId_fkey" FOREIGN KEY ("verificationId") REFERENCES "Verification"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

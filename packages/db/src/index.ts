@@ -23,6 +23,7 @@ export {
 } from './repositories/document.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
+export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
 export {
   type AddProductData,
   type SupplierProfileData,
@@ -31,6 +32,18 @@ export {
   supplierProfileRepository,
 } from './repositories/supplier-profile.repository'
 export { userRepository, type UserWithRoles } from './repositories/user.repository'
+export {
+  type CreateVerificationInput,
+  type HistoryEntry,
+  type ListVerificationsParams,
+  type ReviewDocumentInput,
+  type VerificationHistoryItem,
+  type VerificationListItem,
+  type VerificationPatch,
+  type VerificationRecord,
+  type VerificationRepository,
+  verificationRepository,
+} from './repositories/verification.repository'
 export type {
   Account,
   DocumentStatus,
@@ -43,4 +56,7 @@ export type {
   User,
   UserRole,
   UserStatus,
+  VerificationDecision,
+  VerificationItemStatus,
+  VerificationStatus,
 } from '@prisma/client'
