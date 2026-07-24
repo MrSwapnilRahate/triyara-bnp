@@ -19,6 +19,13 @@ export {
   type NewActivity,
 } from './repositories/activity.repository'
 export {
+  type AddBuyerProductData,
+  type BuyerProfileData,
+  type BuyerProfileRecord,
+  type BuyerProfileRepository,
+  buyerProfileRepository,
+} from './repositories/buyer-profile.repository'
+export {
   type CreateDocumentInput,
   type DocumentListItem,
   type DocumentRecord,
@@ -71,8 +78,10 @@ export {
 export type {
   Account,
   ActivityType,
+  BuyerType,
   DocumentStatus,
   DocumentType,
+  ImportExperience,
   ManufacturingType,
   NotificationChannel,
   NotificationPriority,

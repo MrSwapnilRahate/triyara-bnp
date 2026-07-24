@@ -12,6 +12,12 @@ export {
   createActivityService,
 } from './activity/activity.service'
 export {
+  type BuyerService,
+  type BuyerServiceCtx,
+  type BuyerServiceDeps,
+  createBuyerService,
+} from './buyer/buyer.service'
+export {
   createDocumentService,
   type DocumentService,
   type DocumentServiceCtx,

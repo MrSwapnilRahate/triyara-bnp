@@ -125,6 +125,7 @@ model Account {
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner           User?            @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   supplierProfile SupplierProfile?
+  buyerProfile    BuyerProfile?
 
   @@index([organizationId, deletedAt])
   @@index([organizationId, relationshipStatus])
@@ -549,4 +550,75 @@ model NotificationPreference {
 
   @@unique([userId, type])
   @@index([organizationId, userId])
+}
+
+enum BuyerType {
+  IMPORTER
+  DISTRIBUTOR
+  WHOLESALER
+  RETAILER
+  FOOD_PROCESSOR
+  TRADER
+  BRAND
+  HORECA
+  OTHER
+}
+
+enum ImportExperience {
+  NEW
+  YEARS_1_3
+  YEARS_3_PLUS
+}
+
+// 1:1 buyer extension of Account. Account owns identity; BuyerProfile owns buyer demand.
+// Account is FROZEN, so accountId is a plain unique reference (no Prisma relation / no
+// back-relation on Account); the 1:1 is enforced by the unique key + the service.
+model BuyerProfile {
+  id             String @id @default(cuid())
+  accountId      String @unique
+  organizationId String
+
+  businessType           BuyerType?
+  annualRequirement      String?
+  annualBudgetBand       String?
+  importExperience       ImportExperience?
+  destinationCountries   String[]
+  destinationPort        String?
+  incoterms              String[]
+  paymentTerms           String[]
+  certificationsRequired String[]
+  languages              String[]
+
+  website     String?
+  socialLinks Json?
+  description String?
+
+  version     Int       @default(1)
+  createdById String
+  updatedById String
+  deletedById String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  account  Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  products BuyerProduct[]
+
+  @@index([organizationId, deletedAt])
+}
+
+// A product the buyer wants to source (demand seed for EXT-01 intent modelling).
+model BuyerProduct {
+  id             String   @id @default(cuid())
+  buyerProfileId String
+  product        String
+  targetVolume   String?
+  targetPrice    String?
+  frequency      String?
+  createdAt      DateTime @default(now())
+
+  buyerProfile BuyerProfile @relation(fields: [buyerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([buyerProfileId, product])
+  @@index([buyerProfileId])
 }

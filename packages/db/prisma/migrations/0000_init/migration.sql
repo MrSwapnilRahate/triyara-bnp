@@ -43,6 +43,12 @@ CREATE TYPE "NotificationStatus" AS ENUM ('QUEUED', 'SENT', 'DELIVERED', 'FAILED
 -- CreateEnum
 CREATE TYPE "NotificationPriority" AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT');
 
+-- CreateEnum
+CREATE TYPE "BuyerType" AS ENUM ('IMPORTER', 'DISTRIBUTOR', 'WHOLESALER', 'RETAILER', 'FOOD_PROCESSOR', 'TRADER', 'BRAND', 'HORECA', 'OTHER');
+
+-- CreateEnum
+CREATE TYPE "ImportExperience" AS ENUM ('NEW', 'YEARS_1_3', 'YEARS_3_PLUS');
+
 -- CreateTable
 CREATE TABLE "Organization" (
     "id" TEXT NOT NULL,
@@ -373,6 +379,48 @@ CREATE TABLE "NotificationPreference" (
     CONSTRAINT "NotificationPreference_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "BuyerProfile" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "businessType" "BuyerType",
+    "annualRequirement" TEXT,
+    "annualBudgetBand" TEXT,
+    "importExperience" "ImportExperience",
+    "destinationCountries" TEXT[],
+    "destinationPort" TEXT,
+    "incoterms" TEXT[],
+    "paymentTerms" TEXT[],
+    "certificationsRequired" TEXT[],
+    "languages" TEXT[],
+    "website" TEXT,
+    "socialLinks" JSONB,
+    "description" TEXT,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "createdById" TEXT NOT NULL,
+    "updatedById" TEXT NOT NULL,
+    "deletedById" TEXT,
+    "deletedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "BuyerProfile_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "BuyerProduct" (
+    "id" TEXT NOT NULL,
+    "buyerProfileId" TEXT NOT NULL,
+    "product" TEXT NOT NULL,
+    "targetVolume" TEXT,
+    "targetPrice" TEXT,
+    "frequency" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "BuyerProduct_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
 
@@ -508,6 +556,18 @@ CREATE INDEX "NotificationPreference_organizationId_userId_idx" ON "Notification
 -- CreateIndex
 CREATE UNIQUE INDEX "NotificationPreference_userId_type_key" ON "NotificationPreference"("userId", "type");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "BuyerProfile_accountId_key" ON "BuyerProfile"("accountId");
+
+-- CreateIndex
+CREATE INDEX "BuyerProfile_organizationId_deletedAt_idx" ON "BuyerProfile"("organizationId", "deletedAt");
+
+-- CreateIndex
+CREATE INDEX "BuyerProduct_buyerProfileId_idx" ON "BuyerProduct"("buyerProfileId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "BuyerProduct_buyerProfileId_product_key" ON "BuyerProduct"("buyerProfileId", "product");
+
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -549,4 +609,10 @@ ALTER TABLE "NotificationRecipient" ADD CONSTRAINT "NotificationRecipient_notifi
 
 -- AddForeignKey
 ALTER TABLE "NotificationDelivery" ADD CONSTRAINT "NotificationDelivery_recipientRowId_fkey" FOREIGN KEY ("recipientRowId") REFERENCES "NotificationRecipient"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "BuyerProfile" ADD CONSTRAINT "BuyerProfile_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "BuyerProduct" ADD CONSTRAINT "BuyerProduct_buyerProfileId_fkey" FOREIGN KEY ("buyerProfileId") REFERENCES "BuyerProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

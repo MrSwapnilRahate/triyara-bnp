@@ -3,6 +3,34 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.8.0-buyer-profile] - 2026-07-21
+
+### Added
+
+- **BuyerProfile** (TRY-BNP-BUYER-01) - a **1:1 buyer extension of Account**, mirroring the
+  frozen SupplierProfile:
+  - Prisma `BuyerProfile` + `BuyerProduct` + `BuyerType` / `ImportExperience` enums.
+  - 1:1 via a unique `accountId` with a **Prisma relation + a column-less back-relation on
+    Account** - identical to SupplierProfile. The Account **table is unchanged** (the
+    back-relation adds no column); the foreign key lives on the new `BuyerProfile` table.
+  - Repository: explicit selects, versioned + audited transactional mutations, product
+    (products-of-interest) add/remove.
+  - Service (`@triyara/core`): create / read / update / delete / restore + products;
+    CASL-checked (`BuyerProfile` subject), org-isolated; emits `buyer.created / updated /
+deleted / restored / capability_changed`.
+  - Shared Zod DTOs; API `/accounts/:id/buyer-profile` (+ `/restore`, `/products`,
+    `/products/:productId`) with the standard envelope and **ETag / If-Match / 412**.
+  - UI: tabbed buyer profile (Overview / Products / Markets / Certifications / Settings)
+    with create / edit / delete / restore, product management, and all states.
+  - Audit row + domain event on every mutation; `buyer.*` events are **auto-ingested by
+    Activity and Notifications** (their generic mappers handle the new family).
+  - Tests: service unit (5) + guarded repository integration + e2e.
+
+### Notes
+
+- Account, SupplierProfile, Documents, Verification, Activity, Notifications and
+  Authentication are unchanged.
+
 ## [0.7.0-notifications] - 2026-07-21
 
 ### Added
