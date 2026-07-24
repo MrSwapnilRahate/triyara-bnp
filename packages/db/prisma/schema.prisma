@@ -622,3 +622,192 @@ model BuyerProduct {
   @@unique([buyerProfileId, product])
   @@index([buyerProfileId])
 }
+
+// ==========================================================================
+// PRODUCT CATALOG (TRY-BNP-PRODUCT-01) - central master data
+// ==========================================================================
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum AttributeDataType {
+  STRING
+  NUMBER
+  BOOLEAN
+}
+
+enum ProductLinkSource {
+  SUPPLIER_PRODUCT
+  BUYER_PRODUCT
+}
+
+model ProductCategory {
+  id             String    @id @default(cuid())
+  organizationId String
+  parentId       String?
+  name           String
+  slug           String
+  displayOrder   Int       @default(0)
+  isActive       Boolean   @default(true)
+  version        Int       @default(1)
+  createdById    String
+  updatedById    String
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  parent   ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children ProductCategory[] @relation("CategoryTree")
+  products Product[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, parentId])
+  @@index([organizationId, deletedAt])
+}
+
+model HSCode {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  code               String
+  description        String
+  countryVariant     String?
+  exportRestrictions Json?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  products Product[]
+
+  @@index([organizationId, code])
+}
+
+model UnitOfMeasure {
+  id             String  @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  isActive       Boolean @default(true)
+
+  products Product[]
+
+  @@unique([organizationId, code])
+}
+
+model PackagingType {
+  id             String  @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  isActive       Boolean @default(true)
+
+  productPackaging ProductPackaging[]
+
+  @@unique([organizationId, code])
+}
+
+model OriginCountry {
+  id             String  @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  isActive       Boolean @default(true)
+
+  products Product[]
+
+  @@unique([organizationId, code])
+}
+
+model ProductAttribute {
+  id             String            @id @default(cuid())
+  organizationId String
+  key            String
+  label          String
+  dataType       AttributeDataType @default(STRING)
+  unit           String?
+  isActive       Boolean           @default(true)
+
+  values ProductAttributeValue[]
+
+  @@unique([organizationId, key])
+}
+
+model ProductAttributeValue {
+  id          String @id @default(cuid())
+  productId   String
+  attributeId String
+  value       String
+
+  product   Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attribute ProductAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, attributeId])
+  @@index([productId])
+}
+
+model Product {
+  id               String        @id @default(cuid())
+  organizationId   String
+  sku              String
+  slug             String
+  name             String
+  shortDescription String?
+  description      String?
+  categoryId       String?
+  hsCodeId         String?
+  originCountryId  String?
+  defaultUnitId    String?
+  status           ProductStatus @default(DRAFT)
+  isActive         Boolean       @default(true)
+  version          Int           @default(1)
+  createdById      String
+  updatedById      String
+  deletedById      String?
+  deletedAt        DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  category      ProductCategory? @relation(fields: [categoryId], references: [id])
+  hsCode        HSCode?          @relation(fields: [hsCodeId], references: [id])
+  originCountry OriginCountry?   @relation(fields: [originCountryId], references: [id])
+  defaultUnit   UnitOfMeasure?   @relation(fields: [defaultUnitId], references: [id])
+
+  attributes ProductAttributeValue[]
+  packaging  ProductPackaging[]
+  links      ProductLink[]
+
+  @@unique([organizationId, sku])
+  @@unique([organizationId, slug])
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, categoryId])
+  @@index([organizationId, status])
+}
+
+model ProductPackaging {
+  productId       String
+  packagingTypeId String
+
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  packagingType PackagingType @relation(fields: [packagingTypeId], references: [id], onDelete: Cascade)
+
+  @@id([productId, packagingTypeId])
+  @@index([productId])
+}
+
+// Extension link: maps a frozen SupplierProduct / BuyerProduct row to a catalog Product
+// by ID only (sourceId is a plain reference - the frozen tables are NOT modified).
+model ProductLink {
+  id             String            @id @default(cuid())
+  organizationId String
+  sourceType     ProductLinkSource
+  sourceId       String
+  productId      String
+  createdById    String
+  createdAt      DateTime          @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceType, sourceId])
+  @@index([organizationId, productId])
+}

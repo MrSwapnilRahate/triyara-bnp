@@ -3,6 +3,39 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.9.0-product-catalog] - 2026-07-21
+
+### Added
+
+- **Enterprise Product Catalog** (TRY-BNP-PRODUCT-01) - the central master-data system
+  every business module will reference (not an ecommerce catalog):
+  - Prisma: `Product`, `ProductCategory` (unlimited hierarchy), `HSCode`,
+    `UnitOfMeasure`, `PackagingType`, `OriginCountry`, `ProductAttribute` +
+    `ProductAttributeValue` (dynamic EAV attributes), `ProductPackaging`, `ProductLink`
+    - `ProductStatus` / `AttributeDataType` / `ProductLinkSource` enums (10 new tables).
+  - Repository: CRUD, cursor pagination, search, advanced filters, soft-delete, restore,
+    optimistic concurrency, audit, versioning.
+  - Service: business rules - unique SKU/slug, category / HS-code / unit / origin /
+    packaging validation, and **dynamic-attribute value validation by data type**; emits
+    `product.*` and `category.*` events (auto-ingested by Activity + Notifications).
+  - Authorization via the `ReferenceData` CASL subject (read: all roles; write: Admin) -
+    honours frozen AUTH-01 without adding a new subject.
+  - API: products CRUD + restore, categories CRUD, and read endpoints for hs-codes /
+    units / packaging-types / origin-countries / product-attributes, plus product-links.
+  - UI: product list (search / filters / pagination / restore), full product editor
+    (dynamic attributes + packaging + reference selectors), and a category manager.
+  - **Integration by extension only**: `ProductLink` maps a frozen SupplierProduct /
+    BuyerProduct (by ID) to a catalog Product - the frozen modules are **not modified**.
+  - Seed: units, packaging types, origin countries, HS codes, attribute definitions.
+  - Tests: service unit (6) + guarded repository/integration + e2e.
+
+### Notes
+
+- No frozen module was modified. Supplier/Buyer integration is via the ProductLink
+  extension service only.
+- See `docs/09-decisions/ADR-0009-product-catalog.md` and
+  `docs/03-engineering/product-catalog.md`.
+
 ## [0.8.0-buyer-profile] - 2026-07-21
 
 ### Added

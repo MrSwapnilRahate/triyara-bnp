@@ -39,6 +39,25 @@ export {
   type NotificationPreferenceService,
 } from './notification/preference.service'
 export {
+  type CategoryService,
+  type CategoryServiceCtx,
+  createCategoryService,
+} from './product/category.service'
+export {
+  createProductService,
+  type ProductService,
+  type ProductServiceCtx,
+  type ProductServiceDeps,
+  type ReferenceValidator,
+  slugify,
+} from './product/product.service'
+export {
+  createProductLinkService,
+  type LinkSource,
+  type ProductLinkCtx,
+  type ProductLinkService,
+} from './product/product-link.service'
+export {
   createSupplierService,
   type SupplierService,
   type SupplierServiceCtx,

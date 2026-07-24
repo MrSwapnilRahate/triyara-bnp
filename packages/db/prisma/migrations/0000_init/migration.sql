@@ -49,6 +49,15 @@ CREATE TYPE "BuyerType" AS ENUM ('IMPORTER', 'DISTRIBUTOR', 'WHOLESALER', 'RETAI
 -- CreateEnum
 CREATE TYPE "ImportExperience" AS ENUM ('NEW', 'YEARS_1_3', 'YEARS_3_PLUS');
 
+-- CreateEnum
+CREATE TYPE "ProductStatus" AS ENUM ('DRAFT', 'ACTIVE', 'ARCHIVED');
+
+-- CreateEnum
+CREATE TYPE "AttributeDataType" AS ENUM ('STRING', 'NUMBER', 'BOOLEAN');
+
+-- CreateEnum
+CREATE TYPE "ProductLinkSource" AS ENUM ('SUPPLIER_PRODUCT', 'BUYER_PRODUCT');
+
 -- CreateTable
 CREATE TABLE "Organization" (
     "id" TEXT NOT NULL,
@@ -421,6 +430,142 @@ CREATE TABLE "BuyerProduct" (
     CONSTRAINT "BuyerProduct_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "ProductCategory" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "parentId" TEXT,
+    "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "displayOrder" INTEGER NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "createdById" TEXT NOT NULL,
+    "updatedById" TEXT NOT NULL,
+    "deletedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ProductCategory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "HSCode" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "countryVariant" TEXT,
+    "exportRestrictions" JSONB,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "HSCode_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "UnitOfMeasure" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "UnitOfMeasure_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "PackagingType" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "PackagingType_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OriginCountry" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "OriginCountry_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProductAttribute" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "key" TEXT NOT NULL,
+    "label" TEXT NOT NULL,
+    "dataType" "AttributeDataType" NOT NULL DEFAULT 'STRING',
+    "unit" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "ProductAttribute_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProductAttributeValue" (
+    "id" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "attributeId" TEXT NOT NULL,
+    "value" TEXT NOT NULL,
+
+    CONSTRAINT "ProductAttributeValue_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Product" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "sku" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "shortDescription" TEXT,
+    "description" TEXT,
+    "categoryId" TEXT,
+    "hsCodeId" TEXT,
+    "originCountryId" TEXT,
+    "defaultUnitId" TEXT,
+    "status" "ProductStatus" NOT NULL DEFAULT 'DRAFT',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "createdById" TEXT NOT NULL,
+    "updatedById" TEXT NOT NULL,
+    "deletedById" TEXT,
+    "deletedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Product_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProductPackaging" (
+    "productId" TEXT NOT NULL,
+    "packagingTypeId" TEXT NOT NULL,
+
+    CONSTRAINT "ProductPackaging_pkey" PRIMARY KEY ("productId","packagingTypeId")
+);
+
+-- CreateTable
+CREATE TABLE "ProductLink" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "sourceType" "ProductLinkSource" NOT NULL,
+    "sourceId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "createdById" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ProductLink_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
 
@@ -568,6 +713,60 @@ CREATE INDEX "BuyerProduct_buyerProfileId_idx" ON "BuyerProduct"("buyerProfileId
 -- CreateIndex
 CREATE UNIQUE INDEX "BuyerProduct_buyerProfileId_product_key" ON "BuyerProduct"("buyerProfileId", "product");
 
+-- CreateIndex
+CREATE INDEX "ProductCategory_organizationId_parentId_idx" ON "ProductCategory"("organizationId", "parentId");
+
+-- CreateIndex
+CREATE INDEX "ProductCategory_organizationId_deletedAt_idx" ON "ProductCategory"("organizationId", "deletedAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProductCategory_organizationId_slug_key" ON "ProductCategory"("organizationId", "slug");
+
+-- CreateIndex
+CREATE INDEX "HSCode_organizationId_code_idx" ON "HSCode"("organizationId", "code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "UnitOfMeasure_organizationId_code_key" ON "UnitOfMeasure"("organizationId", "code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PackagingType_organizationId_code_key" ON "PackagingType"("organizationId", "code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OriginCountry_organizationId_code_key" ON "OriginCountry"("organizationId", "code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProductAttribute_organizationId_key_key" ON "ProductAttribute"("organizationId", "key");
+
+-- CreateIndex
+CREATE INDEX "ProductAttributeValue_productId_idx" ON "ProductAttributeValue"("productId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProductAttributeValue_productId_attributeId_key" ON "ProductAttributeValue"("productId", "attributeId");
+
+-- CreateIndex
+CREATE INDEX "Product_organizationId_deletedAt_idx" ON "Product"("organizationId", "deletedAt");
+
+-- CreateIndex
+CREATE INDEX "Product_organizationId_categoryId_idx" ON "Product"("organizationId", "categoryId");
+
+-- CreateIndex
+CREATE INDEX "Product_organizationId_status_idx" ON "Product"("organizationId", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Product_organizationId_sku_key" ON "Product"("organizationId", "sku");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Product_organizationId_slug_key" ON "Product"("organizationId", "slug");
+
+-- CreateIndex
+CREATE INDEX "ProductPackaging_productId_idx" ON "ProductPackaging"("productId");
+
+-- CreateIndex
+CREATE INDEX "ProductLink_organizationId_productId_idx" ON "ProductLink"("organizationId", "productId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProductLink_sourceType_sourceId_key" ON "ProductLink"("sourceType", "sourceId");
+
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -615,4 +814,34 @@ ALTER TABLE "BuyerProfile" ADD CONSTRAINT "BuyerProfile_accountId_fkey" FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE "BuyerProduct" ADD CONSTRAINT "BuyerProduct_buyerProfileId_fkey" FOREIGN KEY ("buyerProfileId") REFERENCES "BuyerProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProductCategory" ADD CONSTRAINT "ProductCategory_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "ProductCategory"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProductAttributeValue" ADD CONSTRAINT "ProductAttributeValue_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProductAttributeValue" ADD CONSTRAINT "ProductAttributeValue_attributeId_fkey" FOREIGN KEY ("attributeId") REFERENCES "ProductAttribute"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Product" ADD CONSTRAINT "Product_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ProductCategory"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Product" ADD CONSTRAINT "Product_hsCodeId_fkey" FOREIGN KEY ("hsCodeId") REFERENCES "HSCode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Product" ADD CONSTRAINT "Product_originCountryId_fkey" FOREIGN KEY ("originCountryId") REFERENCES "OriginCountry"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Product" ADD CONSTRAINT "Product_defaultUnitId_fkey" FOREIGN KEY ("defaultUnitId") REFERENCES "UnitOfMeasure"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProductPackaging" ADD CONSTRAINT "ProductPackaging_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProductPackaging" ADD CONSTRAINT "ProductPackaging_packagingTypeId_fkey" FOREIGN KEY ("packagingTypeId") REFERENCES "PackagingType"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProductLink" ADD CONSTRAINT "ProductLink_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

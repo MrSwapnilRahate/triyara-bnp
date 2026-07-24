@@ -25,6 +25,7 @@ export {
   type BuyerProfileRepository,
   buyerProfileRepository,
 } from './repositories/buyer-profile.repository'
+export { catalogReferenceRepository } from './repositories/catalog-reference.repository'
 export {
   type CreateDocumentInput,
   type DocumentListItem,
@@ -54,6 +55,22 @@ export {
 export { orgUserRepository } from './repositories/org-user.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
+export {
+  type CreateProductData,
+  type ListProductsParams,
+  type ProductListItem,
+  type ProductRecord,
+  type ProductRepository,
+  productRepository,
+  type UpdateProductData,
+} from './repositories/product.repository'
+export {
+  type CategoryData,
+  type CategoryRecord,
+  type ProductCategoryRepository,
+  productCategoryRepository,
+} from './repositories/product-category.repository'
+export { productLinkRepository } from './repositories/product-link.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
 export {
   type AddProductData,
@@ -78,6 +95,7 @@ export {
 export type {
   Account,
   ActivityType,
+  AttributeDataType,
   BuyerType,
   DocumentStatus,
   DocumentType,
@@ -87,6 +105,8 @@ export type {
   NotificationPriority,
   NotificationType,
   Organization,
+  ProductLinkSource,
+  ProductStatus,
   RelationshipStatus,
   Role,
   RoleName,
