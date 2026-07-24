@@ -1,7 +1,25 @@
-# Default owners for everything in the repo.
-*                   @triyara/platform
+# Code ownership - a review is required from the matching owner(s) before merge.
+# Team handles are illustrative until the GitHub org/teams are created.
 
-/docs/              @triyara/tech-leads
-/packages/ui/       @triyara/design
-/packages/db/       @triyara/backend
-/.github/           @triyara/platform
+# Default
+*                       @triyara/platform
+
+# Apps
+/apps/web/              @triyara/frontend @triyara/platform
+
+# Packages (domain + infra)
+/packages/core/         @triyara/backend
+/packages/db/           @triyara/backend @triyara/data
+/packages/validation/   @triyara/backend
+/packages/auth/         @triyara/security @triyara/platform
+/packages/storage/      @triyara/platform
+/packages/events/       @triyara/platform
+/packages/ui/           @triyara/design
+/packages/config/       @triyara/platform
+/packages/lib/          @triyara/platform
+
+# Documentation
+/docs/                  @triyara/tech-leads
+
+# Repo governance & CI
+/.github/               @triyara/platform

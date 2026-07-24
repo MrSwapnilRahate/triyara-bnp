@@ -44,6 +44,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 - Email / webhook / push are interface-only (queued, not dispatched).
 - See `docs/09-decisions/ADR-0007-notification-center.md`.
 
+## [0.6.1-governance] - 2026-07-21
+
+### Added
+
+- **Repository governance** (TRY-BNP-REPO-01): `.github` CODEOWNERS, a 13-section PR
+  template, issue forms, Dependabot (weekly + grouped + security), labels, and
+  branch-protection / GitHub-Actions hardening docs; root `CONTRIBUTING`, `SECURITY`,
+  `GOVERNANCE`, `RELEASE`, `CODE_OF_CONDUCT`; SemVer + Keep-a-Changelog + branch / merge /
+  commit / review policies. No business code.
+
 ## [0.6.0-activity] - 2026-07-21
 
 ### Added
