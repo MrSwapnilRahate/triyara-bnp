@@ -28,6 +28,9 @@ CREATE TYPE "VerificationDecision" AS ENUM ('APPROVED', 'REJECTED');
 -- CreateEnum
 CREATE TYPE "VerificationItemStatus" AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
 
+-- CreateEnum
+CREATE TYPE "ActivityType" AS ENUM ('CREATED', 'UPDATED', 'DELETED', 'RESTORED', 'ASSIGNED', 'UPLOADED', 'APPROVED', 'REJECTED', 'REQUESTED', 'DOWNLOADED', 'STATUS_CHANGED', 'OTHER');
+
 -- CreateTable
 CREATE TABLE "Organization" (
     "id" TEXT NOT NULL,
@@ -279,6 +282,24 @@ CREATE TABLE "VerificationHistory" (
     CONSTRAINT "VerificationHistory_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Activity" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "accountId" TEXT,
+    "actorId" TEXT,
+    "actorType" TEXT NOT NULL,
+    "entityType" TEXT NOT NULL,
+    "entityId" TEXT,
+    "eventName" TEXT NOT NULL,
+    "activityType" "ActivityType" NOT NULL,
+    "description" TEXT NOT NULL,
+    "metadata" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Activity_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
 
@@ -374,6 +395,21 @@ CREATE INDEX "VerificationNote_verificationId_idx" ON "VerificationNote"("verifi
 
 -- CreateIndex
 CREATE INDEX "VerificationHistory_verificationId_idx" ON "VerificationHistory"("verificationId");
+
+-- CreateIndex
+CREATE INDEX "Activity_organizationId_createdAt_idx" ON "Activity"("organizationId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Activity_organizationId_accountId_createdAt_idx" ON "Activity"("organizationId", "accountId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Activity_organizationId_entityType_idx" ON "Activity"("organizationId", "entityType");
+
+-- CreateIndex
+CREATE INDEX "Activity_organizationId_actorId_idx" ON "Activity"("organizationId", "actorId");
+
+-- CreateIndex
+CREATE INDEX "Activity_organizationId_activityType_idx" ON "Activity"("organizationId", "activityType");
 
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;

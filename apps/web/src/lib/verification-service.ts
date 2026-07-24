@@ -1,7 +1,7 @@
 import { createVerificationService } from '@triyara/core'
 import { documentRepository, userRepository, verificationRepository } from '@triyara/db'
-import { createLoggingEventBus } from '@triyara/events'
-import { logger } from '@triyara/lib'
+
+import { eventBus } from './event-bus'
 
 const reviewers = {
   async findById(id: string) {
@@ -15,5 +15,5 @@ export const verificationService = createVerificationService({
   repo: verificationRepository,
   documents: documentRepository,
   reviewers,
-  events: createLoggingEventBus(logger),
+  events: eventBus,
 })

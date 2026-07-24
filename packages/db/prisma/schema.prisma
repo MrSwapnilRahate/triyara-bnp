@@ -406,3 +406,43 @@ model VerificationHistory {
 
   @@index([verificationId])
 }
+
+enum ActivityType {
+  CREATED
+  UPDATED
+  DELETED
+  RESTORED
+  ASSIGNED
+  UPLOADED
+  APPROVED
+  REJECTED
+  REQUESTED
+  DOWNLOADED
+  STATUS_CHANGED
+  OTHER
+}
+
+// Append-only activity feed built by consuming domain events (account.* / supplier.* /
+// document.* / verification.* and any future module). References entities/actors by plain
+// ID only - no relations to the frozen models. metadata (ActivityMetadata) is the raw
+// event payload.
+model Activity {
+  id             String       @id @default(cuid())
+  organizationId String
+  accountId      String?
+  actorId        String?
+  actorType      String
+  entityType     String
+  entityId       String?
+  eventName      String
+  activityType   ActivityType
+  description    String
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, accountId, createdAt])
+  @@index([organizationId, entityType])
+  @@index([organizationId, actorId])
+  @@index([organizationId, activityType])
+}

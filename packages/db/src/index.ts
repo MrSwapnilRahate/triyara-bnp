@@ -12,6 +12,13 @@ export {
   type MutationCtx,
 } from './repositories/account.repository'
 export {
+  type ActivityRecord,
+  type ActivityRepository,
+  activityRepository,
+  type ListActivitiesParams,
+  type NewActivity,
+} from './repositories/activity.repository'
+export {
   type CreateDocumentInput,
   type DocumentListItem,
   type DocumentRecord,
@@ -46,6 +53,7 @@ export {
 } from './repositories/verification.repository'
 export type {
   Account,
+  ActivityType,
   DocumentStatus,
   DocumentType,
   ManufacturingType,

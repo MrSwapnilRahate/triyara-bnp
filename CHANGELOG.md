@@ -3,6 +3,41 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.6.0-activity] - 2026-07-21
+
+### Added
+
+- **Activity Timeline module** (TRY-BNP-ACTIVITY-01) - an append-only feed built by
+  **consuming existing domain events** (account.* / supplier.* / document.* /
+  verification.*). It emits no new events and duplicates no business logic:
+  - Prisma `Activity` (+ Json `metadata` = ActivityMetadata) + `ActivityType` enum;
+    entities/actors referenced by plain ID only - no relations to the frozen models.
+  - **Subscriber ingestion**: a composition-root event bus that preserves logging and
+    attaches an Activity subscriber - the sanctioned "subscriber" mechanism of the event
+    model. Wired by swapping the injected `events` dependency in the four service
+    composition files; no module logic, contracts, or event names changed. Ingestion is
+    best-effort (a failure is logged, never breaks the mutation).
+  - Pure `mapEventToActivity` mapper: derives entity, activity type, description and
+    metadata; **future event families appear automatically** (unknown prefixes map to a
+    generic activity).
+  - Repository: explicit selects, cursor pagination, filters (account, actor, entity,
+    event, activity type, date range, search).
+  - Read service (`@triyara/core`): list / get / listForAccount; org-isolated, RBAC read.
+  - API: `GET /activities`, `GET /activities/:id`, `GET /accounts/:id/activities`.
+  - UI: **global Activity feed** + **account timeline** - event cards with icons,
+    relative time, filters, search, and infinite scroll; loading / empty / error states.
+  - Tests: mapper unit (4) + guarded repository integration + an e2e that performs an
+    action and sees it in the feed.
+
+### Notes
+
+- Account, SupplierProfile, Documents, Verification and Authentication are unchanged.
+  Only `@triyara/events` (infra) gained the subscriber, and four one-line DI swaps wired
+  the shared bus.
+- The `DOWNLOADED` activity type is defined for completeness; no current event produces
+  it (downloads emit no event, and this module must not add one).
+- See `docs/09-decisions/ADR-0006-activity-timeline.md`.
+
 ## [0.5.0-verification] - 2026-07-21
 
 ### Added

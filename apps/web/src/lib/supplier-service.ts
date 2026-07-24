@@ -1,9 +1,9 @@
 import { createSupplierService } from '@triyara/core'
 import { supplierProfileRepository } from '@triyara/db'
-import { createLoggingEventBus } from '@triyara/events'
-import { logger } from '@triyara/lib'
+
+import { eventBus } from './event-bus'
 
 export const supplierService = createSupplierService({
   repo: supplierProfileRepository,
-  events: createLoggingEventBus(logger),
+  events: eventBus,
 })

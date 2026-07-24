@@ -5,6 +5,12 @@ export {
   type BulkResult,
   createAccountService,
 } from './account/account.service'
+export { mapEventToActivity } from './activity/activity.mapper'
+export {
+  type ActivityService,
+  type ActivityServiceCtx,
+  createActivityService,
+} from './activity/activity.service'
 export {
   createDocumentService,
   type DocumentService,
