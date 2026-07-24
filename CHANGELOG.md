@@ -3,6 +3,47 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.7.0-notifications] - 2026-07-21
+
+### Added
+
+- **Notification Center** (TRY-BNP-NOTIFICATION-01) - a per-recipient projection built as
+  a **second subscriber** of the existing event bus (beside Activity). Emits no events and
+  duplicates no business logic:
+  - Prisma `Notification` + `NotificationRecipient` + `NotificationDelivery` +
+    `NotificationPreference` and enums (type / channel / status / priority). Entities and
+    actors are referenced by plain ID - no relations to the frozen models.
+  - **Subscriber ingestion**: the composition-root bus fans each event out to the Activity
+    sink (unchanged) and a new Notification sink; both best-effort. No event producer or
+    event name changed; no new events emitted.
+  - Per-event fan-out to active org recipients, honouring **per-user, per-type
+    preferences** (enable / disable / mute; default enabled, in-app). A separate
+    notification mapper (title / body / priority / type) - not Activity logic.
+  - **Multi-channel delivery model**: in-app is delivered immediately; email / webhook /
+    push are queued (interface only) for a future dispatcher.
+  - Read-state (unread / read / archived) via `readAt` / `archivedAt`, isolated per
+    recipient.
+  - API: `GET /notifications`, `GET /notifications/:id`, `PATCH /notifications/:id/read`,
+    `PATCH /notifications/read-all`, `PATCH /notifications/:id/archive`,
+    `GET /notification-preferences`, `PATCH /notification-preferences`, plus
+    `GET /notifications/unread-count` for the bell.
+  - UI: a global **notification bell** with unread counter (in a new app top bar) and a
+    **Notification Center** - grouped by date, filters (all / unread / read / archived) +
+    type + search, mark-all-read, per-item read/archive, infinite scroll, a preferences
+    panel, and loading / empty / error states.
+  - Tests: generation unit (preference filtering) + mapper unit + guarded repository
+    integration (delivery rows, read/archive, recipient isolation, prefs) + e2e.
+
+### Notes
+
+- Account, SupplierProfile, Documents, Verification, Activity and Authentication are
+  unchanged. Only the composition-root bus gained a second subscriber; a new read-only
+  org-user lookup was added as a new db file.
+- V1 policy: notifications fan out to all active org users (actor included) subject to
+  their preferences - so the feature is demonstrable with a single seeded user.
+- Email / webhook / push are interface-only (queued, not dispatched).
+- See `docs/09-decisions/ADR-0007-notification-center.md`.
+
 ## [0.6.0-activity] - 2026-07-21
 
 ### Added

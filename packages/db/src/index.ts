@@ -28,6 +28,23 @@ export {
   type NewVersionInput,
   type UpdateDocumentInput,
 } from './repositories/document.repository'
+export {
+  type ListNotificationsParams,
+  type NewNotification,
+  type NotificationFeedItem,
+  type NotificationFilter,
+  type NotificationRepository,
+  notificationRepository,
+  type RecipientSpec,
+} from './repositories/notification.repository'
+export {
+  type NotificationPreferenceRepository,
+  notificationPreferenceRepository,
+  type PreferenceRecord,
+  type ResolvedPref,
+  type UpsertPreference,
+} from './repositories/notification-preference.repository'
+export { orgUserRepository } from './repositories/org-user.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
@@ -57,6 +74,9 @@ export type {
   DocumentStatus,
   DocumentType,
   ManufacturingType,
+  NotificationChannel,
+  NotificationPriority,
+  NotificationType,
   Organization,
   RelationshipStatus,
   Role,

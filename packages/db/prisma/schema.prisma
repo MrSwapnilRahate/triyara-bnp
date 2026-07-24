@@ -446,3 +446,107 @@ model Activity {
   @@index([organizationId, actorId])
   @@index([organizationId, activityType])
 }
+
+enum NotificationType {
+  ACCOUNT
+  SUPPLIER
+  DOCUMENT
+  VERIFICATION
+  SYSTEM
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WEBHOOK
+  PUSH
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// A notification message projected from a consumed domain event (never emits events).
+// Fans out to one NotificationRecipient per user. References frozen entities/actors by
+// plain ID only.
+model Notification {
+  id             String               @id @default(cuid())
+  organizationId String
+  type           NotificationType
+  priority       NotificationPriority @default(NORMAL)
+  actorId        String?
+  entityType     String?
+  entityId       String?
+  accountId      String?
+  eventName      String
+  title          String
+  body           String
+  metadata       Json?
+  createdAt      DateTime             @default(now())
+
+  recipients NotificationRecipient[]
+
+  @@index([organizationId, createdAt])
+}
+
+// Per-user copy: read/archived state lives here (recipient isolation).
+model NotificationRecipient {
+  id             String    @id @default(cuid())
+  notificationId String
+  recipientId    String
+  organizationId String
+  readAt         DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  notification Notification           @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  deliveries   NotificationDelivery[]
+
+  @@unique([notificationId, recipientId])
+  @@index([organizationId, recipientId, createdAt])
+  @@index([recipientId, readAt])
+  @@index([recipientId, archivedAt])
+}
+
+// Per-channel delivery record. In-app is delivered immediately; email/webhook/push are
+// queued for a future dispatcher (interface only).
+model NotificationDelivery {
+  id             String              @id @default(cuid())
+  recipientRowId String
+  channel        NotificationChannel
+  status         NotificationStatus  @default(QUEUED)
+  attemptedAt    DateTime?
+  deliveredAt    DateTime?
+  error          String?
+  createdAt      DateTime            @default(now())
+
+  recipient NotificationRecipient @relation(fields: [recipientRowId], references: [id], onDelete: Cascade)
+
+  @@index([recipientRowId])
+}
+
+// Per user, per notification type. Missing row = default (enabled, in-app).
+model NotificationPreference {
+  id             String                @id @default(cuid())
+  organizationId String
+  userId         String
+  type           NotificationType
+  enabled        Boolean               @default(true)
+  muted          Boolean               @default(false)
+  digest         Boolean               @default(false)
+  channels       NotificationChannel[]
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([userId, type])
+  @@index([organizationId, userId])
+}

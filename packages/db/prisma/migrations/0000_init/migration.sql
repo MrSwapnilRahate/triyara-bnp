@@ -31,6 +31,18 @@ CREATE TYPE "VerificationItemStatus" AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED')
 -- CreateEnum
 CREATE TYPE "ActivityType" AS ENUM ('CREATED', 'UPDATED', 'DELETED', 'RESTORED', 'ASSIGNED', 'UPLOADED', 'APPROVED', 'REJECTED', 'REQUESTED', 'DOWNLOADED', 'STATUS_CHANGED', 'OTHER');
 
+-- CreateEnum
+CREATE TYPE "NotificationType" AS ENUM ('ACCOUNT', 'SUPPLIER', 'DOCUMENT', 'VERIFICATION', 'SYSTEM');
+
+-- CreateEnum
+CREATE TYPE "NotificationChannel" AS ENUM ('IN_APP', 'EMAIL', 'WEBHOOK', 'PUSH');
+
+-- CreateEnum
+CREATE TYPE "NotificationStatus" AS ENUM ('QUEUED', 'SENT', 'DELIVERED', 'FAILED');
+
+-- CreateEnum
+CREATE TYPE "NotificationPriority" AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT');
+
 -- CreateTable
 CREATE TABLE "Organization" (
     "id" TEXT NOT NULL,
@@ -300,6 +312,67 @@ CREATE TABLE "Activity" (
     CONSTRAINT "Activity_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Notification" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "type" "NotificationType" NOT NULL,
+    "priority" "NotificationPriority" NOT NULL DEFAULT 'NORMAL',
+    "actorId" TEXT,
+    "entityType" TEXT,
+    "entityId" TEXT,
+    "accountId" TEXT,
+    "eventName" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "metadata" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "NotificationRecipient" (
+    "id" TEXT NOT NULL,
+    "notificationId" TEXT NOT NULL,
+    "recipientId" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "readAt" TIMESTAMP(3),
+    "archivedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "NotificationRecipient_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "NotificationDelivery" (
+    "id" TEXT NOT NULL,
+    "recipientRowId" TEXT NOT NULL,
+    "channel" "NotificationChannel" NOT NULL,
+    "status" "NotificationStatus" NOT NULL DEFAULT 'QUEUED',
+    "attemptedAt" TIMESTAMP(3),
+    "deliveredAt" TIMESTAMP(3),
+    "error" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "NotificationDelivery_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "NotificationPreference" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "type" "NotificationType" NOT NULL,
+    "enabled" BOOLEAN NOT NULL DEFAULT true,
+    "muted" BOOLEAN NOT NULL DEFAULT false,
+    "digest" BOOLEAN NOT NULL DEFAULT false,
+    "channels" "NotificationChannel"[],
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "NotificationPreference_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
 
@@ -411,6 +484,30 @@ CREATE INDEX "Activity_organizationId_actorId_idx" ON "Activity"("organizationId
 -- CreateIndex
 CREATE INDEX "Activity_organizationId_activityType_idx" ON "Activity"("organizationId", "activityType");
 
+-- CreateIndex
+CREATE INDEX "Notification_organizationId_createdAt_idx" ON "Notification"("organizationId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "NotificationRecipient_organizationId_recipientId_createdAt_idx" ON "NotificationRecipient"("organizationId", "recipientId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "NotificationRecipient_recipientId_readAt_idx" ON "NotificationRecipient"("recipientId", "readAt");
+
+-- CreateIndex
+CREATE INDEX "NotificationRecipient_recipientId_archivedAt_idx" ON "NotificationRecipient"("recipientId", "archivedAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "NotificationRecipient_notificationId_recipientId_key" ON "NotificationRecipient"("notificationId", "recipientId");
+
+-- CreateIndex
+CREATE INDEX "NotificationDelivery_recipientRowId_idx" ON "NotificationDelivery"("recipientRowId");
+
+-- CreateIndex
+CREATE INDEX "NotificationPreference_organizationId_userId_idx" ON "NotificationPreference"("organizationId", "userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "NotificationPreference_userId_type_key" ON "NotificationPreference"("userId", "type");
+
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -446,4 +543,10 @@ ALTER TABLE "VerificationNote" ADD CONSTRAINT "VerificationNote_verificationId_f
 
 -- AddForeignKey
 ALTER TABLE "VerificationHistory" ADD CONSTRAINT "VerificationHistory_verificationId_fkey" FOREIGN KEY ("verificationId") REFERENCES "Verification"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "NotificationRecipient" ADD CONSTRAINT "NotificationRecipient_notificationId_fkey" FOREIGN KEY ("notificationId") REFERENCES "Notification"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "NotificationDelivery" ADD CONSTRAINT "NotificationDelivery_recipientRowId_fkey" FOREIGN KEY ("recipientRowId") REFERENCES "NotificationRecipient"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

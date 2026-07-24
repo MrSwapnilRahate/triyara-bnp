@@ -18,6 +18,21 @@ export {
   type DocumentServiceDeps,
 } from './document/document.service'
 export {
+  generateNotifications,
+  type NotificationGenDeps,
+  type OrgUserLookup,
+} from './notification/notification.generate'
+export { mapEventToNotification, type MappedNotification } from './notification/notification.mapper'
+export {
+  createNotificationService,
+  type NotificationService,
+  type NotificationServiceCtx,
+} from './notification/notification.service'
+export {
+  createNotificationPreferenceService,
+  type NotificationPreferenceService,
+} from './notification/preference.service'
+export {
   createSupplierService,
   type SupplierService,
   type SupplierServiceCtx,
