@@ -7,7 +7,7 @@
     "./tailwind": "./tailwind/preset.ts"
   },
   "devDependencies": {
-    "tailwindcss": "^3.4.17",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3"
   }
 }
