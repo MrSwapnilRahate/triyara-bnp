@@ -57,6 +57,7 @@ model Organization {
   // these add NO columns to the Organization table.
   categories      Category[]
   products        Product[]
+  suppliers       Supplier[]
   specDefinitions ProductSpecificationDefinition[]
   tags            Tag[]
 }
@@ -764,6 +765,9 @@ model Product {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   category     Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
+  supplierOfferings  SupplierProductOffering[]
+  supplierCapacities SupplierCapacity[]
+
   specifications ProductSpecification[]
   images         ProductImage[]
   documents      ProductDocument[]
@@ -976,8 +980,9 @@ model Tag {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   products     ProductTag[]
+  suppliers    SupplierTag[]
 
   @@unique([organizationId, slug])
   @@index([organizationId, isActive, sortOrder])
@@ -994,5 +999,573 @@ model ProductTag {
   tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([productId, tagId])
+  @@index([tagId])
+}
+
+// ===========================================================================
+// SUPPLIER MANAGEMENT (TRY-BNP-SUPPLIER-02)
+//
+// Vendor master. Additive over the frozen modules and the Product Catalog:
+// nothing existing is modified beyond column-less back-relations on
+// Organization, Product and Tag, which add no columns.
+//
+// Implements the approved Sprint 3 design verbatim - see
+// docs/03-engineering/supplier-management-sprint3-domain-model.md
+// ===========================================================================
+
+// ==========================================================================
+// ENUMS
+// ==========================================================================
+
+/// What the supplier is, commercially. Drives sourcing strategy and the
+/// documents that are mandatory at onboarding.
+enum SupplierBusinessType {
+  MANUFACTURER
+  MANUFACTURER_EXPORTER
+  MERCHANT_EXPORTER
+  TRADER
+  PROCESSOR
+  FARMER_PRODUCER_ORGANISATION
+  CONTRACT_MANUFACTURER
+  OTHER
+}
+
+/// Onboarding + governance state. Mirrors the approval workflow; the current
+/// value is denormalised here and every transition is recorded in
+/// SupplierApproval.
+enum SupplierStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  BLOCKED
+  INACTIVE
+}
+
+/// Functional role of a contact, for routing. `designation` holds the person's
+/// actual job title; this enum is what queries filter on.
+enum SupplierContactRole {
+  OWNER
+  SALES
+  EXPORT_MANAGER
+  ACCOUNTS
+  QUALITY
+  LOGISTICS
+  PRODUCTION
+  OTHER
+}
+
+enum SupplierAddressType {
+  REGISTERED_OFFICE
+  FACTORY
+  WAREHOUSE
+  BRANCH
+  DISPATCH_POINT
+}
+
+enum CertificationType {
+  ISO
+  FSSAI
+  HACCP
+  APEDA
+  FDA
+  BRCGS
+  HALAL
+  KOSHER
+  ORGANIC
+  GMP
+  SPICE_BOARD
+  OTHER
+}
+
+enum CertificationStatus {
+  ACTIVE
+  PENDING_RENEWAL
+  EXPIRED
+  SUSPENDED
+  REVOKED
+}
+
+/// Supplier onboarding paperwork. Deliberately separate from the frozen
+/// company-level `DocumentType` and the catalog's `ProductDocumentType`.
+enum SupplierDocumentType {
+  GST
+  IEC
+  PAN
+  CANCELLED_CHEQUE
+  MSME
+  IMPORT_EXPORT_LICENSE
+  FACTORY_LICENSE
+  COMPANY_PROFILE
+  CATALOG
+  LAB_REPORT
+  AGREEMENT
+  OTHER
+}
+
+enum CapacityFrequency {
+  PER_DAY
+  PER_WEEK
+  PER_MONTH
+  PER_QUARTER
+  PER_YEAR
+  PER_SEASON
+}
+
+enum SupplierProductStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+/// A single transition in the approval history.
+enum ApprovalDecision {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  BLOCKED
+  UNBLOCKED
+  REOPENED
+}
+
+/// How a scorecard was produced. Manual entries and computed ones must remain
+/// distinguishable for audit.
+enum PerformanceSource {
+  MANUAL
+  COMPUTED
+  IMPORTED
+}
+
+// NOTE: `Incoterm` is NOT declared here. It is owned by the Product Catalog
+// and reused as-is; redefining it would fail to compile.
+
+// ==========================================================================
+// SUPPLIER - the vendor master record
+// ==========================================================================
+
+model Supplier {
+  id             String @id @default(cuid())
+  organizationId String
+
+  /// Human-facing key, e.g. "SUP-000142". Unique per tenant, never reused.
+  supplierCode String
+  companyName  String
+  legalName    String
+  businessType SupplierBusinessType
+
+  email   String?
+  phone   String?
+  website String?
+
+  /// Statutory identifiers. All optional: foreign suppliers have none of them.
+  gstNumber String?
+  iecNumber String?
+  panNumber String?
+
+  /// ISO 3166-1 alpha-2.
+  country String? @db.Char(2)
+  state   String?
+  city    String?
+
+  status     SupplierStatus @default(DRAFT)
+  isVerified Boolean        @default(false)
+  verifiedAt DateTime?
+
+  /// Optional seam to the frozen Account aggregate, so a supplier that is also
+  /// a known partner is not two disconnected records. Plain nullable link -
+  /// the Account module is not modified. See §4.1.
+  accountId String? @unique
+
+  version     Int       @default(1)
+  createdById String?
+  updatedById String?
+  deletedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts       SupplierContact[]
+  addresses      SupplierAddress[]
+  bankAccounts   SupplierBankAccount[]
+  certifications SupplierCertification[]
+  documents      SupplierDocument[]
+  offerings      SupplierProductOffering[]
+  capacities     SupplierCapacity[]
+  performance    SupplierPerformance[]
+  approvals      SupplierApproval[]
+  tags           SupplierTag[]
+
+  @@unique([organizationId, supplierCode])
+  @@index([organizationId, status, deletedAt])
+  @@index([organizationId, businessType])
+  @@index([organizationId, isVerified, status])
+  @@index([organizationId, country, state, city])
+  @@index([organizationId, gstNumber])
+  @@index([organizationId, iecNumber])
+  @@index([organizationId, panNumber])
+  @@index([organizationId, companyName])
+  @@index([accountId])
+  /// Trigram indexes for fuzzy matching on the two identifiers users type.
+  /// Declared in the datamodel rather than raw SQL so `migrate diff` owns them
+  /// and does not emit DROP INDEX on every run. pg_trgm is created in
+  /// 0001_catalog_extensions.
+  @@index([supplierCode(ops: raw("gin_trgm_ops"))], map: "Supplier_code_trgm_idx", type: Gin)
+  @@index([companyName(ops: raw("gin_trgm_ops"))], map: "Supplier_company_trgm_idx", type: Gin)
+}
+
+// ==========================================================================
+// PEOPLE, PLACES, MONEY
+// ==========================================================================
+
+model SupplierContact {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+
+  name        String
+  role        SupplierContactRole @default(OTHER)
+  /// The person's actual job title, e.g. "Sr. Manager - Exports".
+  designation String?
+  email       String?
+  phone       String?
+  whatsapp    String?
+
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+  notes     String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId, isPrimary])
+  @@index([supplierId, role])
+  @@index([organizationId, email])
+  @@index([supplierId, deletedAt])
+}
+
+/// Addresses, including factory sites. Factory-specific attributes live here
+/// rather than in a separate model: a factory IS an address with extra data,
+/// and the brief lists factories under addresses. See §4.3.
+model SupplierAddress {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+
+  type  SupplierAddressType
+  label String?
+
+  line1      String
+  line2      String?
+  city       String
+  state      String?
+  postalCode String?
+  /// ISO 3166-1 alpha-2.
+  country    String  @db.Char(2)
+
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+
+  /// Populated only when type = FACTORY. Null everywhere else.
+  factorySizeSqm  Int?
+  productionLines Int?
+  employeeCount   Int?
+  establishedYear Int?
+  isOwnedPremises Boolean?
+
+  isPrimary Boolean @default(false)
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  supplier   Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  capacities SupplierCapacity[]
+
+  @@index([supplierId, type])
+  @@index([organizationId, country, city])
+  @@index([supplierId, deletedAt])
+}
+
+/// Settlement instructions. Account numbers are sensitive - see §4.6.
+model SupplierBankAccount {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+
+  bankName          String
+  branchName        String?
+  accountHolderName String
+  accountNumber     String
+  ifscCode          String?
+  swiftCode         String?
+  iban              String?
+  /// ISO 4217.
+  currency          String  @db.Char(3)
+
+  isPrimary  Boolean   @default(false)
+  isVerified Boolean   @default(false)
+  verifiedAt DateTime?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId, isPrimary])
+  @@index([supplierId, currency])
+  @@index([supplierId, deletedAt])
+}
+
+// ==========================================================================
+// COMPLIANCE
+// ==========================================================================
+
+model SupplierCertification {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+
+  type              CertificationType
+  certificateNumber String
+  issuedBy          String?
+  issuedDate        DateTime?
+  expiryDate        DateTime?
+  status            CertificationStatus @default(ACTIVE)
+  /// What the certificate actually covers, e.g. "Unit II - spice grinding".
+  scope             String?
+
+  /// Optional link to the uploaded certificate.
+  supplierDocumentId String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  supplier Supplier          @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  document SupplierDocument? @relation(fields: [supplierDocumentId], references: [id], onDelete: SetNull)
+
+  @@index([supplierId, type])
+  @@index([supplierId, status])
+  /// Drives the "expiring in 30 days" compliance sweep.
+  @@index([organizationId, expiryDate])
+  @@index([organizationId, type, status])
+}
+
+/// Onboarding paperwork. Metadata only, per the brief: the binary itself is
+/// held by the storage provider, or by the frozen Document module when the
+/// file needs access control and versioning. See §4.7.
+model SupplierDocument {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+
+  type  SupplierDocumentType
+  title String?
+
+  fileUrl    String?
+  storageKey String?
+  mimeType   String?
+  fileSize   Int?
+  checksum   String?
+
+  documentNumber String?
+  issuedDate     DateTime?
+  expiryDate     DateTime?
+
+  /// Seam to the FROZEN Document module. Populated when this file is also a
+  /// managed, access-controlled, versioned platform document.
+  documentId String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  supplier       Supplier                @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  certifications SupplierCertification[]
+
+  @@index([supplierId, type])
+  @@index([organizationId, expiryDate])
+  @@index([documentId])
+  @@index([supplierId, deletedAt])
+}
+
+// ==========================================================================
+// COMMERCIAL: what this supplier can actually supply
+// ==========================================================================
+
+/// Named SupplierProductOffering because SupplierProduct is a FROZEN model.
+/// This is the join between the vendor master and the Product Catalog.
+model SupplierProductOffering {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+  productId      String
+
+  /// The supplier's own part number for this product.
+  supplierSku String?
+
+  moq          Decimal? @db.Decimal(18, 4)
+  moqUnit      String?
+  leadTimeDays Int?
+  isPreferred  Boolean  @default(false)
+
+  /// Indicative supplier price. Binding prices belong to the Quotation module -
+  /// see §4.5.
+  price    Decimal?  @db.Decimal(18, 4)
+  currency String?   @db.Char(3)
+  incoterm Incoterm?
+  port     String?
+
+  validFrom DateTime?
+  validTo   DateTime?
+
+  status SupplierProductStatus @default(PENDING_APPROVAL)
+  notes  String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  /// A supplier may quote the same product on several terms, but not twice on
+  /// identical terms.
+  @@unique([supplierId, productId, incoterm, port, currency])
+  /// The sourcing question: "who can supply product X?"
+  @@index([organizationId, productId, status])
+  @@index([supplierId, status])
+  @@index([productId, isPreferred])
+  @@index([supplierId, deletedAt])
+}
+
+/// Production capability. Plant-wide when productId is null; product-specific
+/// when set. Site-specific when addressId points at a FACTORY address.
+model SupplierCapacity {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+
+  /// Null = capacity across the whole catalogue.
+  productId String?
+  /// Null = across all sites; set = one factory.
+  addressId String?
+
+  capacity  Decimal           @db.Decimal(18, 4)
+  /// UoM the capacity is expressed in, e.g. "MT", "KG", "CBM".
+  unit      String
+  frequency CapacityFrequency
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  notes         String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  supplier Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product  Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  address  SupplierAddress? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  @@index([supplierId, effectiveFrom, effectiveTo])
+  @@index([organizationId, productId])
+  @@index([addressId])
+  @@index([supplierId, deletedAt])
+}
+
+// ==========================================================================
+// GOVERNANCE: performance and approval
+// ==========================================================================
+
+/// One scorecard per supplier per period. Scores are 0-100.
+model SupplierPerformance {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  deliveryScore       Decimal? @db.Decimal(5, 2)
+  qualityScore        Decimal? @db.Decimal(5, 2)
+  communicationScore  Decimal? @db.Decimal(5, 2)
+  documentationScore  Decimal? @db.Decimal(5, 2)
+  responsivenessScore Decimal? @db.Decimal(5, 2)
+  /// Stored, not derived on read - the weighting will change and historical
+  /// scorecards must stay reproducible. See §4.4.
+  overallScore        Decimal? @db.Decimal(5, 2)
+
+  ordersCount        Int?
+  onTimeDeliveryRate Decimal? @db.Decimal(5, 2)
+  rejectionRate      Decimal? @db.Decimal(5, 2)
+
+  source       PerformanceSource @default(MANUAL)
+  computedAt   DateTime?
+  reviewedById String?
+  notes        String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, periodStart, periodEnd])
+  @@index([organizationId, periodEnd])
+  @@index([organizationId, overallScore])
+  @@index([supplierId, periodEnd])
+}
+
+/// Append-only approval history. One row per transition; never updated, never
+/// soft-deleted. The supplier's current state is denormalised on
+/// Supplier.status. See §4.2.
+model SupplierApproval {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+
+  fromStatus SupplierStatus?
+  toStatus   SupplierStatus
+  decision   ApprovalDecision
+
+  reviewerId String
+  comments   String?
+  reviewedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId, reviewedAt])
+  @@index([organizationId, toStatus])
+  @@index([organizationId, reviewerId])
+}
+
+/// Supplier <-> catalog Tag. Reuses the existing Tag vocabulary rather than
+/// introducing a second one.
+model SupplierTag {
+  supplierId String
+  tagId      String
+
+  createdAt DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([supplierId, tagId])
   @@index([tagId])
 }
