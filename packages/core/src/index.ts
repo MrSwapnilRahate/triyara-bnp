@@ -18,6 +18,19 @@ export {
   createBuyerService,
 } from './buyer/buyer.service'
 export {
+  type CategoryService,
+  type CategoryServiceCtx,
+  type CategoryServiceDeps,
+  createCategoryService,
+  slugify,
+} from './catalog/category.service'
+export {
+  createProductService,
+  type ProductService,
+  type ProductServiceCtx,
+  type ProductServiceDeps,
+} from './catalog/product.service'
+export {
   createDocumentService,
   type DocumentService,
   type DocumentServiceCtx,

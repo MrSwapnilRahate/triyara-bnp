@@ -1,6 +1,7 @@
 export * from './account'
 export * from './activity'
 export * from './buyer'
+export * from './catalog'
 export * from './document'
 export * from './notification'
 export * from './pagination'

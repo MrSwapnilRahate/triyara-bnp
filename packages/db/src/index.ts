@@ -26,6 +26,15 @@ export {
   buyerProfileRepository,
 } from './repositories/buyer-profile.repository'
 export {
+  type CategoryListResult,
+  type CategoryRecord,
+  type CategoryRepository,
+  categoryRepository,
+  type CreateCategoryData,
+  type ListCategoriesParams,
+  type UpdateCategoryData,
+} from './repositories/category.repository'
+export {
   type CreateDocumentInput,
   type DocumentListItem,
   type DocumentRecord,
@@ -54,6 +63,17 @@ export {
 export { orgUserRepository } from './repositories/org-user.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
+export {
+  type CreateProductData,
+  type ListProductsParams,
+  type ProductListItem,
+  type ProductListResult,
+  type ProductRecord,
+  type ProductRepository,
+  productRepository,
+  type SpecificationInput,
+  type UpdateProductData,
+} from './repositories/product.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
 export {
   type AddProductData,
@@ -87,6 +107,7 @@ export type {
   NotificationPriority,
   NotificationType,
   Organization,
+  ProductStatus,
   RelationshipStatus,
   Role,
   RoleName,
