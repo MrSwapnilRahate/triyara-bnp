@@ -28,7 +28,7 @@
     "@triyara/lib": "workspace:*"
   },
   "devDependencies": {
-    "bcryptjs": "^2.4.3",
+    "bcryptjs": "^3.0.3",
     "prisma": "^6.2.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
