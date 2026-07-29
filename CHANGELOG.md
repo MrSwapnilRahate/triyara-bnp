@@ -3,6 +3,37 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.9.0-product-catalog] - 2026-07-29
+
+### Added
+
+- **Product Catalog data layer** (TRY-BNP-CATALOG-S1) - schema, migrations and seed only;
+  repositories, services, API and UI are not part of this change.
+  - Prisma: `Category` (unlimited nesting via adjacency list + materialised `path`/`depth`),
+    `Product`, `ProductSpecificationDefinition`, `ProductSpecification` (EAV with typed
+    `valueNumber`/`valueBoolean`/`valueDate` projections), `ProductImage`,
+    `ProductDocument`, `ProductPrice`, `Tag`, `ProductTag` - 9 tables.
+  - Enums: `ProductStatus`, `DataType`, `ImageType`, `ProductDocumentType`, `Incoterm`
+    (Incoterms 2020, all eleven rules).
+  - Migrations `0001_catalog_extensions` (pg_trgm, btree_gist), `0002_product_catalog`
+    (tables, indexes, trigram indexes), `0003_product_catalog_constraints` (partial unique
+    PRIMARY-image index, full-text expression index, live-row partial indexes, and a
+    `ProductPrice` exclusion constraint barring overlapping validity windows).
+  - Seed: 8 categories, 11 specification definitions, 5 tags and 6 export products with
+    specifications, images, compliance documents and multi-incoterm pricing. Idempotent.
+  - Integration tests covering unique SKU, single PRIMARY image, price-overlap rejection,
+    cascade/restrict behaviour, unlimited nesting and typed projections.
+
+### Notes
+
+- No frozen module was modified. The only change outside the new tables is four
+  column-less back-relations on `Organization`, which add no columns.
+- Money is `Decimal(18,4)`; a soft-deleted product retains its unique SKU (restore rather
+  than recreate).
+- Supersedes the unmerged `feature/product-catalog` branch (Phase 17); that branch must be
+  closed rather than merged, as both define `Product` and `ProductStatus`.
+- See `docs/03-engineering/product-catalog-sprint1-domain-model.md`.
+
 ## [0.8.0-buyer-profile] - 2026-07-21
 
 ### Added

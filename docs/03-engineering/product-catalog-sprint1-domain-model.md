@@ -434,20 +434,37 @@ model Organization {
 }
 ```
 
-### Constraints that Prisma cannot express (raw SQL, at migration time)
+### Constraints that Prisma cannot express (raw SQL, in `0003_product_catalog_constraints`)
 
-Deliberately listed rather than generated, since migrations are out of scope:
+All of the following are **implemented and verified against PostgreSQL 16**:
 
-1. **Exactly one primary image per product**
-   `CREATE UNIQUE INDEX ... ON "ProductImage"("productId") WHERE "type" = 'PRIMARY' AND "deletedAt" IS NULL;`
-2. **No overlapping price windows** for the same product/incoterm/port/currency/MOQ —
-   requires `btree_gist` and an `EXCLUDE USING gist (... WITH =, tstzrange("validFrom","validTo") WITH &&)`.
-   Until then this is a service-layer invariant.
-3. **Full-text search vector** on `Product` — a generated `tsvector` column over
-   `name || sku || shortDescription || brand` with a GIN index, plus `pg_trgm` on
-   `sku`/`name` for fuzzy matching.
-4. **Category cycle guard** — depth/ancestry check in the service; optionally a trigger.
-5. **Partial indexes** narrowing the hot lists to `WHERE "deletedAt" IS NULL`.
+1. **Exactly one PRIMARY image per product** - partial unique index on `("productId")`
+   `WHERE "type" = 'PRIMARY' AND "deletedAt" IS NULL`.
+2. **No overlapping price windows** - `EXCLUDE USING gist` over
+   `(productId, incoterm, COALESCE(port,''), currency, COALESCE(minimumOrderQty,-1),
+tsrange(validFrom, validTo))`, restricted to live active rows. Requires `btree_gist`.
+3. **Full-text search** - GIN expression index over
+   `to_tsvector('english'::regconfig, name || sku || brand || shortDescription)`.
+4. **Live-row partial indexes** on `Product` and `Category` (`WHERE deletedAt IS NULL`).
+
+Two gotchas found by actually running the migration, both now documented inline in the SQL:
+
+- `to_tsvector('english', ...)` without an explicit `::regconfig` cast resolves to the
+  **single-argument** overload, which is only STABLE and is rejected for indexing with
+  `42P17 functions in index expression must be marked IMMUTABLE`.
+- Casting the `Incoterm` enum to text inside the exclusion constraint fails for the same
+  reason - the enum->text cast is STABLE. `btree_gist` supports enum types natively, so
+  the enum is compared directly and no cast is needed.
+
+**Trigram indexes are declared in the Prisma datamodel, not in raw SQL.** They sit on
+plain columns, so Prisma's differ can see them; leaving them in raw SQL made
+`prisma migrate diff` emit `DROP INDEX` for both on every run. Declaring them as
+`@@index([sku(ops: raw("gin_trgm_ops"))], type: Gin)` moves ownership to the datamodel and
+takes drift to zero. Extensions are created ahead of the tables in
+`0001_catalog_extensions` so the datamodel-owned trigram indexes have `pg_trgm` available.
+
+Verified drift after the change: `prisma migrate diff --from-migrations --to-schema-datamodel`
+returns _"This is an empty migration."_
 
 ---
 

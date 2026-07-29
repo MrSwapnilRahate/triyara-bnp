@@ -52,6 +52,13 @@ model Organization {
 
   users    User[]
   accounts Account[]
+
+  // Product Catalog (TRY-BNP-CATALOG-S1) back-relations. ORM-side only:
+  // these add NO columns to the Organization table.
+  categories      Category[]
+  products        Product[]
+  specDefinitions ProductSpecificationDefinition[]
+  tags            Tag[]
 }
 
 model User {
@@ -621,4 +628,371 @@ model BuyerProduct {
 
   @@unique([buyerProfileId, product])
   @@index([buyerProfileId])
+}
+
+// ===========================================================================
+// PRODUCT CATALOG (TRY-BNP-CATALOG-S1)
+//
+// Central master data. Every future module (Supplier, Buyer, Quotation, Order,
+// Inventory) references Product by id and never modifies it. Uniqueness is
+// always tenant-scoped; money is always Decimal; deletes are soft.
+// ===========================================================================
+
+/// Editorial + commercial lifecycle of a catalog product.
+enum ProductStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  DISCONTINUED
+  ARCHIVED
+}
+
+/// Storage type of a specification value. Drives validation and decides which
+/// typed projection column on ProductSpecification is populated.
+enum DataType {
+  STRING
+  NUMBER
+  BOOLEAN
+  DATE
+  ENUM
+}
+
+/// Role an image plays in a product's media set.
+enum ImageType {
+  PRIMARY
+  GALLERY
+  THUMBNAIL
+  PACKAGING
+  LABEL
+}
+
+/// PRODUCT-level document classes. Deliberately separate from the frozen
+/// Documents module's COMPANY-level `DocumentType` (GST, IEC, APEDA, HACCP...).
+enum ProductDocumentType {
+  COA
+  MSDS
+  SPEC_SHEET
+  ISO_CERTIFICATE
+  FSSAI
+  HALAL
+  KOSHER
+  LAB_REPORT
+  ORGANIC_CERTIFICATE
+  PHYTOSANITARY
+  CERTIFICATE_OF_ORIGIN
+  OTHER
+}
+
+/// Incoterms 2020 - all eleven rules.
+enum Incoterm {
+  EXW
+  FCA
+  FAS
+  FOB
+  CFR
+  CIF
+  CPT
+  CIP
+  DAP
+  DPU
+  DDP
+}
+
+/// Product classification with unlimited nesting (adjacency list + path).
+model Category {
+  id             String @id @default(cuid())
+  organizationId String
+
+  parentId    String?
+  name        String
+  slug        String
+  description String?
+
+  /// Denormalised ancestry maintained by the service on create/move, e.g.
+  /// "/spices/whole-spices/turmeric". Turns subtree reads into an indexed
+  /// LIKE instead of a recursive CTE.
+  path  String
+  /// Root = 0. Denormalised depth for breadcrumbs and max-depth guards.
+  depth Int    @default(0)
+
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       Category?    @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children     Category[]   @relation("CategoryTree")
+  products     Product[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, parentId, sortOrder])
+  @@index([organizationId, path])
+  @@index([organizationId, isActive, deletedAt])
+}
+
+/// The master product record every other module references.
+model Product {
+  id             String @id @default(cuid())
+  organizationId String
+
+  sku              String
+  name             String
+  slug             String
+  shortDescription String?
+  description      String? @db.Text
+
+  categoryId String
+
+  /// ISO 3166-1 alpha-2, e.g. "IN".
+  countryOfOrigin String? @db.Char(2)
+  brand           String?
+  /// HS / HSN tariff code, 6-12 digits, stored unformatted.
+  hsCode          String?
+
+  status   ProductStatus @default(DRAFT)
+  isActive Boolean       @default(true)
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  specifications ProductSpecification[]
+  images         ProductImage[]
+  documents      ProductDocument[]
+  prices         ProductPrice[]
+  tags           ProductTag[]
+
+  @@unique([organizationId, sku])
+  @@unique([organizationId, slug])
+  @@index([organizationId, categoryId, status])
+  @@index([organizationId, status, isActive, deletedAt])
+  @@index([organizationId, hsCode])
+  @@index([organizationId, countryOfOrigin])
+  @@index([organizationId, brand])
+  @@index([categoryId])
+  /// Trigram indexes for fuzzy / substring matching on the two identifiers
+  /// users actually type. Declared here rather than in raw SQL so the datamodel
+  /// owns them and `migrate diff` does not try to drop them. Requires the
+  /// pg_trgm extension, created in migration 0001_catalog_extensions.
+  @@index([sku(ops: raw("gin_trgm_ops"))], map: "Product_sku_trgm_idx", type: Gin)
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "Product_name_trgm_idx", type: Gin)
+}
+
+/// Definition of a dynamic specification (Moisture, Purity, Curcumin, ...).
+model ProductSpecificationDefinition {
+  id             String @id @default(cuid())
+  organizationId String
+
+  name String
+  slug String
+  /// Unit the value is expressed in, e.g. "%", "mesh", "months".
+  unit String?
+
+  dataType DataType @default(STRING)
+
+  /// Permitted values when dataType = ENUM (e.g. Grade: A, B, C).
+  allowedValues String[]
+
+  /// Surfaced as a search facet when true.
+  isFilterable Boolean @default(false)
+  isRequired   Boolean @default(false)
+  sortOrder    Int     @default(0)
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  values       ProductSpecification[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, sortOrder])
+  @@index([organizationId, isFilterable])
+}
+
+/// A specification value for one product (EAV).
+model ProductSpecification {
+  id           String @id @default(cuid())
+  productId    String
+  definitionId String
+
+  /// Canonical value exactly as entered. Always populated.
+  value String
+
+  /// Typed projections written by the service from `value` according to
+  /// definition.dataType, so range filters never cast text. Derived data.
+  valueNumber  Decimal?  @db.Decimal(18, 6)
+  valueBoolean Boolean?
+  valueDate    DateTime?
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product    Product                        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  definition ProductSpecificationDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, definitionId])
+  @@index([productId])
+  @@index([definitionId, valueNumber])
+  @@index([definitionId, value])
+}
+
+/// Product imagery. Exactly one PRIMARY per product is enforced by a partial
+/// unique index created in the migration (Prisma cannot express it).
+model ProductImage {
+  id        String @id @default(cuid())
+  productId String
+
+  url     String
+  altText String?
+  type    ImageType @default(GALLERY)
+
+  /// Storage-provider object key when the file is platform-managed.
+  storageKey String?
+  width      Int?
+  height     Int?
+  fileSize   Int?
+  checksum   String?
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, type, sortOrder])
+  @@index([productId, deletedAt])
+}
+
+/// Export/compliance certificates attached to a product.
+model ProductDocument {
+  id        String @id @default(cuid())
+  productId String
+
+  documentType ProductDocumentType
+  title        String?
+
+  fileUrl    String
+  storageKey String?
+  mimeType   String?
+  fileSize   Int?
+  checksum   String?
+
+  /// The issuer's own revision label, e.g. "Rev-3". NOT the optimistic
+  /// concurrency counter - that is `recordVersion`.
+  version    String?
+  issuedBy   String?
+  issuedAt   DateTime?
+  validUntil DateTime?
+
+  /// Whether the document may be shown to unauthenticated buyers.
+  isPublic Boolean @default(false)
+
+  /// Seam to the frozen platform Document module. Populated when the file is
+  /// also a managed, access-controlled platform document.
+  documentId String?
+
+  sortOrder Int @default(0)
+
+  recordVersion Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, documentType])
+  @@index([productId, deletedAt])
+  @@index([validUntil])
+  @@index([documentId])
+}
+
+/// Triyara's own export list price. Supplier-specific cost lives in the
+/// Supplier module, never here.
+model ProductPrice {
+  id        String @id @default(cuid())
+  productId String
+
+  /// ISO 4217. Never inferred from locale.
+  currency String  @db.Char(3)
+  /// Exact decimal. Never Float.
+  price    Decimal @db.Decimal(18, 4)
+
+  incoterm Incoterm
+  /// UN/LOCODE or named place, e.g. "INNSA" / "Nhava Sheva".
+  port     String?
+
+  minimumOrderQty Decimal? @db.Decimal(18, 4)
+  /// UoM the price and MOQ are quoted in, e.g. "MT", "KG".
+  unit            String?
+
+  validFrom DateTime
+  validTo   DateTime?
+
+  isActive Boolean @default(true)
+  notes    String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, incoterm, port, currency, minimumOrderQty, validFrom])
+  @@index([productId, isActive, validFrom, validTo])
+  @@index([productId, incoterm])
+  @@index([productId, currency])
+}
+
+/// Free-form merchandising label (Organic, Premium, Best Seller, ...).
+model Tag {
+  id             String @id @default(cuid())
+  organizationId String
+
+  name        String
+  slug        String
+  description String?
+  /// Presentation hint (hex), e.g. "#0F766E".
+  color       String?
+
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products     ProductTag[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, isActive, sortOrder])
+}
+
+/// Product <-> Tag join.
+model ProductTag {
+  productId String
+  tagId     String
+
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@index([tagId])
 }
