@@ -53,6 +53,25 @@ export {
   createBuyerService,
 } from './buyer/buyer.service'
 export {
+  type CatalogReferenceCtx,
+  type CatalogReferenceDeps,
+  type CatalogReferenceService,
+  createCatalogReferenceService,
+} from './catalog/catalog-reference.service'
+export {
+  type CategoryService,
+  type CategoryServiceCtx,
+  type CategoryServiceDeps,
+  createCategoryService,
+  slugify,
+} from './catalog/category.service'
+export {
+  createProductService,
+  type ProductService,
+  type ProductServiceCtx,
+  type ProductServiceDeps,
+} from './catalog/product.service'
+export {
   createDocumentService,
   type DocumentService,
   type DocumentServiceCtx,
@@ -79,6 +98,18 @@ export {
   type SupplierServiceCtx,
   type SupplierServiceDeps,
 } from './supplier/supplier.service'
+export {
+  createSupplierMasterService,
+  type SupplierMasterCtx,
+  type SupplierMasterDeps,
+  type SupplierMasterService,
+} from './supplier-management/supplier.service'
+export {
+  createSupplierOfferingService,
+  type OfferingServiceCtx,
+  type OfferingServiceDeps,
+  type SupplierOfferingService,
+} from './supplier-management/supplier-offering.service'
 export {
   createVerificationService,
   type ReviewerLookup,

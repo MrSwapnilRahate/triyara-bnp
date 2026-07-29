@@ -3,43 +3,36 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
-## [0.9.0-auth-extension] - 2026-07-29
+## [0.9.0-product-catalog] - 2026-07-29
 
 ### Added
 
-- **Authentication & authorization extension** (TRY-BNP-AUTH-02) - an additive layer over
-  the frozen auth foundation. `TRY-BNP-AUTH-01` is not modified.
-  - Prisma: `UserSecurityProfile` (1:1 extension of User: email verification, lockout,
-    password age), `EmailVerificationToken`, `UserSession` (session registry),
-    `ScopedRoleAssignment` (resource-scoped, optionally time-boxed role grants),
-    `LoginAttempt` (durable authentication audit) + `RoleScopeType`, `SessionEndReason`
-    and `LoginOutcome` enums.
-  - Migrations `20260729060817_auth_extension` and
-    `20260729060900_auth_extension_constraints` (one active grant per user/role/scope,
-    one outstanding verification token per address, live-session partial index).
-  - Repositories: user-security, session, scoped-role, login-attempt, plus a read-only
-    role lookup. All mutations audited through the existing AuditLog.
-  - Services: email verification, sessions, scoped roles, permissions, login audit.
-  - API: eight endpoints under `/api/v1/auth` - email verification (status/request/
-    confirm), sessions (list/revoke), permissions, role assignments (list/grant/revoke)
-    and the login-attempt audit.
-  - Tests: 10 service unit tests and 10 repository integration tests.
+- **Product Catalog data layer** (TRY-BNP-CATALOG-S1) - schema, migrations and seed only;
+  repositories, services, API and UI are not part of this change.
+  - Prisma: `Category` (unlimited nesting via adjacency list + materialised `path`/`depth`),
+    `Product`, `ProductSpecificationDefinition`, `ProductSpecification` (EAV with typed
+    `valueNumber`/`valueBoolean`/`valueDate` projections), `ProductImage`,
+    `ProductDocument`, `ProductPrice`, `Tag`, `ProductTag` - 9 tables.
+  - Enums: `ProductStatus`, `DataType`, `ImageType`, `ProductDocumentType`, `Incoterm`
+    (Incoterms 2020, all eleven rules).
+  - Migrations `0001_catalog_extensions` (pg_trgm, btree_gist), `0002_product_catalog`
+    (tables, indexes, trigram indexes), `0003_product_catalog_constraints` (partial unique
+    PRIMARY-image index, full-text expression index, live-row partial indexes, and a
+    `ProductPrice` exclusion constraint barring overlapping validity windows).
+  - Seed: 8 categories, 11 specification definitions, 5 tags and 6 export products with
+    specifications, images, compliance documents and multi-incoterm pricing. Idempotent.
+  - Integration tests covering unique SKU, single PRIMARY image, price-overlap rejection,
+    cascade/restrict behaviour, unlimited nesting and typed projections.
 
 ### Notes
 
-- **CASL remains the single source of truth for authorization.** There is deliberately no
-  `Permission` table; `GET /auth/permissions` derives the matrix at read time, guarded by
-  compile-time exhaustiveness checks against the frozen Action/Subject unions.
-- Scoped grants widen **who holds a role**, never **what a role permits**.
-- The only touch to frozen models is column-less back-relations on `User` and `Role`,
-  which add no columns (verified: the pre-existing schema is byte-identical without the
-  additions).
-- Known limitations, recorded in ADR-0011: session revocation is enforced per-endpoint via
-  `assertActive` rather than globally (the frozen Auth.js config is JWT-based), and email
-  verification requires an authenticated session (the frozen middleware has no public
-  verify route).
-- See `docs/09-decisions/ADR-0011-auth-extension.md` and
-  `docs/03-engineering/auth-extension.md`.
+- No frozen module was modified. The only change outside the new tables is four
+  column-less back-relations on `Organization`, which add no columns.
+- Money is `Decimal(18,4)`; a soft-deleted product retains its unique SKU (restore rather
+  than recreate).
+- Supersedes the unmerged `feature/product-catalog` branch (Phase 17); that branch must be
+  closed rather than merged, as both define `Product` and `ProductStatus`.
+- See `docs/03-engineering/product-catalog-sprint1-domain-model.md`.
 
 ## [0.8.0-buyer-profile] - 2026-07-21
 

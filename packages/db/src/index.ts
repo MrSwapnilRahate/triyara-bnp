@@ -26,6 +26,23 @@ export {
   buyerProfileRepository,
 } from './repositories/buyer-profile.repository'
 export {
+  type CatalogReferenceRepository,
+  catalogReferenceRepository,
+  type ListDefinitionsParams,
+  type ListTagsParams,
+  type SpecificationDefinitionRecord,
+  type TagRecord,
+} from './repositories/catalog-reference.repository'
+export {
+  type CategoryListResult,
+  type CategoryRecord,
+  type CategoryRepository,
+  categoryRepository,
+  type CreateCategoryData,
+  type ListCategoriesParams,
+  type UpdateCategoryData,
+} from './repositories/category.repository'
+export {
   type CreateDocumentInput,
   type DocumentListItem,
   type DocumentRecord,
@@ -62,27 +79,36 @@ export {
 export { orgUserRepository } from './repositories/org-user.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
+export {
+  type CreateProductData,
+  type ListProductsParams,
+  type ProductListItem,
+  type ProductListResult,
+  type ProductRecord,
+  type ProductRepository,
+  productRepository,
+  type SpecificationInput,
+  type UpdateProductData,
+} from './repositories/product.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
 export {
-  type RoleRecord,
-  type RoleRepository,
-  roleRepository,
-} from './repositories/role.repository'
+  type CreateSupplierData,
+  type ListSuppliersParams,
+  type SupplierListItem,
+  type SupplierListResult,
+  type SupplierRecord,
+  type SupplierRepository,
+  supplierRepository,
+  type UpdateSupplierData,
+} from './repositories/supplier.repository'
 export {
-  type GrantScopedRoleData,
-  type ListScopedRolesParams,
-  type ScopedRoleListResult,
-  type ScopedRoleRecord,
-  type ScopedRoleRepository,
-  scopedRoleRepository,
-} from './repositories/scoped-role.repository'
-export {
-  type ListSessionsParams,
-  type SessionListResult,
-  type SessionRecord,
-  type SessionRepository,
-  sessionRepository,
-} from './repositories/session.repository'
+  type ListOfferingsParams,
+  type OfferingListResult,
+  type OfferingRecord,
+  type SupplierOfferingRepository,
+  supplierOfferingRepository,
+  type UpsertOfferingData,
+} from './repositories/supplier-offering.repository'
 export {
   type AddProductData,
   type SupplierProfileData,
@@ -112,21 +138,24 @@ export {
 export type {
   Account,
   ActivityType,
+  ApprovalDecision,
   BuyerType,
   DocumentStatus,
   DocumentType,
   ImportExperience,
-  LoginOutcome,
+  Incoterm,
   ManufacturingType,
   NotificationChannel,
   NotificationPriority,
   NotificationType,
   Organization,
+  ProductStatus,
   RelationshipStatus,
   Role,
   RoleName,
-  RoleScopeType,
-  SessionEndReason,
+  SupplierBusinessType,
+  SupplierProductStatus,
+  SupplierStatus,
   User,
   UserRole,
   UserStatus,

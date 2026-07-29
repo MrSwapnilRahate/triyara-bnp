@@ -16,7 +16,18 @@ updates:
       dev-minor-patch:
         dependency-type: development
         update-types: ['minor', 'patch']
-    # Security updates are raised automatically regardless of schedule.
+    # Policy: security, patch and minor updates only.
+    #
+    # `version-update:semver-major` suppresses SCHEDULED major-version bumps
+    # only. Dependabot security updates are raised independently of this rule,
+    # so a vulnerability is still surfaced even when the fix is a major release.
+    #
+    # Majors are handled deliberately as their own piece of work: framework
+    # majors (Next, Tailwind, TypeScript, Vitest) carry breaking changes that
+    # must not arrive as unreviewed automated PRs.
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: '/'
@@ -25,3 +36,8 @@ updates:
     labels: ['dependencies', 'ci']
     commit-message:
       prefix: 'chore(ci)'
+    # Same policy for action versions: a major action bump changes runner
+    # behaviour and is reviewed deliberately, not merged automatically.
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
