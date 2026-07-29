@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 import { seedCatalog } from './seed-catalog'
+import { seedRfqs } from './seed-rfq'
 import { seedSuppliers } from './seed-supplier'
 
 // Seeds one organization, the four roles, and an initial admin user.
@@ -44,6 +45,7 @@ async function main() {
 
   const catalog = await seedCatalog(prisma, org.id)
   const suppliers = await seedSuppliers(prisma, org.id)
+  const rfqs = await seedRfqs(prisma, org.id)
 
   /* eslint-disable no-console */
   console.log('Seeded org, roles, and admin (admin@triyaraexports.com / ChangeMe!123)')
@@ -52,6 +54,7 @@ async function main() {
       `${catalog.tags} tags, ${catalog.products} products`,
   )
   console.log(`Seeded suppliers: ${suppliers.suppliers}`)
+  console.log(`Seeded RFQs: ${rfqs.rfqs}`)
   /* eslint-enable no-console */
 }
 
