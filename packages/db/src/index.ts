@@ -36,6 +36,14 @@ export {
   type UpdateDocumentInput,
 } from './repositories/document.repository'
 export {
+  type ListLoginAttemptsParams,
+  type LoginAttemptListResult,
+  type LoginAttemptRecord,
+  type LoginAttemptRepository,
+  loginAttemptRepository,
+  type RecordLoginAttempt,
+} from './repositories/login-attempt.repository'
+export {
   type ListNotificationsParams,
   type NewNotification,
   type NotificationFeedItem,
@@ -56,6 +64,26 @@ export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
 export {
+  type RoleRecord,
+  type RoleRepository,
+  roleRepository,
+} from './repositories/role.repository'
+export {
+  type GrantScopedRoleData,
+  type ListScopedRolesParams,
+  type ScopedRoleListResult,
+  type ScopedRoleRecord,
+  type ScopedRoleRepository,
+  scopedRoleRepository,
+} from './repositories/scoped-role.repository'
+export {
+  type ListSessionsParams,
+  type SessionListResult,
+  type SessionRecord,
+  type SessionRepository,
+  sessionRepository,
+} from './repositories/session.repository'
+export {
   type AddProductData,
   type SupplierProfileData,
   type SupplierProfileRecord,
@@ -63,6 +91,12 @@ export {
   supplierProfileRepository,
 } from './repositories/supplier-profile.repository'
 export { userRepository, type UserWithRoles } from './repositories/user.repository'
+export {
+  type EmailVerificationTokenRecord,
+  type UserSecurityProfileRecord,
+  type UserSecurityRepository,
+  userSecurityRepository,
+} from './repositories/user-security.repository'
 export {
   type CreateVerificationInput,
   type HistoryEntry,
@@ -82,6 +116,7 @@ export type {
   DocumentStatus,
   DocumentType,
   ImportExperience,
+  LoginOutcome,
   ManufacturingType,
   NotificationChannel,
   NotificationPriority,
@@ -90,6 +125,8 @@ export type {
   RelationshipStatus,
   Role,
   RoleName,
+  RoleScopeType,
+  SessionEndReason,
   User,
   UserRole,
   UserStatus,

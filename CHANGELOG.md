@@ -3,6 +3,44 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.9.0-auth-extension] - 2026-07-29
+
+### Added
+
+- **Authentication & authorization extension** (TRY-BNP-AUTH-02) - an additive layer over
+  the frozen auth foundation. `TRY-BNP-AUTH-01` is not modified.
+  - Prisma: `UserSecurityProfile` (1:1 extension of User: email verification, lockout,
+    password age), `EmailVerificationToken`, `UserSession` (session registry),
+    `ScopedRoleAssignment` (resource-scoped, optionally time-boxed role grants),
+    `LoginAttempt` (durable authentication audit) + `RoleScopeType`, `SessionEndReason`
+    and `LoginOutcome` enums.
+  - Migrations `20260729060817_auth_extension` and
+    `20260729060900_auth_extension_constraints` (one active grant per user/role/scope,
+    one outstanding verification token per address, live-session partial index).
+  - Repositories: user-security, session, scoped-role, login-attempt, plus a read-only
+    role lookup. All mutations audited through the existing AuditLog.
+  - Services: email verification, sessions, scoped roles, permissions, login audit.
+  - API: eight endpoints under `/api/v1/auth` - email verification (status/request/
+    confirm), sessions (list/revoke), permissions, role assignments (list/grant/revoke)
+    and the login-attempt audit.
+  - Tests: 10 service unit tests and 10 repository integration tests.
+
+### Notes
+
+- **CASL remains the single source of truth for authorization.** There is deliberately no
+  `Permission` table; `GET /auth/permissions` derives the matrix at read time, guarded by
+  compile-time exhaustiveness checks against the frozen Action/Subject unions.
+- Scoped grants widen **who holds a role**, never **what a role permits**.
+- The only touch to frozen models is column-less back-relations on `User` and `Role`,
+  which add no columns (verified: the pre-existing schema is byte-identical without the
+  additions).
+- Known limitations, recorded in ADR-0011: session revocation is enforced per-endpoint via
+  `assertActive` rather than globally (the frozen Auth.js config is JWT-based), and email
+  verification requires an authenticated session (the frozen middleware has no public
+  verify route).
+- See `docs/09-decisions/ADR-0011-auth-extension.md` and
+  `docs/03-engineering/auth-extension.md`.
+
 ## [0.8.0-buyer-profile] - 2026-07-21
 
 ### Added
