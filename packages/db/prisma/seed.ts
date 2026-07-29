@@ -2,6 +2,9 @@ import type { RoleName } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
+import { seedCatalog } from './seed-catalog'
+import { seedSuppliers } from './seed-supplier'
+
 // Seeds one organization, the four roles, and an initial admin user.
 // Run with: pnpm --filter @triyara/db db:seed  (requires DATABASE_URL)
 const prisma = new PrismaClient()
@@ -39,8 +42,17 @@ async function main() {
     create: { userId: admin.id, roleId: adminRole.id },
   })
 
-  // eslint-disable-next-line no-console
+  const catalog = await seedCatalog(prisma, org.id)
+  const suppliers = await seedSuppliers(prisma, org.id)
+
+  /* eslint-disable no-console */
   console.log('Seeded org, roles, and admin (admin@triyaraexports.com / ChangeMe!123)')
+  console.log(
+    `Seeded catalog: ${catalog.categories} categories, ${catalog.specDefinitions} spec definitions, ` +
+      `${catalog.tags} tags, ${catalog.products} products`,
+  )
+  console.log(`Seeded suppliers: ${suppliers.suppliers}`)
+  /* eslint-enable no-console */
 }
 
 main()
