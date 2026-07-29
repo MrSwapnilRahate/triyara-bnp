@@ -26,6 +26,15 @@ export {
   buyerProfileRepository,
 } from './repositories/buyer-profile.repository'
 export {
+  type CategoryListResult,
+  type CategoryRecord,
+  type CategoryRepository,
+  categoryRepository,
+  type CreateCategoryData,
+  type ListCategoriesParams,
+  type UpdateCategoryData,
+} from './repositories/category.repository'
+export {
   type CreateDocumentInput,
   type DocumentListItem,
   type DocumentRecord,
@@ -54,7 +63,36 @@ export {
 export { orgUserRepository } from './repositories/org-user.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
+export {
+  type CreateProductData,
+  type ListProductsParams,
+  type ProductListItem,
+  type ProductListResult,
+  type ProductRecord,
+  type ProductRepository,
+  productRepository,
+  type SpecificationInput,
+  type UpdateProductData,
+} from './repositories/product.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
+export {
+  type CreateSupplierData,
+  type ListSuppliersParams,
+  type SupplierListItem,
+  type SupplierListResult,
+  type SupplierRecord,
+  type SupplierRepository,
+  supplierRepository,
+  type UpdateSupplierData,
+} from './repositories/supplier.repository'
+export {
+  type ListOfferingsParams,
+  type OfferingListResult,
+  type OfferingRecord,
+  type SupplierOfferingRepository,
+  supplierOfferingRepository,
+  type UpsertOfferingData,
+} from './repositories/supplier-offering.repository'
 export {
   type AddProductData,
   type SupplierProfileData,
@@ -78,18 +116,24 @@ export {
 export type {
   Account,
   ActivityType,
+  ApprovalDecision,
   BuyerType,
   DocumentStatus,
   DocumentType,
   ImportExperience,
+  Incoterm,
   ManufacturingType,
   NotificationChannel,
   NotificationPriority,
   NotificationType,
   Organization,
+  ProductStatus,
   RelationshipStatus,
   Role,
   RoleName,
+  SupplierBusinessType,
+  SupplierProductStatus,
+  SupplierStatus,
   User,
   UserRole,
   UserStatus,
