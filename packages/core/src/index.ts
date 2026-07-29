@@ -58,6 +58,18 @@ export {
   type SupplierServiceDeps,
 } from './supplier/supplier.service'
 export {
+  createSupplierMasterService,
+  type SupplierMasterCtx,
+  type SupplierMasterDeps,
+  type SupplierMasterService,
+} from './supplier-management/supplier.service'
+export {
+  createSupplierOfferingService,
+  type OfferingServiceCtx,
+  type OfferingServiceDeps,
+  type SupplierOfferingService,
+} from './supplier-management/supplier-offering.service'
+export {
   createVerificationService,
   type ReviewerLookup,
   type VerificationService,

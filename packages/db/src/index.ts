@@ -76,6 +76,24 @@ export {
 } from './repositories/product.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
 export {
+  type CreateSupplierData,
+  type ListSuppliersParams,
+  type SupplierListItem,
+  type SupplierListResult,
+  type SupplierRecord,
+  type SupplierRepository,
+  supplierRepository,
+  type UpdateSupplierData,
+} from './repositories/supplier.repository'
+export {
+  type ListOfferingsParams,
+  type OfferingListResult,
+  type OfferingRecord,
+  type SupplierOfferingRepository,
+  supplierOfferingRepository,
+  type UpsertOfferingData,
+} from './repositories/supplier-offering.repository'
+export {
   type AddProductData,
   type SupplierProfileData,
   type SupplierProfileRecord,
@@ -98,10 +116,12 @@ export {
 export type {
   Account,
   ActivityType,
+  ApprovalDecision,
   BuyerType,
   DocumentStatus,
   DocumentType,
   ImportExperience,
+  Incoterm,
   ManufacturingType,
   NotificationChannel,
   NotificationPriority,
@@ -111,6 +131,9 @@ export type {
   RelationshipStatus,
   Role,
   RoleName,
+  SupplierBusinessType,
+  SupplierProductStatus,
+  SupplierStatus,
   User,
   UserRole,
   UserStatus,
