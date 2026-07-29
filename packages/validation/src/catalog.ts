@@ -133,3 +133,21 @@ export const createSpecDefinitionSchema = z.object({
   sortOrder: z.coerce.number().int().min(0).default(0),
 })
 export type CreateSpecDefinitionDto = z.infer<typeof createSpecDefinitionSchema>
+
+// ---- Reference list endpoints ----
+
+export const listSpecificationsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+  q: z.string().trim().optional(),
+  isFilterable: z.enum(['true', 'false']).optional(),
+})
+export type ListSpecificationsQuery = z.infer<typeof listSpecificationsQuerySchema>
+
+export const listTagsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+  q: z.string().trim().optional(),
+  isActive: z.enum(['true', 'false']).optional(),
+})
+export type ListTagsQuery = z.infer<typeof listTagsQuerySchema>

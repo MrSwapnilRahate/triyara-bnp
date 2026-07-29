@@ -26,6 +26,14 @@ export {
   buyerProfileRepository,
 } from './repositories/buyer-profile.repository'
 export {
+  type CatalogReferenceRepository,
+  catalogReferenceRepository,
+  type ListDefinitionsParams,
+  type ListTagsParams,
+  type SpecificationDefinitionRecord,
+  type TagRecord,
+} from './repositories/catalog-reference.repository'
+export {
   type CategoryListResult,
   type CategoryRecord,
   type CategoryRepository,

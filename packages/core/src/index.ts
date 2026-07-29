@@ -18,6 +18,12 @@ export {
   createBuyerService,
 } from './buyer/buyer.service'
 export {
+  type CatalogReferenceCtx,
+  type CatalogReferenceDeps,
+  type CatalogReferenceService,
+  createCatalogReferenceService,
+} from './catalog/catalog-reference.service'
+export {
   type CategoryService,
   type CategoryServiceCtx,
   type CategoryServiceDeps,
