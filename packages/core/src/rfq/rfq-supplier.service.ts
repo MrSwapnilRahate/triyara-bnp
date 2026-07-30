@@ -52,7 +52,9 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
     )
   }
 
-  return {
+  // Named rather than returned inline so a method can call a sibling without
+  // relying on `this`, which would break the moment a caller destructured it.
+  const service = {
     async list(ctx: RfqSupplierCtx, rfqId: string): Promise<RfqParticipationRecord[]> {
       assertAbility(ctx, 'read', 'Account')
       return repo.listParticipation(ctx.organizationId, rfqId)
@@ -177,6 +179,45 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
       return result
     },
 
+    /**
+     * Every bid on one RFQ. The rfqId comes from the caller's path, so a bid
+     * belonging to another RFQ cannot be reached by widening the query.
+     */
+    async listResponsesForRfq(ctx: RfqSupplierCtx, rfqId: string, query: ListResponsesQuery) {
+      assertAbility(ctx, 'read', 'Account')
+      const rfq = await rfqs.findById(ctx.organizationId, rfqId)
+      if (!rfq) throw new NotFoundError('RFQ not found.')
+      return repo.listResponses({
+        organizationId: ctx.organizationId,
+        rfqId,
+        rfqItemId: query.rfqItemId,
+        rfqSupplierId: query.rfqSupplierId,
+        currentOnly: query.currentOnly === undefined ? true : query.currentOnly === 'true',
+        limit: query.limit,
+        cursor: query.cursor,
+      })
+    },
+
+    /**
+     * Submits a bid against an RFQ named in the path. The participation must
+     * belong to that RFQ - otherwise a caller holding one RFQ's id could post a
+     * bid onto another RFQ by supplying a foreign rfqSupplierId.
+     */
+    async submitResponseForRfq(
+      ctx: RfqSupplierCtx,
+      rfqId: string,
+      rfqSupplierId: string,
+      dto: SubmitResponseDto,
+    ) {
+      assertAbility(ctx, 'update', 'Account')
+      const participation = await repo.findParticipation(ctx.organizationId, rfqSupplierId)
+      if (!participation) throw new NotFoundError('Supplier participation not found.')
+      if (participation.rfqId !== rfqId) {
+        throw new NotFoundError('Supplier participation not found on this RFQ.')
+      }
+      return service.submitResponse(ctx, rfqSupplierId, dto)
+    },
+
     async listResponses(ctx: RfqSupplierCtx, query: ListResponsesQuery) {
       assertAbility(ctx, 'read', 'Account')
       return repo.listResponses({
@@ -201,6 +242,8 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
       return repo.priceHistory(ctx.organizationId, rfqSupplierId, rfqItemId)
     },
   }
+
+  return service
 }
 
 export type RfqSupplierService = ReturnType<typeof createRfqSupplierService>
