@@ -557,6 +557,88 @@ export function createQuotationService({
     },
 
     /**
+     * Records the buyer accepting the quotation. Separate from `transition`
+     * because no approval decision maps to ACCEPTED - DECISION_TARGET stops at
+     * WITHDRAWN, so an accepted offer could otherwise never be recorded. The
+     * legal predecessors come from the same TRANSITIONS table, not a second copy
+     * of the rules.
+     */
+    async accept(
+      ctx: QuotationServiceCtx,
+      id: string,
+      expectedVersion: number,
+      comments?: string,
+    ): Promise<QuotationRecord> {
+      assertAbility(ctx, 'update', 'Account')
+      const current = await repo.findById(ctx.organizationId, id)
+      if (!current) throw new NotFoundError('Quotation not found.')
+      if (!(TRANSITIONS[current.status] ?? []).includes('ACCEPTED')) {
+        throw new ConflictError(
+          `A ${current.status} quotation cannot be accepted. Allowed from here: ${
+            (TRANSITIONS[current.status] ?? []).join(', ') || 'none'
+          }.`,
+        )
+      }
+
+      // QuotationApprovalStatus has no ACCEPTED member, so the approval row
+      // records APPROVED: the buyer sanctioned the document.
+      const updated = await repo.transition(
+        mutationCtx(ctx),
+        id,
+        expectedVersion,
+        'ACCEPTED',
+        'APPROVED',
+        comments ?? 'Accepted by the buyer.',
+      )
+      await emit(ctx, 'quotation.accepted', {
+        quotationId: id,
+        buyerId: current.buyerId,
+        grandTotal: num(current.grandTotal),
+      })
+      return redact(ctx, updated)
+    },
+
+    /**
+     * Lapses a quotation whose validity has run out. Deliberately explicit
+     * rather than inferred from `validUntil` on read: a quotation is a
+     * commercial commitment, and when it stopped being one is a fact worth
+     * recording with an actor and a timestamp, not recomputing per request.
+     */
+    async expire(
+      ctx: QuotationServiceCtx,
+      id: string,
+      expectedVersion: number,
+      comments?: string,
+    ): Promise<QuotationRecord> {
+      assertAbility(ctx, 'update', 'Account')
+      const current = await repo.findById(ctx.organizationId, id)
+      if (!current) throw new NotFoundError('Quotation not found.')
+      if (!(TRANSITIONS[current.status] ?? []).includes('EXPIRED')) {
+        throw new ConflictError(
+          `A ${current.status} quotation cannot expire. Allowed from here: ${
+            (TRANSITIONS[current.status] ?? []).join(', ') || 'none'
+          }.`,
+        )
+      }
+
+      // CANCELLED is the closest approval-chain marker: the offer is no longer
+      // live. REJECTED would misrepresent a lapse as a buyer decision.
+      const updated = await repo.transition(
+        mutationCtx(ctx),
+        id,
+        expectedVersion,
+        'EXPIRED',
+        'CANCELLED',
+        comments ?? 'Validity period elapsed.',
+      )
+      await emit(ctx, 'quotation.expired', {
+        quotationId: id,
+        validUntil: current.validUntil,
+      })
+      return redact(ctx, updated)
+    },
+
+    /**
      * Supersedes the current document and opens revision n+1. The superseded row
      * IS the historical snapshot, so nothing is copied or serialised.
      */
