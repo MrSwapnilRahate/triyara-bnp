@@ -3,6 +3,43 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.15.0-supplier-api] - 2026-07-30
+
+### Added
+
+- **Supplier REST API** (TRY-BNP-SUPPLIER-API) - 10 endpoints under `/api/suppliers/*` plus a
+  published `openapi.json`. No schema, migration or business-rule change.
+  - CRUD: `GET|POST /`, `GET|PATCH|DELETE /{id}`.
+  - Offerings: `GET|POST /{id}/products`. The supplier id comes from the path and a
+    `supplierId` in the query string is ignored, so a caller cannot page one supplier while
+    filtering by another.
+  - Reference: `GET /search`, `GET /countries`, `GET /certifications`.
+  - Route handlers only parse, authorize and delegate. No Prisma import, no business rule.
+    Repositories are injected in `apps/web/src/lib/supplier-master-service.ts`.
+  - ETag / `If-Match` optimistic concurrency (412 on a stale version, 428 when absent),
+    cursor pagination, filtering, sorting, soft delete, request-id propagation and audit
+    logging, all inherited from the existing service and repository rather than reimplemented.
+  - Search is backed by the same query as the list, so a supplier findable in one is findable
+    in the other. An exact supplier-code match ranks first. The projection is compact and
+    carries no contact or banking data.
+  - `GET /countries` and `GET /certifications` report what the tenant actually holds, with
+    counts, rather than echoing a 249-entry ISO list or the bare enum. `certifications`
+    additionally carries the full vocabulary in `meta.vocabulary` for filter UIs.
+
+### Notes
+
+- Two read-only aggregations (`countryFacets`, `certificationFacets`) were added to
+  `supplierRepository` because no existing method could answer the two facet endpoints. They
+  write nothing and apply no business rule. Every other endpoint reuses existing methods
+  unchanged.
+- A supplier belonging to another tenant is reported as **404, never 403**, so the API does
+  not confirm the existence of records the caller may not see.
+- `accountNumber` is not in the repository's projection and therefore cannot reach a response;
+  an integration test asserts it never appears.
+- Authorization reuses the frozen `SupplierProfile` CASL subject - no new subject.
+- The frozen `supplier-service.ts` wiring (SupplierProfile, a 1:1 extension of Account) is
+  untouched; this API wires the supplier MASTER aggregate from a separate file.
+
 ## [0.14.0-quotation-engine] - 2026-07-30
 
 ### Added

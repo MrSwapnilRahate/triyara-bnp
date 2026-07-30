@@ -10,7 +10,9 @@ import { ConflictError, NotFoundError, ValidationError } from '@triyara/lib'
 import type {
   CreateSupplierDto,
   ListSuppliersQuery,
+  SearchSuppliersQuery,
   SupplierApprovalDto,
+  SupplierFacetQuery,
   UpdateSupplierDto,
 } from '@triyara/validation'
 
@@ -203,7 +205,76 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
       assertAbility(ctx, 'read', 'SupplierProfile')
       return repo.expiringCertifications(ctx.organizationId, days)
     },
+
+    /**
+     * Typeahead search. Reuses the list query rather than adding a second search
+     * path, so a supplier findable in the list is findable here and the two can
+     * never disagree. The projection is trimmed because a picker needs a label
+     * and an id, not a full record.
+     */
+    async search(
+      ctx: SupplierMasterCtx,
+      query: SearchSuppliersQuery,
+    ): Promise<SupplierSearchHit[]> {
+      assertAbility(ctx, 'read', 'SupplierProfile')
+      const result = await repo.list({
+        organizationId: ctx.organizationId,
+        q: query.q,
+        status: query.status,
+        productId: query.productId,
+        country: query.country,
+        includeDeleted: false,
+        sort: 'companyName',
+        limit: query.limit,
+      })
+      // An exact supplier-code match is what the user meant; surface it first.
+      const needle = query.q.toLowerCase()
+      return result.items
+        .map((s) => ({
+          id: s.id,
+          supplierCode: s.supplierCode,
+          companyName: s.companyName,
+          country: s.country,
+          city: s.city,
+          status: s.status,
+          isVerified: s.isVerified,
+        }))
+        .sort((a, b) => {
+          const rank = (h: SupplierSearchHit) =>
+            h.supplierCode.toLowerCase() === needle
+              ? 0
+              : h.companyName.toLowerCase() === needle
+                ? 1
+                : 2
+          return rank(a) - rank(b) || a.companyName.localeCompare(b.companyName)
+        })
+    },
+
+    /** Filter vocabulary: countries this tenant actually sources from. */
+    async countries(ctx: SupplierMasterCtx, query: SupplierFacetQuery = {}) {
+      assertAbility(ctx, 'read', 'SupplierProfile')
+      return repo.countryFacets(ctx.organizationId, {
+        includeDeleted: query.includeDeleted === 'true',
+      })
+    },
+
+    /** Filter vocabulary: certification types held, with how many are current. */
+    async certifications(ctx: SupplierMasterCtx) {
+      assertAbility(ctx, 'read', 'SupplierProfile')
+      return repo.certificationFacets(ctx.organizationId)
+    },
   }
+}
+
+/** Compact projection for the picker; never carries banking or contact data. */
+export interface SupplierSearchHit {
+  id: string
+  supplierCode: string
+  companyName: string
+  country: string | null
+  city: string | null
+  status: string
+  isVerified: boolean
 }
 
 export type SupplierMasterService = ReturnType<typeof createSupplierMasterService>
