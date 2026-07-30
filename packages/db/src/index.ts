@@ -53,6 +53,14 @@ export {
   type UpdateDocumentInput,
 } from './repositories/document.repository'
 export {
+  type ListLoginAttemptsParams,
+  type LoginAttemptListResult,
+  type LoginAttemptRecord,
+  type LoginAttemptRepository,
+  loginAttemptRepository,
+  type RecordLoginAttempt,
+} from './repositories/login-attempt.repository'
+export {
   type ListNotificationsParams,
   type NewNotification,
   type NotificationFeedItem,
@@ -104,6 +112,26 @@ export {
   type SubmitResponseData,
 } from './repositories/rfq-supplier.repository'
 export {
+  type RoleRecord,
+  type RoleRepository,
+  roleRepository,
+} from './repositories/role.repository'
+export {
+  type GrantScopedRoleData,
+  type ListScopedRolesParams,
+  type ScopedRoleListResult,
+  type ScopedRoleRecord,
+  type ScopedRoleRepository,
+  scopedRoleRepository,
+} from './repositories/scoped-role.repository'
+export {
+  type ListSessionsParams,
+  type SessionListResult,
+  type SessionRecord,
+  type SessionRepository,
+  sessionRepository,
+} from './repositories/session.repository'
+export {
   type CreateSupplierData,
   type ListSuppliersParams,
   type SupplierListItem,
@@ -130,6 +158,12 @@ export {
 } from './repositories/supplier-profile.repository'
 export { userRepository, type UserWithRoles } from './repositories/user.repository'
 export {
+  type EmailVerificationTokenRecord,
+  type UserSecurityProfileRecord,
+  type UserSecurityRepository,
+  userSecurityRepository,
+} from './repositories/user-security.repository'
+export {
   type CreateVerificationInput,
   type HistoryEntry,
   type ListVerificationsParams,
@@ -150,6 +184,7 @@ export type {
   DocumentType,
   ImportExperience,
   Incoterm,
+  LoginOutcome,
   ManufacturingType,
   NotificationChannel,
   NotificationPriority,
@@ -163,6 +198,8 @@ export type {
   RFQType,
   Role,
   RoleName,
+  RoleScopeType,
+  SessionEndReason,
   SupplierBusinessType,
   SupplierProductStatus,
   SupplierStatus,

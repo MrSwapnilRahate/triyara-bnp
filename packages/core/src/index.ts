@@ -12,6 +12,41 @@ export {
   createActivityService,
 } from './activity/activity.service'
 export {
+  createEmailVerificationService,
+  type EmailVerificationCtx,
+  type EmailVerificationDeps,
+  type EmailVerificationService,
+  type UserLookup,
+} from './auth/email-verification.service'
+export {
+  createLoginAuditService,
+  DEFAULT_LOCKOUT,
+  type LockoutPolicy,
+  type LoginAuditCtx,
+  type LoginAuditDeps,
+  type LoginAuditService,
+} from './auth/login-audit.service'
+export {
+  createPermissionService,
+  type PermissionCtx,
+  type PermissionDeps,
+  type PermissionMatrix,
+  type PermissionService,
+} from './auth/permission.service'
+export {
+  createScopedRoleService,
+  type RoleLookup,
+  type ScopedRoleCtx,
+  type ScopedRoleDeps,
+  type ScopedRoleService,
+} from './auth/scoped-role.service'
+export {
+  createSessionService,
+  type SessionService,
+  type SessionServiceCtx,
+  type SessionServiceDeps,
+} from './auth/session.service'
+export {
   type BuyerService,
   type BuyerServiceCtx,
   type BuyerServiceDeps,

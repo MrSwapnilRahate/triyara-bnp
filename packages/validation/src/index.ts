@@ -1,5 +1,6 @@
 export * from './account'
 export * from './activity'
+export * from './auth'
 export * from './buyer'
 export * from './catalog'
 export * from './document'

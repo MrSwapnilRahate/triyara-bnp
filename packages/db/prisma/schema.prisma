@@ -79,6 +79,13 @@ model User {
   resetTokens   PasswordResetToken[]
   ownedAccounts Account[]            @relation("AccountOwner")
 
+  // Auth extension (TRY-BNP-AUTH-02) back-relations. ORM-side only: these add
+  // NO columns to the User table and leave TRY-BNP-AUTH-01 unmodified.
+  securityProfile         UserSecurityProfile?
+  emailVerificationTokens EmailVerificationToken[]
+  sessions                UserSession[]
+  scopedRoles             ScopedRoleAssignment[]
+
   @@index([organizationId])
 }
 
@@ -88,6 +95,9 @@ model Role {
   description String?
 
   users UserRole[]
+
+  // Auth extension (TRY-BNP-AUTH-02) back-relation. Adds no columns to Role.
+  scopedAssignments ScopedRoleAssignment[]
 }
 
 model UserRole {
@@ -1999,4 +2009,179 @@ model RFQApproval {
   @@index([rfqId, decidedAt])
   @@index([organizationId, toStatus])
   @@index([organizationId, approverId])
+}
+
+// ===========================================================================
+// AUTH EXTENSION (TRY-BNP-AUTH-02)
+//
+// Additive layer over the FROZEN authentication foundation (TRY-BNP-AUTH-01).
+// User, Role, UserRole, PasswordResetToken, Organization and AuditLog are NOT
+// modified: the only touch is column-less back-relations on User and Role.
+//
+// Authorization logic stays in CASL (@triyara/auth). Nothing here stores a
+// permission rule - these tables store identity lifecycle state and role
+// ASSIGNMENTS only. CASL remains the single source of truth for what a role
+// is allowed to do.
+// ===========================================================================
+
+/// What a scoped role grant applies to. Scope targets are referenced by plain
+/// id, never by FK, so this table constrains neither frozen modules nor the
+/// product catalog.
+enum RoleScopeType {
+  ORGANIZATION
+  ACCOUNT
+  SUPPLIER_PROFILE
+  BUYER_PROFILE
+  PRODUCT
+  CATEGORY
+}
+
+/// Why a session stopped being valid.
+enum SessionEndReason {
+  LOGOUT
+  EXPIRED
+  REVOKED_BY_ADMIN
+  PASSWORD_CHANGED
+  USER_DEACTIVATED
+}
+
+/// Outcome of a single authentication attempt.
+enum LoginOutcome {
+  SUCCESS
+  INVALID_CREDENTIALS
+  USER_NOT_FOUND
+  INACTIVE_USER
+  LOCKED_OUT
+  RATE_LIMITED
+}
+
+/// 1:1 extension of the frozen User. Holds the identity-lifecycle attributes
+/// User has no column for (email verification, lockout, password age).
+model UserSecurityProfile {
+  id             String @id @default(cuid())
+  userId         String @unique
+  organizationId String
+
+  emailVerifiedAt DateTime?
+
+  lastPasswordChangeAt DateTime?
+  failedLoginCount     Int       @default(0)
+  lastFailedLoginAt    DateTime?
+  /// Set by the lockout policy; a login is refused while this is in the future.
+  lockedUntil          DateTime?
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([lockedUntil])
+  @@index([organizationId, emailVerifiedAt])
+}
+
+/// Single-use email verification token. Only the hash is stored, matching the
+/// existing PasswordResetToken pattern - the plaintext never touches the row.
+model EmailVerificationToken {
+  id             String @id @default(cuid())
+  userId         String
+  organizationId String
+
+  /// The address being verified. Held separately from User.email so an
+  /// email-change flow can verify the new address before it is adopted.
+  email      String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
+  @@index([expiresAt])
+}
+
+/// Registry of issued sessions. The frozen Auth.js configuration is JWT-based
+/// and is not changed; this table records each issued session so it can be
+/// listed, audited and revoked. Enforcement is opt-in per endpoint via
+/// assertSessionActive - see ADR-0011.
+model UserSession {
+  id             String @id @default(cuid())
+  userId         String
+  organizationId String
+
+  /// Opaque identifier carried as the JWT `jti`. One row per issued token.
+  tokenId String @unique
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  endedAt   DateTime?
+  endReason SessionEndReason?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, endedAt])
+  @@index([organizationId, endedAt])
+  @@index([expiresAt])
+}
+
+/// Enterprise RBAC: grants an existing Role to a user for a specific resource,
+/// optionally time-boxed. Stores the ASSIGNMENT only - what the role permits is
+/// decided by CASL, which stays the source of truth.
+model ScopedRoleAssignment {
+  id             String @id @default(cuid())
+  organizationId String
+  userId         String
+  roleId         String
+
+  scopeType RoleScopeType
+  /// Plain identifier; deliberately not a foreign key (see enum docs).
+  scopeId   String
+
+  grantedById String
+  grantedAt   DateTime  @default(now())
+  /// Null means the grant does not expire.
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  revokedById String?
+  reason      String?
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, userId, revokedAt])
+  @@index([organizationId, scopeType, scopeId])
+  @@index([organizationId, roleId])
+  @@index([expiresAt])
+}
+
+/// Durable authentication-attempt log. The existing in-memory rate limiter is
+/// per-instance; this table survives restarts and gives security review a real
+/// audit trail. Email is recorded as attempted, so it is not a foreign key -
+/// failed attempts for non-existent users must still be recorded.
+model LoginAttempt {
+  id             String  @id @default(cuid())
+  email          String
+  userId         String?
+  organizationId String?
+
+  outcome   LoginOutcome
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime     @default(now())
+
+  @@index([email, createdAt])
+  @@index([userId, createdAt])
+  @@index([organizationId, outcome, createdAt])
+  @@index([createdAt])
 }
