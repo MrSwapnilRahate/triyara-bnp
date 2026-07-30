@@ -58,6 +58,7 @@ model Organization {
   categories      Category[]
   products        Product[]
   suppliers       Supplier[]
+  rfqs            RFQ[]
   specDefinitions ProductSpecificationDefinition[]
   tags            Tag[]
 }
@@ -134,6 +135,7 @@ model Account {
   owner           User?            @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   supplierProfile SupplierProfile?
   buyerProfile    BuyerProfile?
+  rfqs            RFQ[]
 
   @@index([organizationId, deletedAt])
   @@index([organizationId, relationshipStatus])
@@ -767,6 +769,8 @@ model Product {
 
   supplierOfferings  SupplierProductOffering[]
   supplierCapacities SupplierCapacity[]
+  rfqItems           RFQItem[]
+  rfqOfferedIn       RFQSupplierResponse[]     @relation("RFQOfferedProduct")
 
   specifications ProductSpecification[]
   images         ProductImage[]
@@ -1185,17 +1189,18 @@ model Supplier {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  contacts       SupplierContact[]
-  addresses      SupplierAddress[]
-  bankAccounts   SupplierBankAccount[]
-  certifications SupplierCertification[]
-  documents      SupplierDocument[]
-  offerings      SupplierProductOffering[]
-  capacities     SupplierCapacity[]
-  performance    SupplierPerformance[]
-  approvals      SupplierApproval[]
-  tags           SupplierTag[]
+  organization      Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts          SupplierContact[]
+  addresses         SupplierAddress[]
+  bankAccounts      SupplierBankAccount[]
+  certifications    SupplierCertification[]
+  documents         SupplierDocument[]
+  offerings         SupplierProductOffering[]
+  capacities        SupplierCapacity[]
+  performance       SupplierPerformance[]
+  approvals         SupplierApproval[]
+  tags              SupplierTag[]
+  rfqParticipations RFQSupplier[]
 
   @@unique([organizationId, supplierCode])
   @@index([organizationId, status, deletedAt])
@@ -1568,4 +1573,430 @@ model SupplierTag {
 
   @@id([supplierId, tagId])
   @@index([tagId])
+}
+
+// ===========================================================================
+// RFQ MANAGEMENT (TRY-BNP-RFQ-01)
+//
+// Demand-side sourcing records. Additive over the frozen modules, the Product
+// Catalog and Supplier Management: nothing existing is modified beyond
+// column-less back-relations on Organization, Account, Product and Supplier,
+// which add no columns.
+//
+// Implements the approved Sprint 4 design verbatim - see
+// docs/03-engineering/rfq-management-sprint4-domain-model.md
+// ===========================================================================
+
+// ==========================================================================
+// ENUMS  (Incoterm and CertificationType are REUSED, not declared here)
+// ==========================================================================
+
+/// Who the RFQ is raised for. A BUYER rfq has an external Account; an INTERNAL
+/// rfq is Triyara sourcing on its own behalf and has no buyer.
+enum RFQType {
+  BUYER
+  INTERNAL
+}
+
+/// Sourcing lifecycle. Distinct from the approval workflow (RFQApprovalStatus):
+/// approval governs whether an RFQ may be issued, this governs where it is.
+enum RFQStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ISSUED
+  IN_PROGRESS
+  EVALUATING
+  AWARDED
+  CLOSED
+  CANCELLED
+  EXPIRED
+}
+
+enum RFQPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+/// Participation state of one invited supplier. Lateness is deliberately NOT a
+/// member here - see section 3.4.
+enum RFQSupplierStatus {
+  INVITED
+  VIEWED
+  ACCEPTED
+  DECLINED
+  SUBMITTED
+  NO_RESPONSE
+  WITHDRAWN
+}
+
+enum RFQAttachmentType {
+  SPECIFICATION
+  DRAWING
+  CERTIFICATE
+  IMAGE
+  PDF
+  PRICE_SHEET
+  OTHER
+}
+
+/// Approval workflow states, per the Sprint 4 brief. Deliberately separate from
+/// the supplier module's ApprovalDecision, which models a different thing.
+enum RFQApprovalStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// ==========================================================================
+// RFQ - the sourcing request
+// ==========================================================================
+
+model RFQ {
+  id             String @id @default(cuid())
+  organizationId String
+
+  /// Human key, e.g. "RFQ-2026-000431". Unique per tenant, never reused.
+  rfqNumber String
+  type      RFQType @default(BUYER)
+
+  /// The external buyer. Null for INTERNAL RFQs - see section 3.1.
+  buyerId String?
+
+  title       String
+  description String? @db.Text
+
+  /// ISO 4217. The currency the RFQ is denominated in; suppliers may quote in
+  /// another currency, which is why the response carries its own.
+  currency           String?   @db.Char(3)
+  incoterm           Incoterm?
+  /// ISO 3166-1 alpha-2.
+  destinationCountry String?   @db.Char(2)
+  /// UN/LOCODE or named place.
+  destinationPort    String?
+
+  expectedShipmentDate DateTime?
+  quotationDeadline    DateTime?
+
+  status   RFQStatus   @default(DRAFT)
+  priority RFQPriority @default(NORMAL)
+
+  /// Pointer to the latest RFQRevision. Denormalised so the current revision is
+  /// readable without an aggregate over history.
+  currentRevision Int @default(1)
+
+  createdById String
+  updatedById String?
+  deletedById String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  buyer        Account?        @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  items        RFQItem[]
+  suppliers    RFQSupplier[]
+  attachments  RFQAttachment[]
+  comments     RFQComment[]
+  revisions    RFQRevision[]
+  approvals    RFQApproval[]
+
+  @@unique([organizationId, rfqNumber])
+  @@index([organizationId, status, deletedAt])
+  @@index([organizationId, buyerId, status])
+  @@index([organizationId, quotationDeadline])
+  @@index([organizationId, destinationCountry, destinationPort])
+  @@index([organizationId, priority, status])
+  @@index([organizationId, createdAt])
+  @@index([buyerId])
+  /// Fuzzy matching on the identifier users actually type. Declared in the
+  /// datamodel rather than raw SQL so `migrate diff` owns it and does not emit
+  /// DROP INDEX on every run. pg_trgm is created in 0001_catalog_extensions.
+  @@index([rfqNumber(ops: raw("gin_trgm_ops"))], map: "RFQ_number_trgm_idx", type: Gin)
+}
+
+// ==========================================================================
+// LINE ITEMS
+// ==========================================================================
+
+/// One requested line. Either a catalog product or a free-text request for
+/// something not yet catalogued - see section 3.2.
+model RFQItem {
+  id             String @id @default(cuid())
+  rfqId          String
+  organizationId String
+
+  lineNumber Int
+
+  /// Catalog product. Null when the buyer asked for something not in the catalog.
+  productId                String?
+  /// Used only when productId is null.
+  customProductName        String?
+  customProductDescription String? @db.Text
+
+  quantity       Decimal  @db.Decimal(18, 4)
+  unit           String
+  targetPrice    Decimal? @db.Decimal(18, 4)
+  targetCurrency String?  @db.Char(3)
+
+  /// Buyer-stated specifications, e.g. {"moisture":"<8%","curcumin":">=3%"}.
+  /// Free-form because a buyer may ask for attributes the catalog has no
+  /// definition for yet - see section 3.3.
+  specifications Json?
+
+  /// Reuses the supplier module's CertificationType vocabulary so a required
+  /// certification is directly comparable to what a supplier holds.
+  requiredCertifications CertificationType[]
+
+  packaging String?
+  remarks   String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  rfq       RFQ                   @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  product   Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
+  responses RFQSupplierResponse[]
+
+  @@unique([rfqId, lineNumber])
+  @@index([rfqId])
+  @@index([organizationId, productId])
+  @@index([rfqId, deletedAt])
+}
+
+// ==========================================================================
+// SUPPLIER PARTICIPATION + RESPONSE
+// ==========================================================================
+
+/// One invited supplier's participation in one RFQ. This row doubles as the
+/// header of that supplier's quotation - see section 3.5.
+model RFQSupplier {
+  id             String @id @default(cuid())
+  rfqId          String
+  supplierId     String
+  organizationId String
+
+  status        RFQSupplierStatus @default(INVITED)
+  invitedById   String
+  invitedAt     DateTime          @default(now())
+  viewedAt      DateTime?
+  /// When the supplier accepted or declined the invitation.
+  respondedAt   DateTime?
+  declineReason String?
+
+  submittedAt DateTime?
+  /// Denormalised at submit time: submittedAt > rfq.quotationDeadline.
+  /// Kept as a flag rather than a status - see section 3.4.
+  isLate      Boolean   @default(false)
+
+  /// Quotation header. The per-line economics live in RFQSupplierResponse.
+  quotationCurrency   String?   @db.Char(3)
+  quotationIncoterm   Incoterm?
+  quotationPort       String?
+  quotationValidUntil DateTime?
+  quotationRemarks    String?   @db.Text
+  /// Denormalised sum of the response lines, for list ranking without an aggregate.
+  quotationTotal      Decimal?  @db.Decimal(18, 4)
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  rfq         RFQ                   @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  supplier    Supplier              @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  responses   RFQSupplierResponse[]
+  attachments RFQAttachment[]
+
+  @@unique([rfqId, supplierId])
+  @@index([rfqId, status])
+  @@index([organizationId, supplierId, status])
+  @@index([organizationId, submittedAt])
+  @@index([supplierId])
+}
+
+/// One priced line from one supplier against one RFQ item. Re-submissions create
+/// a new revision row rather than overwriting, which is what makes price history
+/// possible - see section 3.6.
+model RFQSupplierResponse {
+  id             String @id @default(cuid())
+  rfqSupplierId  String
+  rfqItemId      String
+  organizationId String
+
+  /// Increments on each re-submission for the same supplier/line.
+  revisionNumber Int     @default(1)
+  /// Exactly one row per (supplier, line) has this set; enforced by a partial
+  /// unique index at migration time.
+  isCurrent      Boolean @default(true)
+
+  price    Decimal  @db.Decimal(18, 4)
+  currency String   @db.Char(3)
+  moq      Decimal? @db.Decimal(18, 4)
+  moqUnit  String?
+
+  leadTimeDays Int?
+  incoterm     Incoterm?
+  port         String?
+
+  /// When the supplier offers an alternative catalog product to the one asked for.
+  offeredProductId   String?
+  offeredDescription String?
+
+  remarks    String?
+  validUntil DateTime?
+
+  submittedAt DateTime  @default(now())
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  rfqSupplier    RFQSupplier     @relation(fields: [rfqSupplierId], references: [id], onDelete: Cascade)
+  rfqItem        RFQItem         @relation(fields: [rfqItemId], references: [id], onDelete: Cascade)
+  offeredProduct Product?        @relation("RFQOfferedProduct", fields: [offeredProductId], references: [id], onDelete: SetNull)
+  attachments    RFQAttachment[]
+
+  @@unique([rfqSupplierId, rfqItemId, revisionNumber])
+  /// The comparison query: cheapest current quote per line.
+  @@index([rfqItemId, isCurrent, price])
+  @@index([rfqSupplierId, isCurrent])
+  @@index([organizationId, validUntil])
+  @@index([offeredProductId])
+}
+
+// ==========================================================================
+// ATTACHMENTS, COMMENTS, HISTORY, APPROVAL
+// ==========================================================================
+
+/// Metadata only. Attached to the RFQ itself, or to a supplier's submission, or
+/// to one response line - see section 3.7.
+model RFQAttachment {
+  id             String @id @default(cuid())
+  organizationId String
+  rfqId          String
+
+  /// Set when the file belongs to a supplier's submission rather than the RFQ.
+  rfqSupplierId         String?
+  rfqSupplierResponseId String?
+
+  type  RFQAttachmentType @default(OTHER)
+  title String?
+
+  fileUrl    String
+  storageKey String?
+  mimeType   String?
+  fileSize   Int?
+  checksum   String?
+
+  /// Seam to the FROZEN Document module, when the file needs access control
+  /// and version history.
+  documentId String?
+
+  /// RFQ-side attachments are shared with invited suppliers unless cleared.
+  /// Supplier-side attachments are never shown to other suppliers.
+  isVisibleToSuppliers Boolean @default(true)
+
+  uploadedById String
+  version      Int       @default(1)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  rfq                 RFQ                  @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  rfqSupplier         RFQSupplier?         @relation(fields: [rfqSupplierId], references: [id], onDelete: Cascade)
+  rfqSupplierResponse RFQSupplierResponse? @relation(fields: [rfqSupplierResponseId], references: [id], onDelete: Cascade)
+
+  @@index([rfqId, type])
+  @@index([rfqSupplierId])
+  @@index([rfqSupplierResponseId])
+  @@index([organizationId, deletedAt])
+  @@index([documentId])
+}
+
+/// Internal discussion. Threaded. Never exposed to suppliers - section 3.8.
+model RFQComment {
+  id             String @id @default(cuid())
+  organizationId String
+  rfqId          String
+
+  /// Null for a root comment; set for a reply.
+  parentId String?
+
+  authorId String
+  body     String @db.Text
+
+  /// Always true today. Present as a column so the internal-only guarantee is
+  /// visible in the data and enforceable by a CHECK, not only in service code.
+  isInternal Boolean   @default(true)
+  editedAt   DateTime?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  rfq     RFQ          @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  parent  RFQComment?  @relation("RFQCommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies RFQComment[] @relation("RFQCommentThread")
+
+  @@index([rfqId, createdAt])
+  @@index([parentId])
+  @@index([organizationId, authorId])
+  @@index([rfqId, deletedAt])
+}
+
+/// Append-only temporal history. One row per issued revision, carrying a full
+/// snapshot of the RFQ and its items - see section 3.9.
+model RFQRevision {
+  id             String @id @default(cuid())
+  organizationId String
+  rfqId          String
+
+  revisionNumber Int
+  reason         String?
+  /// Complete snapshot of the RFQ header and line items at this revision.
+  snapshot       Json
+
+  changedById String
+  changedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  rfq RFQ @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+
+  @@unique([rfqId, revisionNumber])
+  @@index([organizationId, changedAt])
+  @@index([rfqId, changedAt])
+}
+
+/// Append-only approval history. One row per transition. The RFQ's current
+/// state is denormalised on RFQ.status - see section 3.10.
+model RFQApproval {
+  id             String @id @default(cuid())
+  organizationId String
+  rfqId          String
+
+  fromStatus RFQApprovalStatus?
+  toStatus   RFQApprovalStatus
+  /// Step order, for multi-level approval chains.
+  sequence   Int                @default(1)
+
+  approverId String
+  comments   String?
+  decidedAt  DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  rfq RFQ @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+
+  @@index([rfqId, decidedAt])
+  @@index([organizationId, toStatus])
+  @@index([organizationId, approverId])
 }

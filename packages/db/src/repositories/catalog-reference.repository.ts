@@ -39,7 +39,7 @@ export type SpecificationDefinitionRecord = Prisma.ProductSpecificationDefinitio
 }>
 export type TagRecord = Prisma.TagGetPayload<{ select: typeof tagSelect }>
 
-export interface ListReferenceParams {
+interface ListReferenceParams {
   organizationId: string
   q?: string
   limit: number

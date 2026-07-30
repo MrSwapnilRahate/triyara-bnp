@@ -58,6 +58,18 @@ export {
   type NotificationPreferenceService,
 } from './notification/preference.service'
 export {
+  createRfqService,
+  type RfqService,
+  type RfqServiceCtx,
+  type RfqServiceDeps,
+} from './rfq/rfq.service'
+export {
+  createRfqSupplierService,
+  type RfqSupplierCtx,
+  type RfqSupplierDeps,
+  type RfqSupplierService,
+} from './rfq/rfq-supplier.service'
+export {
   createSupplierService,
   type SupplierService,
   type SupplierServiceCtx,
