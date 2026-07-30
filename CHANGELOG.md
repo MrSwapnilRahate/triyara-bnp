@@ -3,6 +3,123 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.14.0-quotation-engine] - 2026-07-30
+
+### Added
+
+- **Quotation Engine** (TRY-BNP-QUOTE-01) - data layer, pricing engine and services. No API
+  and no UI are part of this change.
+  - Prisma: `Quotation`, `QuotationItem`, `QuotationSourceOption`, `QuotationCharge`,
+    `QuotationTax`, `QuotationApproval`, `QuotationComment`, `QuotationRevision`,
+    `PaymentTerm`, `ExchangeRate` - 10 tables, 8 enums.
+  - Migrations `0010_quotation_engine` (tables, 40 indexes, 21 foreign keys, a trigram index
+    on `quotationNumber`) and `0011_quotation_constraints` (a partial unique index enforcing
+    **at most one selected supplier per line**, an `EXCLUDE USING gist` barring overlapping
+    FX validity windows for a currency pair, a full-text expression index, live-row partial
+    indexes, and CHECKs for product-or-custom lines, validity ordering, non-negative money,
+    positive FX rates and tax rates within 0-100).
+  - **One row per revision.** A revision is created by superseding the current row and
+    inserting `revisionNumber + 1` chained through `previousRevisionId`; the superseded row
+    **is** the historical snapshot, so nothing is serialised or copied.
+  - **Pricing engine** (`packages/core/src/quotation/quotation-pricing.ts`) - pure, no I/O.
+    Charges are ordered conditions: `sequence` is significant, discounts are charges with
+    `isDeduction`, compound tax sees a base that includes earlier tax, and a reverse-charge
+    tax is recorded without being collected. Totals are **computed once and persisted**,
+    never recomputed on read, because a sent quotation is a commercial commitment.
+  - **Sourcing**: candidate options per line are ranked by `landedUnitCost` (the only figure
+    comparable across suppliers) with supplier terms denormalised at evaluation time, so a
+    later change to the underlying bid cannot rewrite the comparison. Awarding a line clears
+    any prior winner first, so the partial unique index can never be violated.
+  - **Cost and margin are internal**: `costTotal`, `marginPercent` and per-line `unitCost`
+    are redacted unless the actor can `manage Account`.
+  - Approval is gated by **value threshold and margin floor** - above the threshold or below
+    the floor, only an ADMIN may approve. The threshold and the margin at decision time are
+    both recorded on the approval row, so an auditor can see _why_ approval was required.
+  - After `SENT` a quotation is immutable; edits are refused and must go through a revision.
+  - Seed: 3 payment terms, 3 FX rates and 3 quotations (firm, budgetary, proforma) whose
+    lines are sourced from seeded RFQ lines, demonstrating RFQ -> bid -> quotation. Idempotent.
+  - Tests: 62 unit (pricing arithmetic, condition ordering, FX freezing, transition table,
+    approval thresholds, redaction) and 32 integration (revision chain, one-winner-per-line,
+    FX window exclusion, optimistic concurrency, tenant isolation, audit trail).
+
+### Changed
+
+- **CI now exercises the database.** A new `database` job replays every migration from empty,
+  fails on schema drift, seeds twice and asserts the row counts do not move, then runs the
+  integration suite. The existing `quality` job has no `DATABASE_URL`, so all 98 integration
+  tests were skipping in CI - raw-SQL constraints, expression indexes and seed data were
+  entirely unverified there.
+
+### Notes
+
+- No frozen module was modified. Outside the new tables the only changes are 7 column-less
+  back-relations (`Organization`, `Account`, `Product`, `Supplier`, `RFQ`, `RFQItem`,
+  `RFQSupplierResponse`), which add no columns.
+- `Incoterm` and `CertificationType` are reused from the catalog rather than redefined;
+  authorization reuses the frozen `Account` CASL subject rather than adding a new one.
+- `QuotationComment` is an internal thread only, enforced by a CHECK.
+- See `docs/00-overview/architecture-snapshot-pre-quotation.md` for the pre-change baseline.
+
+## [0.13.0-auth-extension] - 2026-07-30
+
+### Added
+
+- **Authentication & Authorization extension** (TRY-BNP-AUTH-02) - 5 tables, 3 enums, with
+  migrations `0008_auth_extension` and `0009_auth_extension_constraints`. Session, login
+  attempt, permission and role-assignment surfaces under `/api/v1/auth/*`.
+
+### Notes
+
+- The frozen Authentication module is untouched; `User` and `Role` gain only back-relations.
+- CASL abilities remain in code, not in the database (per the approved design decision).
+
+## [0.12.0-rfq-management] - 2026-07-30
+
+### Added
+
+- **RFQ Management** (TRY-BNP-RFQ-01) - data layer and services; no API, no UI.
+  - Prisma: 8 tables, 6 enums, with migrations `0006_rfq_management` and
+    `0007_rfq_constraints` (partial unique index for one current response per line,
+    full-text expression index, live-row partial indexes).
+  - Sourcing lifecycle enforced by an explicit transition table; terms are frozen once an
+    RFQ is `ISSUED`. Lateness is computed at submission, not read time. A re-submitted
+    supplier response supersedes its predecessor by flipping `isCurrent` and incrementing
+    `revisionNumber`.
+  - Seed: 3 RFQs with lines, invited suppliers, priced responses, comments and approvals.
+
+### Notes
+
+- `RFQRevision` carries a single `revisionNumber` (an RFQ mutates in place), unlike
+  `QuotationRevision`, which records a `fromRevision`/`toRevision` hop.
+
+## [0.11.0-catalog-api] - 2026-07-29
+
+### Added
+
+- **Product Catalog API** - 12 endpoints under `/api/catalog/*` (products, categories,
+  specifications, tags) plus a published `openapi.json`.
+  - Route handlers contain no business logic and never touch Prisma directly: they parse,
+    authorize and delegate to services, which delegate to repositories.
+  - ETag / `If-Match` optimistic concurrency (412 on mismatch, 428 when the header is
+    absent), cursor pagination, soft delete with restore, and the shared envelope helpers
+    in `apps/web/src/lib/api.ts`.
+
+## [0.10.0-supplier-management] - 2026-07-29
+
+### Added
+
+- **Supplier Management** (TRY-BNP-SUPPLIER-S3) - data layer only; 11 tables, 11 enums, with
+  migrations `0004_supplier_management` and `0005_supplier_constraints`.
+  - A supplier master record for sourcing - deliberately not a CRM.
+  - Capacity, certifications, contacts, banking, documents, product offerings and audit
+    history, with trigram search on supplier code and company name.
+
+### Notes
+
+- `SupplierProductOffering` and `createSupplierMasterService` are named to avoid collision
+  with the frozen `SupplierProfile` module, which already owns `SupplierProduct` and
+  `createSupplierService`. `Incoterm` is reused from the catalog.
+
 ## [0.9.0-product-catalog] - 2026-07-29
 
 ### Added

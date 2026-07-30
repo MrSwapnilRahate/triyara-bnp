@@ -29,6 +29,88 @@ jobs:
         env:
           AUTH_SECRET: ci-placeholder-secret-000000000000
 
+  database:
+    name: Migrations, drift, seed, integration tests
+    runs-on: ubuntu-latest
+    # The quality job runs with no DATABASE_URL, so every integration test skips
+    # there. This job is the one that actually exercises the schema: raw-SQL
+    # constraints, expression indexes and seed data are invisible to typecheck.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: triyara
+          POSTGRES_PASSWORD: triyara
+          POSTGRES_DB: triyara_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://triyara:triyara@localhost:5432/triyara_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Replay every migration from an empty database
+        run: pnpm --filter @triyara/db db:deploy
+
+      - name: Fail on schema drift
+        # A datamodel that no longer matches the recorded migrations means the
+        # next `migrate dev` would silently generate a destructive diff.
+        run: >-
+          pnpm --filter @triyara/db exec prisma migrate diff
+          --from-schema-datasource prisma/schema.prisma
+          --to-schema-datamodel prisma/schema.prisma
+          --exit-code
+
+      - name: Seed
+        run: pnpm --filter @triyara/db db:seed
+
+      - name: Seed again - row counts must not move
+        # Re-running without crashing is not proof of idempotency; the row counts
+        # are. A seed that duplicates rows still exits 0.
+        run: |
+          set -euo pipefail
+          count() {
+            psql "$DATABASE_URL" -tAc "
+              SELECT string_agg(n || '=' || c, ',' ORDER BY n) FROM (
+                SELECT 'quotation' n, count(*) c FROM \"Quotation\"
+                UNION ALL SELECT 'item', count(*) FROM \"QuotationItem\"
+                UNION ALL SELECT 'option', count(*) FROM \"QuotationSourceOption\"
+                UNION ALL SELECT 'charge', count(*) FROM \"QuotationCharge\"
+                UNION ALL SELECT 'tax', count(*) FROM \"QuotationTax\"
+                UNION ALL SELECT 'approval', count(*) FROM \"QuotationApproval\"
+                UNION ALL SELECT 'comment', count(*) FROM \"QuotationComment\"
+                UNION ALL SELECT 'revision', count(*) FROM \"QuotationRevision\"
+                UNION ALL SELECT 'term', count(*) FROM \"PaymentTerm\"
+                UNION ALL SELECT 'rate', count(*) FROM \"ExchangeRate\"
+                UNION ALL SELECT 'product', count(*) FROM \"Product\"
+                UNION ALL SELECT 'supplier', count(*) FROM \"Supplier\"
+                UNION ALL SELECT 'rfq', count(*) FROM \"RFQ\"
+              ) t"
+          }
+          before=$(count)
+          pnpm --filter @triyara/db db:seed
+          after=$(count)
+          echo "before: $before"
+          echo "after:  $after"
+          if [ "$before" != "$after" ]; then
+            echo "::error::The seed is not idempotent - row counts changed on re-run."
+            exit 1
+          fi
+
+      - name: Integration tests
+        run: pnpm --filter @triyara/db test
+
   security:
     name: Security scan
     runs-on: ubuntu-latest
