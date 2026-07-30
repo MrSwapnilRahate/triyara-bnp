@@ -36,6 +36,9 @@ const rfqService = {
   issue: vi.fn(),
   close: vi.fn(),
   reopen: vi.fn(),
+  decide: vi.fn(),
+  approvalHistory: vi.fn(),
+  revisionHistory: vi.fn(),
 }
 const rfqSupplierService = {
   listResponsesForRfq: vi.fn(),
@@ -56,6 +59,8 @@ const { POST: closeRfq } = await import('./[id]/close/route')
 const { POST: reopenRfq } = await import('./[id]/reopen/route')
 const { GET: listSuppliers, POST: inviteSuppliers } = await import('./[id]/suppliers/route')
 const { PATCH: setParticipation } = await import('./[id]/suppliers/[participationId]/route')
+const { GET: listApprovals, POST: decideRfq } = await import('./[id]/approvals/route')
+const { GET: listRevisions } = await import('./[id]/revisions/route')
 const { GET: openapi } = await import('./openapi.json/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
@@ -623,6 +628,120 @@ describe('supplier invitation', () => {
   })
 })
 
+describe('approvals', () => {
+  it('records a decision and returns 201 with the new status', async () => {
+    rfqService.decide.mockResolvedValue(rfq({ status: 'PENDING_APPROVAL', version: 2 }))
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v1"' },
+        body: JSON.stringify({ decision: 'PENDING', comments: 'Looks right.' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(201)
+    expect(res.headers.get('etag')).toBe('W/"v2"')
+    const payload = await body(res)
+    expect(payload.meta).toMatchObject({ status: 'PENDING_APPROVAL', decision: 'PENDING' })
+    expect(rfqService.decide).toHaveBeenCalledWith(
+      expect.anything(),
+      'r1',
+      1,
+      expect.objectContaining({ decision: 'PENDING' }),
+    )
+  })
+
+  it('requires If-Match', async () => {
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        body: JSON.stringify({ decision: 'PENDING' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(428)
+    expect(rfqService.decide).not.toHaveBeenCalled()
+  })
+
+  it('rejects a decision outside the vocabulary', async () => {
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v1"' },
+        body: JSON.stringify({ decision: 'MAYBE' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(422)
+    expect(rfqService.decide).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an illegal transition as 409', async () => {
+    rfqService.decide.mockRejectedValue(
+      new ConflictError(
+        'Cannot move a DRAFT RFQ to APPROVED. Allowed: PENDING_APPROVAL, CANCELLED.',
+      ),
+    )
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v1"' },
+        body: JSON.stringify({ decision: 'APPROVED' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(409)
+    expect((await body(res)).errors?.[0]?.message).toContain('PENDING_APPROVAL')
+  })
+
+  it('lists the decision trail with a count', async () => {
+    rfqService.approvalHistory.mockResolvedValue([
+      { id: 'a2', sequence: 2, toStatus: 'APPROVED' },
+      { id: 'a1', sequence: 1, toStatus: 'PENDING' },
+    ])
+    const res = await listApprovals(req('/api/rfqs/r1/approvals'), params('r1'))
+    expect(res.status).toBe(200)
+    expect((await body(res)).meta).toMatchObject({ rfqId: 'r1', count: 2 })
+  })
+
+  it('is refused for a role without manage', async () => {
+    rfqService.decide.mockRejectedValue(new ForbiddenError('Not permitted.'))
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v1"' },
+        body: JSON.stringify({ decision: 'APPROVED' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('revisions', () => {
+  it('reports the current revision in meta', async () => {
+    rfqService.revisionHistory.mockResolvedValue([
+      { id: 'v2', revisionNumber: 2 },
+      { id: 'v1', revisionNumber: 1 },
+    ])
+    const res = await listRevisions(req('/api/rfqs/r1/revisions'), params('r1'))
+    expect(res.status).toBe(200)
+    expect((await body(res)).meta).toMatchObject({ rfqId: 'r1', count: 2, currentRevision: 2 })
+  })
+
+  it('reports revision 0 when there are none', async () => {
+    rfqService.revisionHistory.mockResolvedValue([])
+    const res = await listRevisions(req('/api/rfqs/r1/revisions'), params('r1'))
+    expect((await body(res)).meta).toMatchObject({ count: 0, currentRevision: 0 })
+  })
+
+  it('reports a missing RFQ as 404', async () => {
+    rfqService.revisionHistory.mockRejectedValue(new NotFoundError('RFQ not found.'))
+    const res = await listRevisions(req('/api/rfqs/nope/revisions'), params('nope'))
+    expect(res.status).toBe(404)
+  })
+})
+
 describe('GET /api/rfqs/openapi.json', () => {
   it('serves a 3.1 document covering every endpoint', async () => {
     const res = await openapi(req('/api/rfqs/openapi.json'))
@@ -632,11 +751,13 @@ describe('GET /api/rfqs/openapi.json', () => {
     expect(Object.keys(doc.paths).sort()).toEqual([
       '/',
       '/{id}',
+      '/{id}/approvals',
       '/{id}/close',
       '/{id}/items',
       '/{id}/publish',
       '/{id}/reopen',
       '/{id}/responses',
+      '/{id}/revisions',
       '/{id}/suppliers',
       '/{id}/suppliers/{participationId}',
     ])

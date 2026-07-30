@@ -1,4 +1,5 @@
 import {
+  RFQ_APPROVAL_STATUSES,
   RFQ_INCOTERMS,
   RFQ_PRIORITIES,
   RFQ_STATUSES,
@@ -125,8 +126,10 @@ export const rfqOpenApiDocument = {
       '  EVALUATING -> AWARDED -> CLOSED, with CANCELLED and EXPIRED as exits.',
       'Illegal moves return 409 naming the states that are legal from here.',
       '',
-      'Publishing requires at least one invited supplier, so POST /{id}/suppliers',
-      'is a prerequisite for moving an RFQ out of APPROVED.',
+      'Reaching ISSUED has two prerequisites, both refused with 409 if unmet:',
+      'the RFQ must be APPROVED, which is driven by POST /{id}/approvals one',
+      'decision at a time (there is no jump from DRAFT straight to APPROVED),',
+      'and it must have at least one invited supplier from POST /{id}/suppliers.',
       '',
       'Once ISSUED, commercial terms (currency, incoterm, deadline, destination',
       'port) are frozen: the RFQ is out with suppliers. Changing lines cuts a new',
@@ -141,6 +144,7 @@ export const rfqOpenApiDocument = {
     { name: 'Suppliers', description: 'Invited suppliers and their participation.' },
     { name: 'Responses', description: 'Supplier bids.' },
     { name: 'Workflow', description: 'Lifecycle transitions.' },
+    { name: 'History', description: 'Approval decisions and line-item revisions.' },
   ],
   paths: {
     '/': {
@@ -405,6 +409,85 @@ export const rfqOpenApiDocument = {
         },
       },
     },
+    '/{id}/approvals': {
+      get: {
+        tags: ['History'],
+        summary: 'List approval decisions',
+        description: 'The decision trail, newest first.',
+        parameters: [idParam],
+        responses: {
+          '200': {
+            description: 'Decisions, newest first.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/RfqApproval' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+      post: {
+        tags: ['History'],
+        summary: 'Record an approval decision',
+        description:
+          'Drives the sourcing status: PENDING moves an RFQ to PENDING_APPROVAL, APPROVED to APPROVED, REJECTED and CANCELLED to their exits. Each decision must be legal from the current status, so DRAFT cannot jump straight to APPROVED. Approving an RFQ with no lines is refused. Requires ADMIN (`manage Account`).',
+        parameters: [idParam, ifMatch],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['decision'],
+                properties: {
+                  decision: { type: 'string', enum: RFQ_APPROVAL_STATUSES },
+                  comments: { type: 'string', maxLength: 2000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Decision recorded; the RFQ moved.',
+            headers: { ETag: { schema: { type: 'string' } } },
+            content: {
+              'application/json': {
+                schema: envelope({ $ref: '#/components/schemas/Rfq' }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/{id}/revisions': {
+      get: {
+        tags: ['History'],
+        summary: 'List line-item revisions',
+        description:
+          'Newest first. Each entry carries the snapshot taken when the lines were replaced, so a reviewer can see what the RFQ asked for at the point a supplier quoted against it. Creating an RFQ records revision 1.',
+        parameters: [idParam],
+        responses: {
+          '200': {
+            description: 'Revisions, newest first.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/RfqRevision' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
     '/{id}/suppliers/{participationId}': {
       patch: {
         tags: ['Suppliers'],
@@ -630,6 +713,33 @@ export const rfqOpenApiDocument = {
           status: { type: 'string', enum: RFQ_SUPPLIER_STATUSES },
           isLate: { type: 'boolean' },
           supplier: { type: ['object', 'null'], additionalProperties: true },
+        },
+      },
+      RfqApproval: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          sequence: { type: 'integer', description: 'Order of the decision; highest is newest.' },
+          fromStatus: { type: ['string', 'null'], enum: [...RFQ_APPROVAL_STATUSES, null] },
+          toStatus: { type: 'string', enum: RFQ_APPROVAL_STATUSES },
+          approverId: { type: ['string', 'null'] },
+          comments: { type: ['string', 'null'] },
+          decidedAt: { type: ['string', 'null'], format: 'date-time' },
+        },
+      },
+      RfqRevision: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          revisionNumber: { type: 'integer' },
+          reason: { type: ['string', 'null'] },
+          snapshot: {
+            type: 'object',
+            additionalProperties: true,
+            description: 'The RFQ as it stood after this revision was cut.',
+          },
+          changedById: { type: ['string', 'null'] },
+          changedAt: { type: 'string', format: 'date-time' },
         },
       },
       RfqResponse: {
