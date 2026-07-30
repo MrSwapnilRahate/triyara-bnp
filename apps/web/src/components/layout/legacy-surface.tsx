@@ -13,10 +13,13 @@ import type { ReactNode } from 'react'
  * visibly breaks the only pages that exist. Restyling those pages is Wave 7
  * (TRY-BNP-PORTAL-01 §30), so this pins them instead.
  *
- * WHEN TO DELETE: Wave 2 adds the first token-styled screens under `(app)`.
- * Those must NOT be wrapped in this. Move the wrapper down onto the individual
- * legacy pages at that point, and delete it entirely once the last one is
- * migrated.
+ * WHERE IT IS APPLIED: one `layout.tsx` per legacy route segment - dashboard,
+ * accounts, activity, documents, notifications, verifications. It is NOT on the
+ * shared `(app)` layout, because the token-styled screens added from Wave 2
+ * onwards must not inherit the pin.
+ *
+ * WHEN TO DELETE: remove a route's layout.tsx as that route is restyled, and
+ * delete this component once the last one is migrated (§30 Wave 7).
  */
 export function LegacySurface({ children }: { children: ReactNode }) {
   return (

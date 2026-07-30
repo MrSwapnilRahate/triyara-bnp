@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import { logoutAction } from '@/auth/actions'
 import { currentOrganization, requireAuth } from '@/auth/context'
 import { AppChrome } from '@/components/layout/app-chrome'
-import { LegacySurface } from '@/components/layout/legacy-surface'
 import { SignOutButton } from '@/components/layout/sign-out-button'
 import { AbilityProvider } from '@/lib/ability-context'
 
@@ -37,9 +36,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </form>
         }
       >
-        {/* Every page under (app) predates the design system and hard-codes the
-            old palette. See LegacySurface for when this wrapper comes off. */}
-        <LegacySurface>{children}</LegacySurface>
+        {children}
       </AppChrome>
     </AbilityProvider>
   )
