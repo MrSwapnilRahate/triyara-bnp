@@ -36,6 +36,8 @@ const { GET: listResponses, POST: submitResponse } = await import('./[id]/respon
 const { POST: publishRfq } = await import('./[id]/publish/route')
 const { POST: closeRfq } = await import('./[id]/close/route')
 const { POST: reopenRfq } = await import('./[id]/reopen/route')
+const { GET: listSuppliers, POST: inviteSuppliers } = await import('./[id]/suppliers/route')
+const { PATCH: setParticipation } = await import('./[id]/suppliers/[participationId]/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -264,6 +266,141 @@ describe.skipIf(!process.env.DATABASE_URL)('RFQ API (integration, real PostgreSQ
       )
       expect(del.status).toBe(200)
       expect((await getRfq(req(`/api/rfqs/${rfq.id}`), params(rfq.id))).status).toBe(404)
+    })
+  })
+
+  describe('supplier invitation', () => {
+    it('takes an RFQ all the way to ISSUED over HTTP alone', async () => {
+      // This is the point of the endpoint. Before it existed, publishing was
+      // unreachable: issue() refuses an RFQ with no invited suppliers, and
+      // nothing exposed invite - these very tests had to seed rFQSupplier rows
+      // through Prisma to get past it.
+      const rfq = await create()
+
+      const invited = await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, {
+          method: 'POST',
+          body: JSON.stringify({ supplierIds: [supplierId] }),
+        }),
+        params(rfq.id),
+      )
+      expect(invited.status).toBe(200)
+      expect((await body(invited)).data).toHaveLength(1)
+
+      const approved = await prisma.rFQ.update({
+        where: { id: rfq.id },
+        data: { status: 'APPROVED', version: { increment: 1 } },
+      })
+
+      const published = await publishRfq(
+        req(`/api/rfqs/${rfq.id}/publish`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${approved.version}"` },
+        }),
+        params(rfq.id),
+      )
+      expect(published.status).toBe(200)
+      expect((await body(published)).meta.status).toBe('ISSUED')
+    })
+
+    it('is idempotent per supplier - inviting twice does not duplicate', async () => {
+      const rfq = await create()
+      const payload = JSON.stringify({ supplierIds: [supplierId, supplierId2] })
+
+      await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, { method: 'POST', body: payload }),
+        params(rfq.id),
+      )
+      const second = await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, { method: 'POST', body: payload }),
+        params(rfq.id),
+      )
+      expect((await body(second)).data).toHaveLength(2)
+
+      const listed = await body(
+        await listSuppliers(req(`/api/rfqs/${rfq.id}/suppliers`), params(rfq.id)),
+      )
+      expect(listed.data).toHaveLength(2)
+      expect(listed.meta).toMatchObject({ count: 2, submitted: 0 })
+    })
+
+    it('refuses to invite to a CLOSED RFQ', async () => {
+      const rfq = await create()
+      await prisma.rFQ.update({ where: { id: rfq.id }, data: { status: 'CLOSED' } })
+      const res = await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, {
+          method: 'POST',
+          body: JSON.stringify({ supplierIds: [supplierId] }),
+        }),
+        params(rfq.id),
+      )
+      expect(res.status).toBe(409)
+    })
+
+    it('records a decline with its reason', async () => {
+      const rfq = await create()
+      await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, {
+          method: 'POST',
+          body: JSON.stringify({ supplierIds: [supplierId] }),
+        }),
+        params(rfq.id),
+      )
+      const listed = await body(
+        await listSuppliers(req(`/api/rfqs/${rfq.id}/suppliers`), params(rfq.id)),
+      )
+      const participation = (listed.data as unknown as Array<{ id: string; version: number }>)[0]!
+
+      const res = await setParticipation(
+        req(`/api/rfqs/${rfq.id}/suppliers/${participation.id}`, {
+          method: 'PATCH',
+          headers: { 'if-match': `W/"v${participation.version}"` },
+          body: JSON.stringify({ status: 'DECLINED', declineReason: 'Capacity is committed.' }),
+        }),
+        { params: Promise.resolve({ id: rfq.id, participationId: participation.id }) },
+      )
+      expect(res.status).toBe(200)
+      expect((await body(res)).meta.status).toBe('DECLINED')
+    })
+
+    it('refuses a decline with no reason', async () => {
+      const rfq = await create()
+      await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, {
+          method: 'POST',
+          body: JSON.stringify({ supplierIds: [supplierId] }),
+        }),
+        params(rfq.id),
+      )
+      const listed = await body(
+        await listSuppliers(req(`/api/rfqs/${rfq.id}/suppliers`), params(rfq.id)),
+      )
+      const participation = (listed.data as unknown as Array<{ id: string; version: number }>)[0]!
+
+      const res = await setParticipation(
+        req(`/api/rfqs/${rfq.id}/suppliers/${participation.id}`, {
+          method: 'PATCH',
+          headers: { 'if-match': `W/"v${participation.version}"` },
+          body: JSON.stringify({ status: 'DECLINED' }),
+        }),
+        { params: Promise.resolve({ id: rfq.id, participationId: participation.id }) },
+      )
+      expect(res.status).toBe(422)
+    })
+
+    it("does not leak another tenant's participations", async () => {
+      const foreign = await prisma.rFQ.create({
+        data: {
+          organizationId: otherOrgId,
+          rfqNumber: num(),
+          type: 'INTERNAL',
+          title: `Foreign ${uniq()}`,
+          createdById: authState.userId,
+        },
+      })
+      const res = await listSuppliers(req(`/api/rfqs/${foreign.id}/suppliers`), params(foreign.id))
+      // The service scopes by organization, so a foreign RFQ simply has none.
+      expect((await body(res)).data).toHaveLength(0)
     })
   })
 

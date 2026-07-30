@@ -37,7 +37,13 @@ const rfqService = {
   close: vi.fn(),
   reopen: vi.fn(),
 }
-const rfqSupplierService = { listResponsesForRfq: vi.fn(), submitResponseForRfq: vi.fn() }
+const rfqSupplierService = {
+  listResponsesForRfq: vi.fn(),
+  submitResponseForRfq: vi.fn(),
+  list: vi.fn(),
+  invite: vi.fn(),
+  setParticipation: vi.fn(),
+}
 
 vi.mock('@/lib/rfq-service', () => ({ rfqService, rfqSupplierService }))
 
@@ -48,6 +54,8 @@ const { GET: listResponses, POST: submitResponse } = await import('./[id]/respon
 const { POST: publishRfq } = await import('./[id]/publish/route')
 const { POST: closeRfq } = await import('./[id]/close/route')
 const { POST: reopenRfq } = await import('./[id]/reopen/route')
+const { GET: listSuppliers, POST: inviteSuppliers } = await import('./[id]/suppliers/route')
+const { PATCH: setParticipation } = await import('./[id]/suppliers/[participationId]/route')
 const { GET: openapi } = await import('./openapi.json/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
@@ -500,6 +508,121 @@ describe('workflow endpoints', () => {
   })
 })
 
+describe('supplier invitation', () => {
+  it('lists invited suppliers with a submitted count in meta', async () => {
+    rfqSupplierService.list.mockResolvedValue([
+      { id: 'rs1', supplierId: 's1', status: 'INVITED' },
+      { id: 'rs2', supplierId: 's2', status: 'SUBMITTED' },
+    ])
+    const res = await listSuppliers(req('/api/rfqs/r1/suppliers'), params('r1'))
+    const b = await body(res)
+    expect(res.status).toBe(200)
+    expect(b.data).toHaveLength(2)
+    expect(b.meta).toMatchObject({ rfqId: 'r1', count: 2, submitted: 1 })
+    expect(rfqSupplierService.list).toHaveBeenCalledWith(expect.anything(), 'r1')
+  })
+
+  it('invites and returns 200, not 201 - inviting is idempotent per supplier', async () => {
+    rfqSupplierService.invite.mockResolvedValue([{ id: 'rs1' }, { id: 'rs2' }])
+    const res = await inviteSuppliers(
+      req('/api/rfqs/r1/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({ supplierIds: ['s1', 's2'] }),
+      }),
+      params('r1'),
+    )
+    const b = await body(res)
+    expect(res.status).toBe(200)
+    expect(b.meta).toMatchObject({ requested: 2, total: 2 })
+    expect(rfqSupplierService.invite).toHaveBeenCalledWith(expect.anything(), 'r1', {
+      supplierIds: ['s1', 's2'],
+    })
+  })
+
+  it('rejects an empty supplier list', async () => {
+    const res = await inviteSuppliers(
+      req('/api/rfqs/r1/suppliers', { method: 'POST', body: JSON.stringify({ supplierIds: [] }) }),
+      params('r1'),
+    )
+    expect(res.status).toBe(422)
+    expect(rfqSupplierService.invite).not.toHaveBeenCalled()
+  })
+
+  it('maps an invitation to a closed RFQ to 409', async () => {
+    rfqSupplierService.invite.mockRejectedValue(new ConflictError('closed'))
+    const res = await inviteSuppliers(
+      req('/api/rfqs/r1/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({ supplierIds: ['s1'] }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(409)
+  })
+
+  it('requires If-Match to change a participation', async () => {
+    const res = await setParticipation(
+      req('/api/rfqs/r1/suppliers/rs1', {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'ACCEPTED' }),
+      }),
+      { params: Promise.resolve({ id: 'r1', participationId: 'rs1' }) },
+    )
+    expect(res.status).toBe(428)
+    expect(rfqSupplierService.setParticipation).not.toHaveBeenCalled()
+  })
+
+  it('forwards the parsed version and reports the new status', async () => {
+    rfqSupplierService.setParticipation.mockResolvedValue({
+      id: 'rs1',
+      status: 'ACCEPTED',
+      version: 3,
+    })
+    const res = await setParticipation(
+      req('/api/rfqs/r1/suppliers/rs1', {
+        method: 'PATCH',
+        headers: { 'if-match': 'W/"v2"' },
+        body: JSON.stringify({ status: 'ACCEPTED' }),
+      }),
+      { params: Promise.resolve({ id: 'r1', participationId: 'rs1' }) },
+    )
+    const b = await body(res)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('ETag')).toBe('W/"v3"')
+    expect(b.meta.status).toBe('ACCEPTED')
+    expect(rfqSupplierService.setParticipation).toHaveBeenCalledWith(expect.anything(), 'rs1', 2, {
+      status: 'ACCEPTED',
+    })
+  })
+
+  it('surfaces the service refusing SUBMITTED as 409', async () => {
+    rfqSupplierService.setParticipation.mockRejectedValue(
+      new ConflictError('Submit a response instead of setting SUBMITTED directly.'),
+    )
+    const res = await setParticipation(
+      req('/api/rfqs/r1/suppliers/rs1', {
+        method: 'PATCH',
+        headers: { 'if-match': 'W/"v2"' },
+        body: JSON.stringify({ status: 'SUBMITTED' }),
+      }),
+      { params: Promise.resolve({ id: 'r1', participationId: 'rs1' }) },
+    )
+    expect(res.status).toBe(409)
+  })
+
+  it('rejects an unknown participation status', async () => {
+    const res = await setParticipation(
+      req('/api/rfqs/r1/suppliers/rs1', {
+        method: 'PATCH',
+        headers: { 'if-match': 'W/"v2"' },
+        body: JSON.stringify({ status: 'WIZARD' }),
+      }),
+      { params: Promise.resolve({ id: 'r1', participationId: 'rs1' }) },
+    )
+    expect(res.status).toBe(422)
+  })
+})
+
 describe('GET /api/rfqs/openapi.json', () => {
   it('serves a 3.1 document covering every endpoint', async () => {
     const res = await openapi(req('/api/rfqs/openapi.json'))
@@ -514,6 +637,8 @@ describe('GET /api/rfqs/openapi.json', () => {
       '/{id}/publish',
       '/{id}/reopen',
       '/{id}/responses',
+      '/{id}/suppliers',
+      '/{id}/suppliers/{participationId}',
     ])
   })
 })
