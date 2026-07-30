@@ -3,6 +3,44 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.16.0-rfq-api] - 2026-07-30
+
+### Added
+
+- **RFQ REST API** (TRY-BNP-RFQ-API) - 12 endpoints under `/api/rfqs/*` plus a published
+  `openapi.json`. No schema change, no migration change.
+  - CRUD: `GET|POST /`, `GET|PATCH|DELETE /{id}`.
+  - Lines: `GET|POST /{id}/items`. The POST **replaces** the line set and cuts a revision -
+    an RFQ's lines are quoted as a set, so they version as a set.
+  - Bids: `GET|POST /{id}/responses`. A bid is submitted against the supplier's invitation
+    (`rfqSupplierId`), which must belong to the RFQ in the path or the request is a 404.
+  - Workflow: `POST /{id}/publish`, `/close`, `/reopen`. All three require `If-Match` - a
+    lifecycle move is a mutation like any other.
+  - Route handlers only parse, authorize and delegate. Repositories are injected in
+    `apps/web/src/lib/rfq-service.ts`.
+  - ETag / `If-Match` optimistic concurrency (412 stale, 428 absent), cursor pagination,
+    filtering, sorting, search, soft delete, request-id propagation and audit logging, all
+    inherited from the existing service and repository rather than reimplemented.
+  - `POST /` creates the RFQ **with its lines in one request**: a two-step create would leave
+    an unusable record behind if the second call never arrived, and the service refuses to
+    approve an RFQ with no lines.
+
+### Notes
+
+- Two thin service methods were added because no existing one could reach the requested
+  states: `close()` and `reopen()`. `DECISION_TARGET` stops at CANCELLED, so a finished
+  sourcing round could otherwise never be retired. Both read their legal predecessors from
+  the **existing** `TRANSITIONS` table rather than restating the rules, and both delegate to
+  `repo.transition`. `reopen()` requires `manage Account` (ADMIN): reviving a deliberately
+  stopped round is an administrative act.
+- One read-only repository addition: an optional `rfqId` filter on `listResponses`, so bids
+  can be scoped to an RFQ. It writes nothing.
+- `createRfqSupplierService` now names its returned object instead of returning it inline, so
+  one method can call a sibling without depending on `this` - which would have broken the
+  moment a caller destructured the method off the service.
+- An RFQ belonging to another tenant is reported as **404, never 403**.
+- Authorization reuses the frozen `Account` CASL subject - no new subject.
+
 ## [0.15.0-supplier-api] - 2026-07-30
 
 ### Added

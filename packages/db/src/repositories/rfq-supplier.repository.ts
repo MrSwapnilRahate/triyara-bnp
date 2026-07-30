@@ -93,6 +93,8 @@ export interface SubmitResponseData {
 
 export interface ListResponsesParams {
   organizationId: string
+  /** Every bid on one RFQ, across all its lines and invited suppliers. */
+  rfqId?: string
   rfqItemId?: string
   rfqSupplierId?: string
   currentOnly?: boolean
@@ -349,6 +351,7 @@ export const rfqSupplierRepository = {
     const where: Prisma.RFQSupplierResponseWhereInput = {
       organizationId: params.organizationId,
       deletedAt: null,
+      ...(params.rfqId ? { rfqSupplier: { rfqId: params.rfqId } } : {}),
       ...(params.rfqItemId ? { rfqItemId: params.rfqItemId } : {}),
       ...(params.rfqSupplierId ? { rfqSupplierId: params.rfqSupplierId } : {}),
       ...(params.currentOnly ? { isCurrent: true } : {}),

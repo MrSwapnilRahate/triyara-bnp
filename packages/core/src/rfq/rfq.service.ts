@@ -332,6 +332,78 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
       return rfq
     },
 
+    /**
+     * Closes a sourcing round. Separate from `decide` because no approval
+     * decision maps to CLOSED - DECISION_TARGET stops at CANCELLED, so a
+     * finished round could otherwise never be retired. The legal predecessors
+     * come from the same TRANSITIONS table, not a second copy of the rules.
+     */
+    async close(ctx: RfqServiceCtx, id: string, expectedVersion: number): Promise<RfqRecord> {
+      assertAbility(ctx, 'update', 'Account')
+
+      const current = await repo.findById(ctx.organizationId, id)
+      if (!current) throw new NotFoundError('RFQ not found.')
+
+      const allowed = TRANSITIONS[current.status] ?? []
+      if (!allowed.includes('CLOSED')) {
+        throw new ConflictError(
+          `A ${current.status} RFQ cannot be closed. Allowed from here: ${allowed.join(', ') || 'none'}.`,
+        )
+      }
+
+      // RFQApprovalStatus has no CLOSED member, so the approval row records
+      // APPROVED: the closure was sanctioned. CANCELLED would misrepresent a
+      // round that concluded normally. No cast - the compiler checks the member.
+      const rfq = await repo.transition(
+        mutationCtx(ctx),
+        id,
+        expectedVersion,
+        'CLOSED',
+        'APPROVED',
+        'Sourcing round closed.',
+      )
+      await emit(ctx, 'rfq.closed', {
+        rfqId: rfq.id,
+        rfqNumber: rfq.rfqNumber,
+        fromStatus: current.status,
+      })
+      return rfq
+    },
+
+    /**
+     * Returns a cancelled or expired RFQ to DRAFT so it can be re-run. Requires
+     * `manage Account`: reviving a round that was deliberately stopped is an
+     * administrative act, not routine editing.
+     */
+    async reopen(ctx: RfqServiceCtx, id: string, expectedVersion: number): Promise<RfqRecord> {
+      assertAbility(ctx, 'manage', 'Account')
+
+      const current = await repo.findById(ctx.organizationId, id)
+      if (!current) throw new NotFoundError('RFQ not found.')
+
+      const allowed = TRANSITIONS[current.status] ?? []
+      if (!allowed.includes('DRAFT')) {
+        throw new ConflictError(
+          `A ${current.status} RFQ cannot be reopened. Allowed from here: ${allowed.join(', ') || 'none'}.`,
+        )
+      }
+
+      const rfq = await repo.transition(
+        mutationCtx(ctx),
+        id,
+        expectedVersion,
+        'DRAFT',
+        'DRAFT',
+        'Reopened for a further sourcing round.',
+      )
+      await emit(ctx, 'rfq.reopened', {
+        rfqId: rfq.id,
+        rfqNumber: rfq.rfqNumber,
+        fromStatus: current.status,
+      })
+      return rfq
+    },
+
     async approvalHistory(ctx: RfqServiceCtx, id: string) {
       assertAbility(ctx, 'read', 'Account')
       return repo.approvalHistory(ctx.organizationId, id)
