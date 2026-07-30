@@ -1,5 +1,6 @@
 import {
   type ApprovalDecision,
+  type CertificationType,
   Prisma,
   type SupplierBusinessType,
   type SupplierStatus,
@@ -516,6 +517,63 @@ export const supplierRepository = {
         supplier: { select: { id: true, supplierCode: true, companyName: true } },
       },
     })
+  },
+
+  /**
+   * Distinct countries in use, with a supplier count each. Drives the filter
+   * vocabulary for `GET /api/suppliers?country=`: a static ISO list would offer
+   * 249 options where this tenant has a handful, most of them empty.
+   *
+   * Read-only aggregation - no row is written and no business rule is applied.
+   */
+  async countryFacets(
+    organizationId: string,
+    opts: { includeDeleted?: boolean } = {},
+  ): Promise<Array<{ country: string; suppliers: number }>> {
+    const rows = await prisma.supplier.groupBy({
+      by: ['country'],
+      where: {
+        organizationId,
+        ...(opts.includeDeleted ? {} : { deletedAt: null }),
+        country: { not: null },
+      },
+      _count: { _all: true },
+      orderBy: { country: 'asc' },
+    })
+    // `country` is nullable in the datamodel; the predicate above excludes nulls,
+    // but the generated type does not narrow, so filter rather than assert.
+    return rows.flatMap((r) =>
+      r.country ? [{ country: r.country, suppliers: r._count._all }] : [],
+    )
+  },
+
+  /**
+   * Certification types held across the tenant, with a count and how many are
+   * currently ACTIVE. Same purpose as `countryFacets`: what this tenant actually
+   * has, not what the enum permits.
+   */
+  async certificationFacets(
+    organizationId: string,
+  ): Promise<Array<{ type: CertificationType; total: number; active: number }>> {
+    const [totals, actives] = await Promise.all([
+      prisma.supplierCertification.groupBy({
+        by: ['type'],
+        where: { organizationId, deletedAt: null },
+        _count: { _all: true },
+        orderBy: { type: 'asc' },
+      }),
+      prisma.supplierCertification.groupBy({
+        by: ['type'],
+        where: { organizationId, deletedAt: null, status: 'ACTIVE' },
+        _count: { _all: true },
+      }),
+    ])
+    const activeByType = new Map(actives.map((a) => [a.type, a._count._all]))
+    return totals.map((t) => ({
+      type: t.type,
+      total: t._count._all,
+      active: activeByType.get(t.type) ?? 0,
+    }))
   },
 }
 

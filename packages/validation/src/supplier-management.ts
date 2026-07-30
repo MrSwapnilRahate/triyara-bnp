@@ -283,3 +283,30 @@ export const supplierPerformanceSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 })
 export type SupplierPerformanceDto = z.infer<typeof supplierPerformanceSchema>
+
+// ---- REST API query contracts (TRY-BNP-SUPPLIER-API) ----
+
+/**
+ * Typeahead search. `q` is required - an empty search is a list, and the two
+ * have different defaults, so they are different endpoints rather than one
+ * endpoint with an optional parameter.
+ */
+export const searchSuppliersQuerySchema = z.object({
+  q: z.string().trim().min(2, 'Search needs at least 2 characters.').max(120),
+  limit: z.coerce.number().int().min(1).max(25).default(10),
+  status: supplierStatusSchema.optional(),
+  /** Restrict to suppliers offering this catalog product. */
+  productId: z.string().optional(),
+  country: z.string().trim().length(2).optional(),
+})
+export type SearchSuppliersQuery = z.infer<typeof searchSuppliersQuerySchema>
+
+/** Facet endpoints report what the tenant HAS, so deleted rows are excluded. */
+export const supplierFacetQuerySchema = z.object({
+  includeDeleted: z.enum(['true', 'false']).optional(),
+})
+export type SupplierFacetQuery = z.infer<typeof supplierFacetQuerySchema>
+
+/** `GET /api/suppliers/:id/products` - offerings scoped to one supplier. */
+export const listSupplierProductsQuerySchema = listOfferingsQuerySchema.omit({ supplierId: true })
+export type ListSupplierProductsQuery = z.infer<typeof listSupplierProductsQuerySchema>

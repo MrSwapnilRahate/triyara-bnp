@@ -131,6 +131,7 @@ export {
   type SupplierMasterCtx,
   type SupplierMasterDeps,
   type SupplierMasterService,
+  type SupplierSearchHit,
 } from './supplier-management/supplier.service'
 export {
   createSupplierOfferingService,
