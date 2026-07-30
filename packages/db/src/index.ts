@@ -92,6 +92,46 @@ export {
 } from './repositories/product.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
 export {
+  type CreateRfqData,
+  type ListRfqsParams,
+  type RfqItemData,
+  type RfqListItem,
+  type RfqListResult,
+  type RfqRecord,
+  type RfqRepository,
+  rfqRepository,
+  type UpdateRfqData,
+} from './repositories/rfq.repository'
+export {
+  type ListResponsesParams,
+  type ResponseLineData,
+  type RfqParticipationRecord,
+  type RfqResponseRecord,
+  type RfqSupplierRepository,
+  rfqSupplierRepository,
+  type SubmitResponseData,
+} from './repositories/rfq-supplier.repository'
+export {
+  type RoleRecord,
+  type RoleRepository,
+  roleRepository,
+} from './repositories/role.repository'
+export {
+  type GrantScopedRoleData,
+  type ListScopedRolesParams,
+  type ScopedRoleListResult,
+  type ScopedRoleRecord,
+  type ScopedRoleRepository,
+  scopedRoleRepository,
+} from './repositories/scoped-role.repository'
+export {
+  type ListSessionsParams,
+  type SessionListResult,
+  type SessionRecord,
+  type SessionRepository,
+  sessionRepository,
+} from './repositories/session.repository'
+export {
   type CreateSupplierData,
   type ListSuppliersParams,
   type SupplierListItem,
@@ -144,6 +184,7 @@ export type {
   DocumentType,
   ImportExperience,
   Incoterm,
+  LoginOutcome,
   ManufacturingType,
   NotificationChannel,
   NotificationPriority,
@@ -151,8 +192,14 @@ export type {
   Organization,
   ProductStatus,
   RelationshipStatus,
+  RFQPriority,
+  RFQStatus,
+  RFQSupplierStatus,
+  RFQType,
   Role,
   RoleName,
+  RoleScopeType,
+  SessionEndReason,
   SupplierBusinessType,
   SupplierProductStatus,
   SupplierStatus,
