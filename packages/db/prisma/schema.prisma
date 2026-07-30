@@ -59,6 +59,9 @@ model Organization {
   products        Product[]
   suppliers       Supplier[]
   rfqs            RFQ[]
+  quotations      Quotation[]
+  paymentTerms    PaymentTerm[]
+  exchangeRates   ExchangeRate[]
   specDefinitions ProductSpecificationDefinition[]
   tags            Tag[]
 }
@@ -146,6 +149,7 @@ model Account {
   supplierProfile SupplierProfile?
   buyerProfile    BuyerProfile?
   rfqs            RFQ[]
+  quotations      Quotation[]
 
   @@index([organizationId, deletedAt])
   @@index([organizationId, relationshipStatus])
@@ -780,6 +784,7 @@ model Product {
   supplierOfferings  SupplierProductOffering[]
   supplierCapacities SupplierCapacity[]
   rfqItems           RFQItem[]
+  quotationItems     QuotationItem[]
   rfqOfferedIn       RFQSupplierResponse[]     @relation("RFQOfferedProduct")
 
   specifications ProductSpecification[]
@@ -1199,18 +1204,19 @@ model Supplier {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  organization      Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  contacts          SupplierContact[]
-  addresses         SupplierAddress[]
-  bankAccounts      SupplierBankAccount[]
-  certifications    SupplierCertification[]
-  documents         SupplierDocument[]
-  offerings         SupplierProductOffering[]
-  capacities        SupplierCapacity[]
-  performance       SupplierPerformance[]
-  approvals         SupplierApproval[]
-  tags              SupplierTag[]
-  rfqParticipations RFQSupplier[]
+  organization           Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts               SupplierContact[]
+  addresses              SupplierAddress[]
+  bankAccounts           SupplierBankAccount[]
+  certifications         SupplierCertification[]
+  documents              SupplierDocument[]
+  offerings              SupplierProductOffering[]
+  capacities             SupplierCapacity[]
+  performance            SupplierPerformance[]
+  approvals              SupplierApproval[]
+  tags                   SupplierTag[]
+  rfqParticipations      RFQSupplier[]
+  quotationSourceOptions QuotationSourceOption[]
 
   @@unique([organizationId, supplierCode])
   @@index([organizationId, status, deletedAt])
@@ -1716,6 +1722,7 @@ model RFQ {
   comments     RFQComment[]
   revisions    RFQRevision[]
   approvals    RFQApproval[]
+  quotations   Quotation[]
 
   @@unique([organizationId, rfqNumber])
   @@index([organizationId, status, deletedAt])
@@ -1772,9 +1779,10 @@ model RFQItem {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  rfq       RFQ                   @relation(fields: [rfqId], references: [id], onDelete: Cascade)
-  product   Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
-  responses RFQSupplierResponse[]
+  rfq            RFQ                   @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  product        Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
+  responses      RFQSupplierResponse[]
+  quotationItems QuotationItem[]
 
   @@unique([rfqId, lineNumber])
   @@index([rfqId])
@@ -1870,10 +1878,11 @@ model RFQSupplierResponse {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  rfqSupplier    RFQSupplier     @relation(fields: [rfqSupplierId], references: [id], onDelete: Cascade)
-  rfqItem        RFQItem         @relation(fields: [rfqItemId], references: [id], onDelete: Cascade)
-  offeredProduct Product?        @relation("RFQOfferedProduct", fields: [offeredProductId], references: [id], onDelete: SetNull)
-  attachments    RFQAttachment[]
+  rfqSupplier            RFQSupplier             @relation(fields: [rfqSupplierId], references: [id], onDelete: Cascade)
+  rfqItem                RFQItem                 @relation(fields: [rfqItemId], references: [id], onDelete: Cascade)
+  offeredProduct         Product?                @relation("RFQOfferedProduct", fields: [offeredProductId], references: [id], onDelete: SetNull)
+  attachments            RFQAttachment[]
+  quotationSourceOptions QuotationSourceOption[]
 
   @@unique([rfqSupplierId, rfqItemId, revisionNumber])
   /// The comparison query: cheapest current quote per line.
@@ -2184,4 +2193,554 @@ model LoginAttempt {
   @@index([userId, createdAt])
   @@index([organizationId, outcome, createdAt])
   @@index([createdAt])
+}
+
+// ===========================================================================
+// QUOTATION ENGINE (TRY-BNP-QUOTE-01)
+//
+// Outbound customer quotations. Additive over the frozen modules, the Product
+// Catalog, Supplier Management and RFQ Management: nothing existing is modified
+// beyond column-less back-relations, which add no columns.
+//
+// An inbound supplier bid (RFQSupplierResponse) and an outbound customer
+// quotation are DIFFERENT entities, bridged explicitly by
+// QuotationSourceOption. Incoterm and CertificationType are REUSED.
+//
+// Implements the approved Sprint 5 design verbatim - see
+// docs/03-engineering/quotation-engine-sprint5-domain-model.md
+// ===========================================================================
+
+// ==========================================================================
+// ENUMS  (Incoterm and CertificationType are REUSED, not declared here)
+// ==========================================================================
+
+enum QuotationType {
+  BUDGETARY
+  FIRM
+  PROFORMA
+}
+
+/// Commercial lifecycle. SUPERSEDED marks a revision replaced by a later one.
+enum QuotationStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  UNDER_NEGOTIATION
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  WITHDRAWN
+  SUPERSEDED
+}
+
+/// Approval workflow states. Separate from QuotationStatus: approval governs
+/// whether the quotation may be sent, status governs where it is commercially.
+enum QuotationApprovalStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// Shared vocabulary - see section 0. Reused by Purchase Orders and Invoices.
+enum ChargeType {
+  FREIGHT
+  INSURANCE
+  PACKING
+  SAMPLING
+  HANDLING
+  INSPECTION
+  CERTIFICATION
+  DOCUMENTATION
+  BANK_CHARGES
+  DISCOUNT
+  SURCHARGE
+  OTHER
+}
+
+enum ChargeCalculationBasis {
+  FIXED_AMOUNT
+  PERCENTAGE
+  PER_UNIT
+  PER_WEIGHT
+  PER_CONTAINER
+}
+
+enum ChargeScope {
+  HEADER
+  LINE
+}
+
+enum TaxType {
+  GST
+  IGST
+  CGST
+  SGST
+  VAT
+  CUSTOMS_DUTY
+  CESS
+  WITHHOLDING
+  OTHER
+}
+
+enum ExchangeRateSource {
+  MANUAL
+  RBI
+  ECB
+  MARKET_FEED
+  IMPORTED
+}
+
+// ==========================================================================
+// CROSS-CUTTING MASTER DATA
+// ==========================================================================
+
+/// Payment terms as master data. The frozen SupplierProfile carries
+/// `paymentTerms String[]`; this upgrades the concept to a referenceable entity
+/// without touching that field - see section 3.7.
+model PaymentTerm {
+  id             String @id @default(cuid())
+  organizationId String
+
+  /// e.g. "TT30", "LC_AT_SIGHT", "DP".
+  code        String
+  name        String
+  description String?
+
+  /// Net days from invoice. Null for at-sight / LC style terms.
+  netDays        Int?
+  advancePercent Decimal? @db.Decimal(5, 2)
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quotations   Quotation[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive, sortOrder])
+}
+
+/// Temporal FX rates. A quotation freezes the rate it used - see section 3.5.
+model ExchangeRate {
+  id             String @id @default(cuid())
+  organizationId String
+
+  /// ISO 4217.
+  fromCurrency String  @db.Char(3)
+  toCurrency   String  @db.Char(3)
+  /// High precision: 8 dp is the practical floor for JPY/IDR style pairs.
+  rate         Decimal @db.Decimal(18, 8)
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  source        ExchangeRateSource @default(MANUAL)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, fromCurrency, toCurrency, effectiveFrom])
+  @@index([organizationId, fromCurrency, toCurrency, effectiveFrom])
+  @@index([organizationId, effectiveFrom])
+}
+
+// ==========================================================================
+// QUOTATION - one row PER REVISION (see section 3.3)
+// ==========================================================================
+
+model Quotation {
+  id             String @id @default(cuid())
+  organizationId String
+
+  /// Stable across revisions, e.g. "QT-2026-000118".
+  quotationNumber String
+  revisionNumber  Int    @default(1)
+
+  type QuotationType @default(FIRM)
+
+  /// The customer being quoted. Frozen Account.
+  buyerId String
+
+  /// Convenience pointer when a quotation came from a single RFQ. The
+  /// authoritative, per-line provenance is QuotationItem.rfqItemId, which is
+  /// what allows one quotation to draw on SEVERAL RFQs - see section 3.2.
+  primaryRfqId String?
+
+  title       String?
+  description String? @db.Text
+
+  /// Revision chaining. Immutable once SENT.
+  previousRevisionId String?   @unique
+  supersededAt       DateTime?
+
+  // ---- Commercial terms ----
+  /// Currency the customer is quoted in. ISO 4217.
+  currency     String    @db.Char(3)
+  /// Tenant reporting currency, for analytics without re-conversion.
+  baseCurrency String    @db.Char(3)
+  /// FX rate frozen at issue - never re-derived - see section 3.5.
+  fxRate       Decimal?  @db.Decimal(18, 8)
+  fxRateDate   DateTime?
+
+  incoterm           Incoterm?
+  namedPlace         String?
+  destinationCountry String?   @db.Char(2)
+  destinationPort    String?
+
+  paymentTermId    String?
+  /// Free-text override when the agreed wording differs from the master term.
+  paymentTermsText String?
+
+  leadTimeDays   Int?
+  packingSummary String?
+  samplingTerms  String?
+
+  validFrom  DateTime?
+  validUntil DateTime?
+
+  status QuotationStatus @default(DRAFT)
+
+  // ---- Stored monetary roll-ups (see section 3.4) ----
+  subtotal      Decimal? @db.Decimal(18, 4)
+  chargesTotal  Decimal? @db.Decimal(18, 4)
+  discountTotal Decimal? @db.Decimal(18, 4)
+  taxTotal      Decimal? @db.Decimal(18, 4)
+  grandTotal    Decimal? @db.Decimal(18, 4)
+  /// INTERNAL: sourced cost and realised margin. Never rendered to the customer.
+  costTotal     Decimal? @db.Decimal(18, 4)
+  marginPercent Decimal? @db.Decimal(9, 4)
+
+  sentAt          DateTime?
+  acceptedAt      DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String?
+
+  createdById String
+  updatedById String?
+  deletedById String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  buyer            Account      @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  primaryRfq       RFQ?         @relation(fields: [primaryRfqId], references: [id], onDelete: SetNull)
+  paymentTerm      PaymentTerm? @relation(fields: [paymentTermId], references: [id], onDelete: Restrict)
+  previousRevision Quotation?   @relation("QuotationRevisionChain", fields: [previousRevisionId], references: [id], onDelete: SetNull)
+  nextRevision     Quotation?   @relation("QuotationRevisionChain")
+
+  items     QuotationItem[]
+  charges   QuotationCharge[]
+  taxes     QuotationTax[]
+  revisions QuotationRevision[]
+  approvals QuotationApproval[]
+  comments  QuotationComment[]
+
+  @@unique([organizationId, quotationNumber, revisionNumber])
+  @@index([organizationId, status, deletedAt])
+  @@index([organizationId, buyerId, status])
+  @@index([organizationId, validUntil])
+  @@index([organizationId, quotationNumber])
+  @@index([organizationId, createdAt])
+  @@index([primaryRfqId])
+  @@index([buyerId])
+  @@index([paymentTermId])
+  /// Fuzzy matching on the identifier users type. Declared in the datamodel
+  /// rather than raw SQL so `migrate diff` owns it and does not emit DROP INDEX
+  /// on every run. pg_trgm is created in 0001_catalog_extensions.
+  @@index([quotationNumber(ops: raw("gin_trgm_ops"))], map: "Quotation_number_trgm_idx", type: Gin)
+}
+
+// ==========================================================================
+// LINES
+// ==========================================================================
+
+model QuotationItem {
+  id             String @id @default(cuid())
+  quotationId    String
+  organizationId String
+
+  lineNumber Int
+
+  productId         String?
+  customProductName String?
+  description       String? @db.Text
+
+  /// Per-line provenance. This is what lets ONE quotation answer lines drawn
+  /// from SEVERAL RFQs - see section 3.2.
+  rfqItemId String?
+
+  quantity Decimal @db.Decimal(18, 4)
+  unit     String
+
+  /// Sourced cost per unit, already converted into the quotation currency.
+  /// INTERNAL - never rendered to the customer.
+  unitCost      Decimal? @db.Decimal(18, 4)
+  marginPercent Decimal? @db.Decimal(9, 4)
+
+  unitPrice    Decimal @db.Decimal(18, 4)
+  lineSubtotal Decimal @db.Decimal(18, 4)
+  /// After line-scoped charges, discounts and taxes.
+  lineTotal    Decimal @db.Decimal(18, 4)
+
+  packaging              String?
+  hsCode                 String?
+  countryOfOrigin        String?             @db.Char(2)
+  requiredCertifications CertificationType[]
+  leadTimeDays           Int?
+  remarks                String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  quotation     Quotation               @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product       Product?                @relation(fields: [productId], references: [id], onDelete: SetNull)
+  rfqItem       RFQItem?                @relation(fields: [rfqItemId], references: [id], onDelete: SetNull)
+  sourceOptions QuotationSourceOption[]
+  charges       QuotationCharge[]
+  taxes         QuotationTax[]
+
+  @@unique([quotationId, lineNumber])
+  @@index([quotationId])
+  @@index([organizationId, productId])
+  @@index([rfqItemId])
+  @@index([quotationId, deletedAt])
+}
+
+/// Candidate suppliers evaluated for one quoted line. This single model provides
+/// price comparison, supplier comparison AND winner selection - section 3.6.
+model QuotationSourceOption {
+  id              String @id @default(cuid())
+  quotationItemId String
+  organizationId  String
+  supplierId      String
+
+  /// The specific supplier bid this option is costed from, when the quotation
+  /// was sourced through an RFQ.
+  rfqSupplierResponseId String?
+
+  /// Supplier's quoted terms, denormalised at evaluation time so the comparison
+  /// stays reproducible even if the bid is later revised.
+  supplierPrice    Decimal  @db.Decimal(18, 4)
+  supplierCurrency String   @db.Char(3)
+  fxRate           Decimal? @db.Decimal(18, 8)
+
+  /// Converted and loaded with freight/duty: the only number that is
+  /// legitimately comparable across suppliers - see section 3.6.
+  landedUnitCost Decimal @db.Decimal(18, 4)
+
+  moq          Decimal?  @db.Decimal(18, 4)
+  leadTimeDays Int?
+  incoterm     Incoterm?
+  port         String?
+
+  /// 1 = best on landed cost. Recomputed on evaluation.
+  rank Int?
+
+  /// The winner. Exactly one per line, enforced by a partial unique index.
+  isSelected      Boolean   @default(false)
+  selectionReason String?
+  selectedById    String?
+  selectedAt      DateTime?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  quotationItem       QuotationItem        @relation(fields: [quotationItemId], references: [id], onDelete: Cascade)
+  supplier            Supplier             @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  rfqSupplierResponse RFQSupplierResponse? @relation(fields: [rfqSupplierResponseId], references: [id], onDelete: SetNull)
+
+  @@unique([quotationItemId, supplierId])
+  /// The comparison query: rank suppliers for a line by landed cost.
+  @@index([quotationItemId, landedUnitCost])
+  @@index([quotationItemId, isSelected])
+  @@index([organizationId, supplierId])
+  @@index([rfqSupplierResponseId])
+}
+
+// ==========================================================================
+// PRICING CONDITIONS: charges, discounts, taxes
+// ==========================================================================
+
+/// Freight, insurance, packing, sampling, handling AND discounts, as one
+/// ordered condition table rather than five near-identical ones - section 3.8.
+model QuotationCharge {
+  id             String @id @default(cuid())
+  quotationId    String
+  organizationId String
+
+  /// Null for a header charge; set for a line charge.
+  quotationItemId String?
+
+  type  ChargeType
+  scope ChargeScope            @default(HEADER)
+  basis ChargeCalculationBasis @default(FIXED_AMOUNT)
+  label String?
+
+  /// Percentage or per-unit rate, depending on `basis`.
+  rate     Decimal? @db.Decimal(12, 6)
+  /// Resolved money amount. Stored - see section 3.4.
+  amount   Decimal  @db.Decimal(18, 4)
+  currency String   @db.Char(3)
+
+  /// True for DISCOUNT and any other deduction; the amount is then subtracted.
+  isDeduction Boolean @default(false)
+  /// Evaluation order. Charges may stack on earlier charges.
+  sequence    Int     @default(0)
+
+  /// Whether the customer sees this broken out, or it is absorbed into
+  /// unit price - see section 3.9.
+  isVisibleToCustomer Boolean @default(true)
+  notes               String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  quotation     Quotation      @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  quotationItem QuotationItem? @relation(fields: [quotationItemId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId, scope, sequence])
+  @@index([quotationItemId])
+  @@index([organizationId, type])
+}
+
+/// Taxes are modelled separately from charges because they carry jurisdiction,
+/// compounding and reverse-charge semantics charges do not - section 3.8.
+model QuotationTax {
+  id             String @id @default(cuid())
+  quotationId    String
+  organizationId String
+
+  quotationItemId String?
+
+  type         TaxType
+  /// e.g. "IGST-18".
+  code         String?
+  /// Country or state whose rule applies.
+  jurisdiction String?
+
+  ratePercent   Decimal @db.Decimal(9, 4)
+  taxableAmount Decimal @db.Decimal(18, 4)
+  amount        Decimal @db.Decimal(18, 4)
+  currency      String  @db.Char(3)
+
+  /// Tax levied on a base that already includes an earlier tax.
+  isCompound      Boolean @default(false)
+  isReverseCharge Boolean @default(false)
+  sequence        Int     @default(0)
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  quotation     Quotation      @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  quotationItem QuotationItem? @relation(fields: [quotationItemId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId, sequence])
+  @@index([quotationItemId])
+  @@index([organizationId, type])
+}
+
+// ==========================================================================
+// HISTORY, APPROVAL, INTERNAL NOTES
+// ==========================================================================
+
+/// Why a revision happened. The full prior state is the previous Quotation row,
+/// so this records the CHANGE, not a snapshot - section 3.3.
+model QuotationRevision {
+  id             String @id @default(cuid())
+  organizationId String
+  /// The revision row this record introduced.
+  quotationId    String
+
+  fromRevision  Int?
+  toRevision    Int
+  reason        String?
+  /// Field-level summary of what moved between revisions.
+  changeSummary Json?
+
+  changedById String
+  changedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@unique([quotationId, toRevision])
+  @@index([organizationId, changedAt])
+}
+
+/// Append-only approval history. Current state is denormalised on
+/// Quotation.status.
+model QuotationApproval {
+  id             String @id @default(cuid())
+  organizationId String
+  quotationId    String
+
+  fromStatus QuotationApprovalStatus?
+  toStatus   QuotationApprovalStatus
+  /// Step order for multi-level chains.
+  sequence   Int                      @default(1)
+
+  approverId      String
+  /// The value threshold that made this approval step necessary, recorded so an
+  /// auditor can see WHY approval was required, not just that it happened.
+  thresholdAmount Decimal? @db.Decimal(18, 4)
+  /// Margin at the time of decision - the number approvers actually judge.
+  marginPercent   Decimal? @db.Decimal(9, 4)
+
+  comments  String?
+  decidedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId, decidedAt])
+  @@index([organizationId, toStatus])
+  @@index([organizationId, approverId])
+}
+
+/// Internal-only, threaded. Same contract as RFQComment.
+model QuotationComment {
+  id             String @id @default(cuid())
+  organizationId String
+  quotationId    String
+
+  parentId String?
+  authorId String
+  body     String  @db.Text
+
+  isInternal Boolean   @default(true)
+  editedAt   DateTime?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  quotation Quotation          @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  parent    QuotationComment?  @relation("QuotationCommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   QuotationComment[] @relation("QuotationCommentThread")
+
+  @@index([quotationId, createdAt])
+  @@index([parentId])
+  @@index([organizationId, authorId])
 }
