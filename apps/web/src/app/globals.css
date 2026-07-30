@@ -1,3 +1,55 @@
+@import '@triyara/ui/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Bind the design-system font tokens to the next/font variables. The token
+     layer names the ROLE (--font-sans); the app supplies the face. */
+  :root {
+    --font-sans:
+      var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  html {
+    /* The portal is a dense working surface; 14px is the app default. */
+    font-size: 100%;
+  }
+
+  body {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Tabular numerals everywhere money or counts appear, so columns align. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Scrollbars that do not dominate a dense table. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--line-strong)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--line-strong));
+    border-radius: 9999px;
+  }
+}
+
+@media print {
+  /* Print is a first-class surface for quotations and RFQs. */
+  .print\:hidden,
+  aside,
+  header nav {
+    display: none !important;
+  }
+}
