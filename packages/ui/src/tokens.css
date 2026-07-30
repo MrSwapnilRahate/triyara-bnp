@@ -1,0 +1,230 @@
+/*
+ * Design tokens (TRY-BNP-PORTAL-01 §26).
+ *
+ * Every colour is an HSL triple without the `hsl()` wrapper so Tailwind can
+ * compose it with an alpha value. Components reference semantic names only -
+ * `bg-surface`, `text-content-muted` - never a raw scale step. Re-theming is a
+ * change to this file and nothing else.
+ *
+ * Light and dark are the SAME token names with different values, so no component
+ * carries a `dark:` variant. That is the point: a component cannot be correct in
+ * one theme and broken in the other.
+ *
+ * Theme selectors are ELEMENT-scoped (`[data-theme=...]`), not `:root`-scoped,
+ * so a subtree can be re-themed independently of the document. That is what lets
+ * a light-mode portal host a dark-only legacy page without either fighting the
+ * other.
+ */
+
+:root {
+  /* ---- Typography ---- */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ---- Radius. Restrained: an ERP is not a consumer app. ---- */
+  --radius-xs: 0.125rem; /* 2  - inputs inside dense tables */
+  --radius-sm: 0.25rem; /* 4  - buttons, inputs */
+  --radius-md: 0.375rem; /* 6  - cards, popovers */
+  --radius-lg: 0.5rem; /* 8  - dialogs */
+  --radius-xl: 0.75rem; /* 12 - marketing surfaces only */
+
+  /* ---- Elevation ---- */
+  --shadow-xs: 0 1px 2px 0 hsl(var(--shadow-color) / 0.05);
+  --shadow-sm:
+    0 1px 3px 0 hsl(var(--shadow-color) / 0.08), 0 1px 2px -1px hsl(var(--shadow-color) / 0.08);
+  --shadow-md:
+    0 4px 6px -1px hsl(var(--shadow-color) / 0.1), 0 2px 4px -2px hsl(var(--shadow-color) / 0.08);
+  --shadow-lg:
+    0 10px 15px -3px hsl(var(--shadow-color) / 0.1), 0 4px 6px -4px hsl(var(--shadow-color) / 0.08);
+  --shadow-overlay: 0 16px 40px -8px hsl(var(--shadow-color) / 0.24);
+
+  /* ---- Layout metrics used by the shell ---- */
+  --sidebar-width: 15rem; /* 240 */
+  --sidebar-width-collapsed: 3.5rem; /* 56  */
+  --topbar-height: 3.5rem; /* 56  */
+
+  /* Row height responds to density (set on <html> by the density toggle). */
+  --row-height: 2.75rem; /* 44 - comfortable */
+}
+
+:root[data-density='compact'] {
+  --row-height: 2.125rem; /* 34 - compact */
+}
+
+/* ==========================================================================
+   LIGHT (default)
+   Black / white / slate, with a blue accent.
+   ========================================================================== */
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+  --shadow-color: 215 25% 27%;
+
+  --canvas: 210 20% 98%; /* slate-50  - page background */
+  --surface: 0 0% 100%; /* white     - cards, tables */
+  --surface-raised: 0 0% 100%;
+  --surface-overlay: 0 0% 100%;
+  --surface-sunken: 210 20% 96%; /* slate-100 - inset wells, table headers */
+
+  --content: 222 47% 11%; /* slate-900 - primary text */
+  --content-muted: 215 16% 40%; /* slate-600 - secondary text */
+  --content-subtle: 215 14% 57%; /* slate-400 - placeholders, meta */
+  --content-inverted: 0 0% 100%;
+
+  --line: 214 20% 90%; /* slate-200 */
+  --line-strong: 214 17% 82%; /* slate-300 */
+
+  --accent: 217 91% 50%; /* blue-600  */
+  --accent-hover: 217 91% 44%;
+  --accent-active: 217 91% 38%;
+  --accent-subtle: 214 95% 96%; /* blue-50   */
+  --accent-fg: 0 0% 100%;
+
+  --success: 142 71% 33%;
+  --success-subtle: 138 76% 96%;
+  --success-fg: 143 64% 20%;
+
+  --warning: 32 95% 44%;
+  --warning-subtle: 48 96% 94%;
+  --warning-fg: 26 90% 26%;
+
+  --danger: 0 72% 45%;
+  --danger-subtle: 0 86% 97%;
+  --danger-fg: 0 70% 32%;
+
+  --info: 217 91% 50%;
+  --info-subtle: 214 95% 96%;
+  --info-fg: 224 76% 33%;
+
+  --neutral: 215 16% 47%;
+  --neutral-subtle: 210 20% 96%;
+  --neutral-fg: 215 25% 27%;
+}
+
+/* ==========================================================================
+   DARK
+   Near-black canvas, not pure #000: pure black against bright text causes
+   halation and is tiring over a working day.
+   ========================================================================== */
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --shadow-color: 0 0% 0%;
+
+  --canvas: 222 47% 7%;
+  --surface: 222 40% 10%;
+  --surface-raised: 217 33% 14%;
+  --surface-overlay: 217 33% 14%;
+  --surface-sunken: 222 47% 8%;
+
+  --content: 210 20% 96%;
+  --content-muted: 215 16% 68%;
+  --content-subtle: 215 14% 52%;
+  --content-inverted: 222 47% 11%;
+
+  --line: 215 20% 20%;
+  --line-strong: 215 18% 28%;
+
+  --accent: 213 94% 62%; /* lifted for contrast on a dark canvas */
+  --accent-hover: 213 94% 68%;
+  --accent-active: 213 94% 74%;
+  --accent-subtle: 217 60% 17%;
+  --accent-fg: 222 47% 8%;
+
+  --success: 142 60% 48%;
+  --success-subtle: 144 40% 14%;
+  --success-fg: 141 70% 78%;
+
+  --warning: 38 92% 55%;
+  --warning-subtle: 30 45% 15%;
+  --warning-fg: 46 92% 78%;
+
+  --danger: 0 78% 62%;
+  --danger-subtle: 0 45% 16%;
+  --danger-fg: 0 90% 84%;
+
+  --info: 213 94% 62%;
+  --info-subtle: 217 60% 17%;
+  --info-fg: 213 94% 82%;
+
+  --neutral: 215 16% 60%;
+  --neutral-subtle: 217 25% 17%;
+  --neutral-fg: 215 20% 78%;
+}
+
+/* Follow the OS when the user has expressed no preference. The theme toggle
+   writes data-theme, and the rules above win because they are more specific. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --shadow-color: 0 0% 0%;
+    --canvas: 222 47% 7%;
+    --surface: 222 40% 10%;
+    --surface-raised: 217 33% 14%;
+    --surface-overlay: 217 33% 14%;
+    --surface-sunken: 222 47% 8%;
+    --content: 210 20% 96%;
+    --content-muted: 215 16% 68%;
+    --content-subtle: 215 14% 52%;
+    --content-inverted: 222 47% 11%;
+    --line: 215 20% 20%;
+    --line-strong: 215 18% 28%;
+    --accent: 213 94% 62%;
+    --accent-hover: 213 94% 68%;
+    --accent-active: 213 94% 74%;
+    --accent-subtle: 217 60% 17%;
+    --accent-fg: 222 47% 8%;
+    --success: 142 60% 48%;
+    --success-subtle: 144 40% 14%;
+    --success-fg: 141 70% 78%;
+    --warning: 38 92% 55%;
+    --warning-subtle: 30 45% 15%;
+    --warning-fg: 46 92% 78%;
+    --danger: 0 78% 62%;
+    --danger-subtle: 0 45% 16%;
+    --danger-fg: 0 90% 84%;
+    --info: 213 94% 62%;
+    --info-subtle: 217 60% 17%;
+    --info-fg: 213 94% 82%;
+    --neutral: 215 16% 60%;
+    --neutral-subtle: 217 25% 17%;
+    --neutral-fg: 215 20% 78%;
+  }
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+.ds-root {
+  font-family: var(--font-sans);
+  font-feature-settings:
+    'cv02' 1,
+    'cv03' 1,
+    'cv04' 1,
+    'tnum' 1; /* tabular numerals: money columns must align */
+}
+
+/* Focus is defined once and never removed. Every interactive component uses
+   `focus-ring`; there is no component-local focus style to drift. */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid hsl(var(--accent));
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Respect the user's motion preference globally rather than per-component. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
