@@ -3,6 +3,42 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [0.17.0-quotation-api] - 2026-07-30
+
+### Added
+
+- **Quotation REST API** (TRY-BNP-QUOTE-API) - 12 endpoints under `/api/quotations/*` plus a
+  published `openapi.json`. No schema change, no migration change.
+  - CRUD: `GET|POST /`, `GET|PATCH|DELETE /{id}`. `DELETE` withdraws rather than erases.
+  - Lines: `GET /{id}/items`, with quotation context in `meta`.
+  - Workflow: `POST /{id}/approve`, `/reject`, `/send`, `/accept`, `/expire`. All five require
+    `If-Match` - a lifecycle move is a mutation like any other.
+  - Route handlers only parse, authorize and delegate. Repositories are injected in
+    `apps/web/src/lib/quotation-service.ts`.
+  - **Cost and margin never leak.** `costTotal`, `marginPercent` and per-line `unitCost` are
+    redacted by the service unless the caller can `manage Account`, so no endpoint can expose
+    them - including `GET /{id}/items`. Both paths are asserted by integration tests.
+  - **Approval thresholds are enforced through the API.** A quotation at or above the value
+    threshold, or below the margin floor, returns 403 to a non-ADMIN. The threshold and the
+    margin at decision time are recorded on the approval row.
+  - `POST /` creates the quotation **with its lines in one request**: stored totals are computed
+    from the lines, so a lineless quotation would carry a priced zero that means nothing. A
+    cross-currency quotation with no exchange rate on file is refused (422) rather than
+    converted at 1.
+
+### Notes
+
+- Two thin service methods were added because no existing one could reach the requested
+  states: `accept()` and `expire()`. `DECISION_TARGET` stops at WITHDRAWN, so an accepted
+  offer or a lapsed one could never be recorded. Both read their legal predecessors from the
+  **existing** `TRANSITIONS` table rather than restating the rules.
+- `expire()` is deliberately explicit rather than inferred from `validUntil` on read: when an
+  offer stopped being a commitment is a fact worth recording with an actor and a timestamp.
+- A quotation belonging to another tenant is reported as **404, never 403**.
+- An `id` identifies one **revision**, not a quotation number. `currentOnly=true` on the list
+  excludes superseded revisions.
+- Authorization reuses the frozen `Account` CASL subject - no new subject.
+
 ## [0.16.0-rfq-api] - 2026-07-30
 
 ### Added
