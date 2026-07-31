@@ -1,5 +1,6 @@
 import { assertAbility, type AuthContext } from '@triyara/auth'
 import type {
+  ChargeData,
   MutationCtx,
   QuotationItemData,
   QuotationListResult,
@@ -8,6 +9,7 @@ import type {
   QuotationRepository,
   QuotationSourcingRepository,
   QuotationTotals,
+  TaxData,
 } from '@triyara/db'
 import { type EventBus, makeEvent } from '@triyara/events'
 import { ConflictError, NotFoundError, ValidationError } from '@triyara/lib'
@@ -28,6 +30,21 @@ import {
   type PricingLine,
   type PricingTax,
 } from './quotation-pricing'
+
+/** The header-scoped condition rows as they stand before a re-price. */
+type ConditionRows = Awaited<ReturnType<QuotationSourcingRepository['listConditions']>>
+
+/**
+ * Condition rows carrying the figures the pricing engine actually resolved.
+ *
+ * Written back after every re-price so a stored row can never state one number
+ * while the header states another - the document contradicting itself is worse
+ * than either figure being wrong, because a reader cannot tell which to trust.
+ */
+interface RepricedConditions {
+  charges: ChargeData[]
+  taxes: TaxData[]
+}
 
 // Quotation service (TRY-BNP-QUOTE-01).
 //
@@ -159,7 +176,7 @@ export function createQuotationService({
     organizationId: string,
     quotationId: string | null,
     items: QuotationItemData[],
-  ): Promise<QuotationTotals> {
+  ): Promise<QuotationTotals & { repriced: RepricedConditions | null }> {
     const lines: PricingLine[] = items.map((it, i) => ({
       ref: String(i + 1),
       quantity: it.quantity,
@@ -169,31 +186,81 @@ export function createQuotationService({
 
     let charges: PricingCharge[] = []
     let taxes: PricingTax[] = []
+    // The surviving rows are kept so the resolved figures can be written back
+    // onto them. Re-pricing against new lines changes what a percentage charge
+    // or any tax is worth, and a row left at its old amount would contradict
+    // the totals it just helped produce.
+    let survivingCharges: ConditionRows['charges'] = []
+    let survivingTaxes: ConditionRows['taxes'] = []
+
     if (quotationId) {
       const conditions = await sourcing.listConditions(organizationId, quotationId)
       // Existing conditions are keyed by line id, but a replacement changes the
       // ids, so only header-scoped conditions survive a line replacement.
-      charges = conditions.charges
-        .filter((c) => !c.quotationItemId)
-        .map((c) => ({
-          basis: c.basis,
-          rate: c.rate === null ? undefined : num(c.rate),
-          amount: num(c.amount),
-          isDeduction: c.isDeduction,
-          sequence: c.sequence,
-        }))
-      taxes = conditions.taxes
-        .filter((t) => !t.quotationItemId)
-        .map((t) => ({
-          ratePercent: num(t.ratePercent),
-          isCompound: t.isCompound,
-          isReverseCharge: t.isReverseCharge,
-          sequence: t.sequence,
-        }))
+      survivingCharges = conditions.charges.filter((c) => !c.quotationItemId)
+      survivingTaxes = conditions.taxes.filter((t) => !t.quotationItemId)
+      charges = survivingCharges.map((c, i) => ({
+        ref: String(i),
+        basis: c.basis,
+        rate: c.rate === null ? undefined : num(c.rate),
+        amount: num(c.amount),
+        isDeduction: c.isDeduction,
+        sequence: c.sequence,
+      }))
+      taxes = survivingTaxes.map((t, i) => ({
+        ref: String(i),
+        ratePercent: num(t.ratePercent),
+        isCompound: t.isCompound,
+        isReverseCharge: t.isReverseCharge,
+        sequence: t.sequence,
+      }))
     }
 
     const result = priceQuotation(lines, charges, taxes)
+
+    // Paired by ref, never by position: charges come back line-scoped first.
+    const chargeAmounts = new Map(result.charges.map((c) => [c.ref, c.resolvedAmount]))
+    const taxFigures = new Map(
+      result.taxes.map((t) => [t.ref, { amount: t.resolvedAmount, base: t.resolvedTaxableAmount }]),
+    )
+
+    const repriced: RepricedConditions | null =
+      survivingCharges.length > 0 || survivingTaxes.length > 0
+        ? {
+            charges: survivingCharges.map((c, i) => ({
+              quotationItemId: null,
+              type: c.type,
+              scope: c.scope,
+              basis: c.basis,
+              ...(c.label === null ? {} : { label: c.label }),
+              ...(c.rate === null ? {} : { rate: num(c.rate) }),
+              amount: chargeAmounts.get(String(i)) ?? num(c.amount),
+              currency: c.currency,
+              isDeduction: c.isDeduction,
+              sequence: c.sequence,
+              isVisibleToCustomer: c.isVisibleToCustomer,
+            })),
+            taxes: survivingTaxes.map((t, i) => {
+              const resolved = taxFigures.get(String(i))
+              return {
+                quotationItemId: null,
+                type: t.type,
+                ...(t.code === null ? {} : { code: t.code }),
+                ...(t.jurisdiction === null ? {} : { jurisdiction: t.jurisdiction }),
+                ratePercent: num(t.ratePercent),
+                taxableAmount: resolved?.base ?? num(t.taxableAmount),
+                amount: resolved?.amount ?? num(t.amount),
+                currency: t.currency,
+                isCompound: t.isCompound,
+                isReverseCharge: t.isReverseCharge,
+                sequence: t.sequence,
+              }
+            }),
+          }
+        : null
+
     return {
+      repriced,
       subtotal: result.subtotal,
       chargesTotal: result.chargesTotal,
       discountTotal: result.discountTotal,
@@ -307,7 +374,12 @@ export function createQuotationService({
       )
       // No quotation id yet, so only line arithmetic applies; conditions are
       // added afterwards and re-price the document then.
-      const totals = await computeTotals(ctx.organizationId, null, items)
+      // No quotationId yet, so there are no stored conditions to re-price.
+      const { repriced: _unpriced, ...totals } = await computeTotals(
+        ctx.organizationId,
+        null,
+        items,
+      )
 
       const quotation = await repo.create(mutationCtx(ctx), { ...dto, ...fx }, items, totals)
       await emit(ctx, 'quotation.created', {
@@ -376,8 +448,17 @@ export function createQuotationService({
       }
 
       const items = toItemData(dto.items)
-      const totals = await computeTotals(ctx.organizationId, id, items)
+      const { repriced, ...totals } = await computeTotals(ctx.organizationId, id, items)
       const updated = await repo.replaceItems(mutationCtx(ctx), id, expectedVersion, items, totals)
+
+      // Replacing the lines moves the base every header charge and tax is
+      // levied on, so their stored rows have to be rewritten at the figures the
+      // re-price produced. Done after the line replacement, because that is
+      // what drops the line-scoped rows these headers are replacing.
+      if (repriced) {
+        await sourcing.replaceConditions(mutationCtx(ctx), id, repriced.charges, repriced.taxes)
+      }
+
       await emit(ctx, 'quotation.items_replaced', {
         quotationId: id,
         lines: items.length,
@@ -419,14 +500,12 @@ export function createQuotationService({
         }
       }
 
-      await sourcing.replaceConditions(
-        mutationCtx(ctx),
-        id,
-        charges.map((c) => ({ ...c, quotationItemId: c.quotationItemId ?? null })),
-        taxes.map((t) => ({ ...t, quotationItemId: t.quotationItemId ?? null })),
-      )
-
-      // Re-price from the persisted lines and the conditions just written.
+      // Price BEFORE persisting. The conditions define the price, so a row has
+      // to be stored carrying the figure that actually went into the totals -
+      // otherwise the document contradicts itself, and a reader has no way to
+      // tell which number is real. The submitted `amount` and `taxableAmount`
+      // are inputs at most: a PERCENTAGE charge is derived from its rate, and a
+      // header tax is always levied on the running total.
       const lines: PricingLine[] = current.items.map((it) => ({
         ref: it.id,
         quantity: num(it.quantity),
@@ -435,7 +514,8 @@ export function createQuotationService({
       }))
       const priced = priceQuotation(
         lines,
-        charges.map((c) => ({
+        charges.map((c, i) => ({
+          ref: String(i),
           lineRef: c.quotationItemId ?? null,
           basis: c.basis,
           rate: c.rate,
@@ -443,13 +523,41 @@ export function createQuotationService({
           isDeduction: c.isDeduction,
           sequence: c.sequence,
         })),
-        taxes.map((t) => ({
+        taxes.map((t, i) => ({
+          ref: String(i),
           lineRef: t.quotationItemId ?? null,
           ratePercent: t.ratePercent,
           isCompound: t.isCompound,
           isReverseCharge: t.isReverseCharge,
           sequence: t.sequence,
         })),
+      )
+
+      // Paired by ref, not by position: charges come back line-scoped first.
+      const chargeAmounts = new Map(priced.charges.map((c) => [c.ref, c.resolvedAmount]))
+      const taxFigures = new Map(
+        priced.taxes.map((t) => [
+          t.ref,
+          { amount: t.resolvedAmount, base: t.resolvedTaxableAmount },
+        ]),
+      )
+
+      await sourcing.replaceConditions(
+        mutationCtx(ctx),
+        id,
+        charges.map((c, i) => ({
+          ...c,
+          quotationItemId: c.quotationItemId ?? null,
+          amount: chargeAmounts.get(String(i)) ?? c.amount,
+        })),
+        taxes.map((t, i) => {
+          const resolved = taxFigures.get(String(i))
+          return {
+            ...t,
+            quotationItemId: t.quotationItemId ?? null,
+            ...(resolved ? { amount: resolved.amount, taxableAmount: resolved.base } : {}),
+          }
+        }),
       )
 
       const updated = await repo.mutate(
@@ -658,7 +766,13 @@ export function createQuotationService({
       }
 
       const items = toItemData(itemsDto.items)
-      const totals = await computeTotals(ctx.organizationId, id, items)
+      // The successor's condition rows are written by repo.revise, so the
+      // re-priced rows for THIS quotation are not applicable here.
+      const { repriced: _superseded, ...totals } = await computeTotals(
+        ctx.organizationId,
+        id,
+        items,
+      )
       const next = await repo.revise(
         mutationCtx(ctx),
         id,

@@ -21,6 +21,14 @@ export interface PricingLine {
 }
 
 export interface PricingCharge {
+  /**
+   * Caller's own handle on this charge, echoed back on the resolved result.
+   *
+   * Charges come back re-ordered - line-scoped are priced before header-scoped,
+   * each by sequence - so position cannot be used to pair a resolved amount with
+   * the row it came from. Mirrors `PricingLine.ref`.
+   */
+  ref?: string
   /** Null for a header charge; a line ref for a line charge. */
   lineRef?: string | null
   basis: ChargeBasis
@@ -33,6 +41,8 @@ export interface PricingCharge {
 }
 
 export interface PricingTax {
+  /** Caller's own handle, echoed back on the resolved result. See PricingCharge.ref. */
+  ref?: string
   lineRef?: string | null
   ratePercent: number
   /** Explicit taxable base; defaults to the running total when omitted. */
