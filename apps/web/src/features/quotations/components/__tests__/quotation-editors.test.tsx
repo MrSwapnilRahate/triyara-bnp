@@ -203,7 +203,6 @@ describe('QuotationLinesEditor', () => {
 
   describe('revise mode', () => {
     it('requires a reason before creating a revision', async () => {
-      const user = userEvent.setup()
       const posted = vi.fn()
       server.use(
         ...detailHandlers(makeQuotation({ status: 'SENT' })),

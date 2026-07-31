@@ -26,7 +26,18 @@ export const userRepository = {
     await prisma.user.update({ where: { id }, data: { lastLoginAt: new Date() } })
   },
 
+  /**
+   * Changes the display name only. Email is the login identifier and roles are
+   * granted by an administrator, so neither is writable through the profile
+   * endpoint that calls this.
+   */
+  async updateProfile(id: string, data: { name: string }): Promise<void> {
+    await prisma.user.update({ where: { id }, data: { name: data.name } })
+  },
+
   async updatePassword(id: string, passwordHash: string): Promise<void> {
     await prisma.user.update({ where: { id }, data: { passwordHash } })
   },
 }
+
+export type UserRepository = typeof userRepository

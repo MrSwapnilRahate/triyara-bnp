@@ -18,6 +18,13 @@ export {
   type ListActivitiesParams,
   type NewActivity,
 } from './repositories/activity.repository'
+export type {
+  AuditListResult,
+  AuditRecord,
+  AuditRepository,
+  ListAuditParams,
+} from './repositories/audit.repository'
+export { auditRepository } from './repositories/audit.repository'
 export {
   type AddBuyerProductData,
   type BuyerProfileData,
@@ -42,6 +49,8 @@ export {
   type ListCategoriesParams,
   type UpdateCategoryData,
 } from './repositories/category.repository'
+export type { DashboardRepository, DashboardSummary } from './repositories/dashboard.repository'
+export { dashboardRepository } from './repositories/dashboard.repository'
 export {
   type CreateDocumentInput,
   type DocumentListItem,
@@ -77,6 +86,7 @@ export {
   type UpsertPreference,
 } from './repositories/notification-preference.repository'
 export { orgUserRepository } from './repositories/org-user.repository'
+export type { OrganizationRepository } from './repositories/organization.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
 export {
@@ -186,7 +196,11 @@ export {
   type SupplierProfileRepository,
   supplierProfileRepository,
 } from './repositories/supplier-profile.repository'
-export { userRepository, type UserWithRoles } from './repositories/user.repository'
+export {
+  type UserRepository,
+  userRepository,
+  type UserWithRoles,
+} from './repositories/user.repository'
 export {
   type EmailVerificationTokenRecord,
   type UserSecurityProfileRecord,

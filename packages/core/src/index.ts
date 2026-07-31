@@ -12,6 +12,13 @@ export {
   createActivityService,
 } from './activity/activity.service'
 export {
+  type AdminService,
+  type AdminServiceCtx,
+  type AdminServiceDeps,
+  createAdminService,
+  type ProfileRecord,
+} from './admin/admin.service'
+export {
   createEmailVerificationService,
   type EmailVerificationCtx,
   type EmailVerificationDeps,
