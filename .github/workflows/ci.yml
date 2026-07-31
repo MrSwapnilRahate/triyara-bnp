@@ -108,8 +108,16 @@ jobs:
             exit 1
           fi
 
-      - name: Integration tests
+      - name: Integration tests - repositories
         run: pnpm --filter @triyara/db test
+
+      # The web package's API integration tests are gated on DATABASE_URL too,
+      # and the quality job has none - so until this step existed they skipped
+      # in both jobs and nothing exercised the route handlers against real
+      # PostgreSQL. Filtered to the integration files so the jsdom unit tests
+      # are not run a second time; the quality job already covers those.
+      - name: Integration tests - API routes
+        run: pnpm --filter @triyara/web exec vitest run integration.test
 
   security:
     name: Security scan

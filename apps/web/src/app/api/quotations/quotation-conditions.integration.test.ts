@@ -122,29 +122,34 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return { ...q, version: after.version, status: after.status }
     }
 
+    // Fixtures are namespaced to this file. Vitest runs test files in parallel,
+    // and `upsert` is a select-then-insert: two files seeding the same slug both
+    // find nothing on an empty database, both insert, and one dies on the unique
+    // constraint. It only passes on a database a previous run already populated,
+    // which is why this survived until CI started from a clean one.
     beforeAll(async () => {
       const org = await prisma.organization.upsert({
-        where: { slug: 'quote-api-itest' },
+        where: { slug: 'quote-conditions-itest' },
         update: {},
-        create: { name: 'Quotation API IT', slug: 'quote-api-itest' },
+        create: { name: 'Quotation Conditions IT', slug: 'quote-conditions-itest' },
       })
       authState.organizationId = org.id
       const user = await prisma.user.upsert({
-        where: { email: 'quote-api@triyara.test' },
+        where: { email: 'quote-conditions@triyara.test' },
         update: {},
         create: {
           organizationId: org.id,
-          email: 'quote-api@triyara.test',
-          name: 'API IT',
+          email: 'quote-conditions@triyara.test',
+          name: 'Conditions IT',
           passwordHash: 'x',
         },
       })
       authState.userId = user.id
 
       const other = await prisma.organization.upsert({
-        where: { slug: 'quote-api-itest-other' },
+        where: { slug: 'quote-conditions-itest-other' },
         update: {},
-        create: { name: 'Other Tenant', slug: 'quote-api-itest-other' },
+        create: { name: 'Other Tenant', slug: 'quote-conditions-itest-other' },
       })
       otherOrgId = other.id
 
@@ -159,13 +164,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       accountId = account.id
 
       const cat = await prisma.category.upsert({
-        where: { organizationId_slug: { organizationId: org.id, slug: 'quote-api-cat' } },
+        where: { organizationId_slug: { organizationId: org.id, slug: 'quote-conditions-cat' } },
         update: {},
         create: {
           organizationId: org.id,
           name: 'IT Cat',
-          slug: 'quote-api-cat',
-          path: '/quote-api-cat',
+          slug: 'quote-conditions-cat',
+          path: '/quote-conditions-cat',
           depth: 0,
         },
       })
