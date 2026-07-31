@@ -392,7 +392,11 @@ function Panel<T>({
 }) {
   const items = query.data?.items ?? []
   return (
-    <Card>
+    // min-w-0: a grid item's automatic minimum size is its min-content width, so
+    // without this the track is floored by the longest RFQ title and the whole
+    // row of panels grows past a phone viewport. The rows below already ask to
+    // truncate; this is what lets them.
+    <Card className="min-w-0">
       <CardHeader className="flex items-center justify-between">
         <CardTitle as="h2">{title}</CardTitle>
         <Button asChild size="sm" variant="ghost">

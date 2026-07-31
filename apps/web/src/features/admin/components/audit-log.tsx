@@ -21,7 +21,7 @@ import {
   SkeletonTable,
 } from '@triyara/ui'
 import { History, SearchX, ShieldAlert } from 'lucide-react'
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useMemo, useRef, useState } from 'react'
 
 import { DebouncedSearch } from '@/components/data/debounced-search'
 import { FilterSelect } from '@/components/data/filter-select'
@@ -71,6 +71,13 @@ export function AuditLog() {
   const { params, setFilter, nextPage, previousPage, hasPrevious, isFiltered, reset } =
     useListState<AuditParams>(DEFAULTS)
   const [selected, setSelected] = useState<AuditEntry | null>(null)
+  /**
+   * The row that opened the drawer, so focus can go back to it on close.
+   * Radix restores to whatever it captured, and here that lands on <body> -
+   * which drops a keyboard user at the top of the document and makes them tab
+   * back through the whole sidebar to reach the next row.
+   */
+  const openedFrom = useRef<HTMLTableRowElement | null>(null)
 
   const query = useMemo(
     () => ({
@@ -240,10 +247,14 @@ export function AuditLog() {
                   tabIndex={0}
                   role="button"
                   aria-label={`${entry.action} on ${entry.entityType}, ${new Date(entry.createdAt).toLocaleString()}`}
-                  onClick={() => setSelected(entry)}
+                  onClick={(event) => {
+                    openedFrom.current = event.currentTarget
+                    setSelected(entry)
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
+                      openedFrom.current = event.currentTarget
                       setSelected(entry)
                     }
                   }}
@@ -271,7 +282,11 @@ export function AuditLog() {
         </DataTableLayout>
       </div>
 
-      <AuditDetail entry={selected} onClose={() => setSelected(null)} />
+      <AuditDetail
+        entry={selected}
+        onClose={() => setSelected(null)}
+        restoreFocus={() => openedFrom.current?.focus()}
+      />
     </>
   )
 }
@@ -310,7 +325,15 @@ function ChangeSummary({ entry }: { entry: AuditEntry }) {
  * and prints values. A viewer that assumed a schema would silently mis-render
  * the first entity that did not match it.
  */
-function AuditDetail({ entry, onClose }: { entry: AuditEntry | null; onClose: () => void }) {
+function AuditDetail({
+  entry,
+  onClose,
+  restoreFocus,
+}: {
+  entry: AuditEntry | null
+  onClose: () => void
+  restoreFocus: () => void
+}) {
   const keys = useMemo(() => {
     if (!entry) return []
     return [
@@ -320,7 +343,15 @@ function AuditDetail({ entry, onClose }: { entry: AuditEntry | null; onClose: ()
 
   return (
     <Drawer open={entry !== null} onOpenChange={(open) => !open && onClose()}>
-      <DrawerContent className="w-full max-w-2xl">
+      <DrawerContent
+        className="w-full max-w-2xl"
+        // Take over the close-time focus move: preventDefault stops Radix
+        // sending focus to <body>, then we put it back on the row.
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          restoreFocus()
+        }}
+      >
         <DrawerHeader>
           <DrawerTitle>{entry?.action ?? 'Audit entry'}</DrawerTitle>
         </DrawerHeader>

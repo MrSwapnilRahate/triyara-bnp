@@ -1,4 +1,4 @@
-import { createInMemoryRateLimiter, isRole, type Role, verifyPassword } from '@triyara/auth'
+import { createInMemoryRateLimiter, isRole, verifyPassword } from '@triyara/auth'
 import { userRepository } from '@triyara/db'
 import { logger } from '@triyara/lib'
 import NextAuth from 'next-auth'
@@ -57,14 +57,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.roles = user.roles
       }
       return token
-    },
-    session({ session, token }) {
-      // Values written by the jwt() callback above; the JWT carries an `unknown`
-      // index signature, so we assert the shapes we control at this boundary.
-      session.user.id = token.sub ?? ''
-      session.user.organizationId = (token.organizationId as string | undefined) ?? ''
-      session.user.roles = (token.roles as Role[] | undefined) ?? []
-      return session
     },
   },
 })

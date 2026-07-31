@@ -196,6 +196,22 @@ describe('AuditLog', () => {
     expect(within(drawer).getByText('ISSUED')).toBeInTheDocument()
   })
 
+  it('returns focus to the row that opened the drawer', async () => {
+    const user = userEvent.setup()
+    server.use(...handlers())
+    renderWithProviders(<AuditLog />, { roles: ['ADMIN'] })
+
+    const row = await screen.findByRole('button', { name: /rfq\.issued on RFQ/i })
+    await user.click(row)
+    await screen.findByRole('dialog')
+
+    await user.keyboard('{Escape}')
+
+    // Without this, focus falls to <body> and a keyboard user has to tab back
+    // through the whole sidebar to reach the next row.
+    await waitFor(() => expect(row).toHaveFocus())
+  })
+
   it('offers no way to edit an entry', async () => {
     const user = userEvent.setup()
     server.use(...handlers())
