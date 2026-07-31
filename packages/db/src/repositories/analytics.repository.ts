@@ -1,5 +1,3 @@
-import { Prisma } from '@prisma/client'
-
 import { prisma } from '../client'
 
 /**
@@ -60,21 +58,40 @@ export const analyticsRepository = {
     const now = new Date()
     const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1))
 
-    const monthly = (table: Prisma.Sql) => prisma.$queryRaw<MonthRow[]>`
-      SELECT date_trunc('month', "createdAt") AS month, COUNT(*)::bigint AS count
-      FROM ${table}
-      WHERE "organizationId" = ${organizationId}
-        AND "deletedAt" IS NULL
-        AND "createdAt" >= ${from}
-      GROUP BY 1
-      ORDER BY 1
-    `
-
+    // Three explicit queries rather than one helper with an interpolated table
+    // name. Passing a table through `Prisma.sql` works under vitest but not once
+    // Next bundles this module for the server runtime, and a chart that 500s in
+    // the app while passing its tests is the worst of both. Written out, each
+    // query is also readable on its own.
     const [rfqRows, quotationRows, supplierRows, countryRows, rfqFunnel, quoteFunnel] =
       await Promise.all([
-        monthly(Prisma.sql`"RFQ"`),
-        monthly(Prisma.sql`"Quotation"`),
-        monthly(Prisma.sql`"Supplier"`),
+        prisma.$queryRaw<MonthRow[]>`
+          SELECT date_trunc('month', "createdAt") AS month, COUNT(*)::bigint AS count
+          FROM "RFQ"
+          WHERE "organizationId" = ${organizationId}
+            AND "deletedAt" IS NULL
+            AND "createdAt" >= ${from}
+          GROUP BY 1
+          ORDER BY 1
+        `,
+        prisma.$queryRaw<MonthRow[]>`
+          SELECT date_trunc('month', "createdAt") AS month, COUNT(*)::bigint AS count
+          FROM "Quotation"
+          WHERE "organizationId" = ${organizationId}
+            AND "deletedAt" IS NULL
+            AND "createdAt" >= ${from}
+          GROUP BY 1
+          ORDER BY 1
+        `,
+        prisma.$queryRaw<MonthRow[]>`
+          SELECT date_trunc('month', "createdAt") AS month, COUNT(*)::bigint AS count
+          FROM "Supplier"
+          WHERE "organizationId" = ${organizationId}
+            AND "deletedAt" IS NULL
+            AND "createdAt" >= ${from}
+          GROUP BY 1
+          ORDER BY 1
+        `,
         prisma.$queryRaw<Array<{ country: string | null; suppliers: bigint }>>`
           SELECT "country", COUNT(*)::bigint AS suppliers
           FROM "Supplier"

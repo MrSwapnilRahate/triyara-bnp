@@ -3,6 +3,7 @@ import type { NavGroup, NavItem } from '@triyara/ui'
 import {
   Activity,
   Bell,
+  BellRing,
   Building2,
   FileSearch,
   FileText,
@@ -17,6 +18,7 @@ import {
   ShieldCheck,
   Tags,
   Truck,
+  UserCog,
   Users,
 } from 'lucide-react'
 
@@ -75,6 +77,15 @@ export const NAVIGATION: GuardedGroup[] = [
     items: [
       { label: 'Activity feed', href: '/activity', icon: <Activity /> },
       { label: 'Notifications', href: '/notifications', icon: <Bell /> },
+    ],
+  },
+  {
+    // Personal settings carry no `requires`: every signed-in user has a
+    // profile and notification preferences of their own.
+    heading: 'You',
+    items: [
+      { label: 'My profile', href: '/settings/profile', icon: <UserCog /> },
+      { label: 'Notifications', href: '/settings/notifications', icon: <BellRing /> },
     ],
   },
   {
