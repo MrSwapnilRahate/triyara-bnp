@@ -50,6 +50,16 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Tenant-wide display settings (TRY-BNP-ADMIN-01). Every column is nullable
+  // or defaulted, so the migration is additive and existing rows stay valid.
+  // These govern PRESENTATION only - a quotation still stores its own currency,
+  // because changing the tenant default must never restate a sent document.
+  logoUrl         String?
+  defaultCurrency String  @default("USD")
+  timezone        String  @default("UTC")
+  dateFormat      String  @default("DD/MM/YYYY")
+  language        String  @default("en")
+
   users    User[]
   accounts Account[]
 
@@ -74,6 +84,12 @@ model User {
   passwordHash   String
   status         UserStatus @default(ACTIVE)
   lastLoginAt    DateTime?
+
+  // Personal presentation (TRY-BNP-ADMIN-01). `preferences` is free-form JSON
+  // on purpose: it holds UI choices the server never interprets, so adding one
+  // must not need a migration. Anything the server acts on gets a column.
+  avatarUrl      String?
+  preferences    Json?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 

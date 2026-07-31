@@ -25,6 +25,9 @@ vi.mock('@/auth/context', () => ({
 
 const adminService = {
   listAudit: vi.fn(),
+  trends: vi.fn(),
+  changePassword: vi.fn(),
+  searchUsers: vi.fn(),
   auditForEntity: vi.fn(),
   getOrganization: vi.fn(),
   updateOrganization: vi.fn(),
@@ -38,6 +41,9 @@ const { GET: listAudit } = await import('./audit/route')
 const { GET: getOrganization, PATCH: patchOrganization } = await import('./organization/route')
 const { GET: getMe, PATCH: patchMe } = await import('./me/route')
 const { GET: getSummary } = await import('./dashboard/summary/route')
+const { GET: getTrends } = await import('./dashboard/trends/route')
+const { POST: changePassword } = await import('./me/password/route')
+const { GET: searchUsers } = await import('./users/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const body = async (res: Response) =>
@@ -253,6 +259,119 @@ describe('GET /api/v1/dashboard/summary', () => {
 
   it('exposes no write verb', async () => {
     const routeModule = await import('./dashboard/summary/route')
+    expect(Object.keys(routeModule).sort()).toEqual(['GET'])
+  })
+})
+
+describe('GET /api/v1/dashboard/trends', () => {
+  const trends = {
+    rfqs: [{ month: '2026-01-01', count: 2 }],
+    quotations: [],
+    supplierGrowth: [],
+    topCountries: [{ country: 'IN', suppliers: 3 }],
+    approvalFunnel: { rfqs: [], quotations: [] },
+    window: { months: 6, from: '2026-01-01' },
+  }
+
+  it('defaults to a six month window', async () => {
+    adminService.trends.mockResolvedValue(trends)
+    const res = await getTrends(req('/api/v1/dashboard/trends'))
+    expect(res.status).toBe(200)
+    expect(adminService.trends).toHaveBeenCalledWith(expect.anything(), { window: '6m' })
+    expect((await body(res)).meta.window).toBe('6m')
+  })
+
+  it('accepts a supported window', async () => {
+    adminService.trends.mockResolvedValue(trends)
+    await getTrends(req('/api/v1/dashboard/trends?window=12m'))
+    expect(adminService.trends).toHaveBeenCalledWith(expect.anything(), { window: '12m' })
+  })
+
+  it('rejects an unsupported window rather than silently defaulting', async () => {
+    const res = await getTrends(req('/api/v1/dashboard/trends?window=all'))
+    expect(res.status).toBe(422)
+    expect(adminService.trends).not.toHaveBeenCalled()
+  })
+
+  it('exposes no write verb', async () => {
+    const routeModule = await import('./dashboard/trends/route')
+    expect(Object.keys(routeModule).sort()).toEqual(['GET'])
+  })
+})
+
+describe('POST /api/v1/me/password', () => {
+  const valid = { currentPassword: 'OldPassw0rd!', newPassword: 'NewPassw0rdLong' }
+
+  it('changes the password and returns no body', async () => {
+    adminService.changePassword.mockResolvedValue(undefined)
+    const res = await changePassword(
+      req('/api/v1/me/password', { method: 'POST', body: JSON.stringify(valid) }),
+    )
+    expect(res.status).toBe(200)
+    // Nothing about the credential is echoed back.
+    expect((await body(res)).data).toBeNull()
+  })
+
+  it('requires the current password', async () => {
+    const res = await changePassword(
+      req('/api/v1/me/password', {
+        method: 'POST',
+        body: JSON.stringify({ newPassword: 'NewPassw0rdLong' }),
+      }),
+    )
+    expect(res.status).toBe(422)
+    expect(adminService.changePassword).not.toHaveBeenCalled()
+  })
+
+  it('rejects a weak new password before it reaches the service', async () => {
+    for (const newPassword of ['short', 'alllowercaseletters', 'ALLUPPERCASELETTERS']) {
+      const res = await changePassword(
+        req('/api/v1/me/password', {
+          method: 'POST',
+          body: JSON.stringify({ currentPassword: 'x', newPassword }),
+        }),
+      )
+      expect(res.status).toBe(422)
+    }
+    expect(adminService.changePassword).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a wrong current password as 403', async () => {
+    adminService.changePassword.mockRejectedValue(
+      new ForbiddenError('Current password is incorrect.'),
+    )
+    const res = await changePassword(
+      req('/api/v1/me/password', { method: 'POST', body: JSON.stringify(valid) }),
+    )
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('GET /api/v1/users', () => {
+  it('returns the narrow directory projection', async () => {
+    adminService.searchUsers.mockResolvedValue([
+      { id: 'u1', name: 'Ada', email: 'ada@t.test', avatarUrl: null },
+    ])
+    const res = await searchUsers(req('/api/v1/users?q=ada'))
+    expect(res.status).toBe(200)
+    const payload = await body(res)
+    expect(payload.meta).toMatchObject({ count: 1, q: 'ada' })
+    // No passwordHash, no preferences, no roles: a lookup is not a profile read.
+    expect(Object.keys((payload.data as unknown as Array<object>)[0]!).sort()).toEqual([
+      'avatarUrl',
+      'email',
+      'id',
+      'name',
+    ])
+  })
+
+  it('caps the page size', async () => {
+    const res = await searchUsers(req('/api/v1/users?limit=500'))
+    expect(res.status).toBe(422)
+  })
+
+  it('exposes no write verb', async () => {
+    const routeModule = await import('./users/route')
     expect(Object.keys(routeModule).sort()).toEqual(['GET'])
   })
 })

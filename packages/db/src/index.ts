@@ -19,6 +19,14 @@ export {
   type NewActivity,
 } from './repositories/activity.repository'
 export type {
+  AnalyticsRepository,
+  CountryPoint,
+  DashboardTrends,
+  FunnelStage,
+  MonthlyPoint,
+} from './repositories/analytics.repository'
+export { analyticsRepository } from './repositories/analytics.repository'
+export type {
   AuditListResult,
   AuditRecord,
   AuditRepository,
@@ -86,7 +94,10 @@ export {
   type UpsertPreference,
 } from './repositories/notification-preference.repository'
 export { orgUserRepository } from './repositories/org-user.repository'
-export type { OrganizationRepository } from './repositories/organization.repository'
+export type {
+  OrganizationRepository,
+  OrganizationSettingsData,
+} from './repositories/organization.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
 export {

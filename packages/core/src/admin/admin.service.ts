@@ -1,14 +1,23 @@
-import { assertAbility, type AuthContext } from '@triyara/auth'
+import { assertAbility, type AuthContext, hashPassword, verifyPassword } from '@triyara/auth'
 import type {
+  AnalyticsRepository,
   AuditListResult,
   AuditRepository,
   DashboardRepository,
   DashboardSummary,
+  DashboardTrends,
   OrganizationRepository,
   UserRepository,
 } from '@triyara/db'
-import { NotFoundError } from '@triyara/lib'
-import type { ListAuditQuery, UpdateOrganizationDto, UpdateProfileDto } from '@triyara/validation'
+import { ForbiddenError, NotFoundError, ValidationError } from '@triyara/lib'
+import type {
+  ChangePasswordDto,
+  ListAuditQuery,
+  ListUsersQuery,
+  TrendsQuery,
+  UpdateOrganizationDto,
+  UpdateProfileDto,
+} from '@triyara/validation'
 
 // Administration services (TRY-BNP-ADMIN-01).
 //
@@ -30,6 +39,7 @@ import type { ListAuditQuery, UpdateOrganizationDto, UpdateProfileDto } from '@t
 export type AdminServiceCtx = AuthContext & { requestId?: string }
 
 export interface AdminServiceDeps {
+  analytics: AnalyticsRepository
   audit: AuditRepository
   organizations: OrganizationRepository
   users: UserRepository
@@ -40,12 +50,22 @@ export interface ProfileRecord {
   id: string
   email: string
   name: string | null
+  avatarUrl: string | null
+  preferences: Record<string, unknown> | null
   roles: string[]
   organizationId: string
   lastLoginAt: Date | null
 }
 
-export function createAdminService({ audit, organizations, users, dashboard }: AdminServiceDeps) {
+const TREND_MONTHS: Record<string, number> = { '3m': 3, '6m': 6, '12m': 12 }
+
+export function createAdminService({
+  analytics,
+  audit,
+  organizations,
+  users,
+  dashboard,
+}: AdminServiceDeps) {
   /** Shared by getProfile and updateProfile; `this` is unavailable in the
    *  object literal below, so the read lives here rather than on the service. */
   async function readProfile(userId: string): Promise<ProfileRecord> {
@@ -55,6 +75,8 @@ export function createAdminService({ audit, organizations, users, dashboard }: A
       id: user.id,
       email: user.email,
       name: user.name,
+      avatarUrl: user.avatarUrl,
+      preferences: (user.preferences ?? null) as Record<string, unknown> | null,
       roles: user.roles.map((r) => r.role.name),
       organizationId: user.organizationId,
       lastLoginAt: user.lastLoginAt,
@@ -120,6 +142,37 @@ export function createAdminService({ audit, organizations, users, dashboard }: A
     async summary(ctx: AdminServiceCtx): Promise<DashboardSummary> {
       assertAbility(ctx, 'read', 'Account')
       return dashboard.summary(ctx.organizationId)
+    },
+
+    /** Live aggregates for the dashboard charts. */
+    async trends(ctx: AdminServiceCtx, query: TrendsQuery): Promise<DashboardTrends> {
+      assertAbility(ctx, 'read', 'Account')
+      return analytics.trends(ctx.organizationId, TREND_MONTHS[query.window] ?? 6)
+    },
+
+    /**
+     * Changes the caller's own password. The current one must be supplied and
+     * verified: a hijacked session must not be able to lock the real owner out.
+     */
+    async changePassword(ctx: AdminServiceCtx, dto: ChangePasswordDto): Promise<void> {
+      const hash = await users.findPasswordHash(ctx.user.id)
+      if (!hash) throw new NotFoundError('User not found.')
+      if (!(await verifyPassword(dto.currentPassword, hash))) {
+        throw new ForbiddenError('Current password is incorrect.')
+      }
+      if (await verifyPassword(dto.newPassword, hash)) {
+        throw new ValidationError('The new password must differ from the current one.')
+      }
+      await users.updatePassword(ctx.user.id, await hashPassword(dto.newPassword))
+    },
+
+    /**
+     * Colleague lookup for global search. Read-only and deliberately narrow:
+     * name, email and avatar, never anything else about a colleague.
+     */
+    async searchUsers(ctx: AdminServiceCtx, query: ListUsersQuery) {
+      assertAbility(ctx, 'read', 'User')
+      return users.searchDirectory(ctx.organizationId, query.q, query.limit)
     },
   }
 }

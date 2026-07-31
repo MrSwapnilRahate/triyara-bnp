@@ -1,5 +1,6 @@
 import { createAdminService } from '@triyara/core'
 import {
+  analyticsRepository,
   auditRepository,
   dashboardRepository,
   organizationRepository,
@@ -10,6 +11,7 @@ import {
 // route handlers depend only on the service - never on Prisma.
 
 export const adminService = createAdminService({
+  analytics: analyticsRepository,
   audit: auditRepository,
   organizations: organizationRepository,
   users: userRepository,
