@@ -36,8 +36,17 @@ const rfqService = {
   issue: vi.fn(),
   close: vi.fn(),
   reopen: vi.fn(),
+  decide: vi.fn(),
+  approvalHistory: vi.fn(),
+  revisionHistory: vi.fn(),
 }
-const rfqSupplierService = { listResponsesForRfq: vi.fn(), submitResponseForRfq: vi.fn() }
+const rfqSupplierService = {
+  listResponsesForRfq: vi.fn(),
+  submitResponseForRfq: vi.fn(),
+  list: vi.fn(),
+  invite: vi.fn(),
+  setParticipation: vi.fn(),
+}
 
 vi.mock('@/lib/rfq-service', () => ({ rfqService, rfqSupplierService }))
 
@@ -48,6 +57,10 @@ const { GET: listResponses, POST: submitResponse } = await import('./[id]/respon
 const { POST: publishRfq } = await import('./[id]/publish/route')
 const { POST: closeRfq } = await import('./[id]/close/route')
 const { POST: reopenRfq } = await import('./[id]/reopen/route')
+const { GET: listSuppliers, POST: inviteSuppliers } = await import('./[id]/suppliers/route')
+const { PATCH: setParticipation } = await import('./[id]/suppliers/[participationId]/route')
+const { GET: listApprovals, POST: decideRfq } = await import('./[id]/approvals/route')
+const { GET: listRevisions } = await import('./[id]/revisions/route')
 const { GET: openapi } = await import('./openapi.json/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
@@ -500,6 +513,235 @@ describe('workflow endpoints', () => {
   })
 })
 
+describe('supplier invitation', () => {
+  it('lists invited suppliers with a submitted count in meta', async () => {
+    rfqSupplierService.list.mockResolvedValue([
+      { id: 'rs1', supplierId: 's1', status: 'INVITED' },
+      { id: 'rs2', supplierId: 's2', status: 'SUBMITTED' },
+    ])
+    const res = await listSuppliers(req('/api/rfqs/r1/suppliers'), params('r1'))
+    const b = await body(res)
+    expect(res.status).toBe(200)
+    expect(b.data).toHaveLength(2)
+    expect(b.meta).toMatchObject({ rfqId: 'r1', count: 2, submitted: 1 })
+    expect(rfqSupplierService.list).toHaveBeenCalledWith(expect.anything(), 'r1')
+  })
+
+  it('invites and returns 200, not 201 - inviting is idempotent per supplier', async () => {
+    rfqSupplierService.invite.mockResolvedValue([{ id: 'rs1' }, { id: 'rs2' }])
+    const res = await inviteSuppliers(
+      req('/api/rfqs/r1/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({ supplierIds: ['s1', 's2'] }),
+      }),
+      params('r1'),
+    )
+    const b = await body(res)
+    expect(res.status).toBe(200)
+    expect(b.meta).toMatchObject({ requested: 2, total: 2 })
+    expect(rfqSupplierService.invite).toHaveBeenCalledWith(expect.anything(), 'r1', {
+      supplierIds: ['s1', 's2'],
+    })
+  })
+
+  it('rejects an empty supplier list', async () => {
+    const res = await inviteSuppliers(
+      req('/api/rfqs/r1/suppliers', { method: 'POST', body: JSON.stringify({ supplierIds: [] }) }),
+      params('r1'),
+    )
+    expect(res.status).toBe(422)
+    expect(rfqSupplierService.invite).not.toHaveBeenCalled()
+  })
+
+  it('maps an invitation to a closed RFQ to 409', async () => {
+    rfqSupplierService.invite.mockRejectedValue(new ConflictError('closed'))
+    const res = await inviteSuppliers(
+      req('/api/rfqs/r1/suppliers', {
+        method: 'POST',
+        body: JSON.stringify({ supplierIds: ['s1'] }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(409)
+  })
+
+  it('requires If-Match to change a participation', async () => {
+    const res = await setParticipation(
+      req('/api/rfqs/r1/suppliers/rs1', {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'ACCEPTED' }),
+      }),
+      { params: Promise.resolve({ id: 'r1', participationId: 'rs1' }) },
+    )
+    expect(res.status).toBe(428)
+    expect(rfqSupplierService.setParticipation).not.toHaveBeenCalled()
+  })
+
+  it('forwards the parsed version and reports the new status', async () => {
+    rfqSupplierService.setParticipation.mockResolvedValue({
+      id: 'rs1',
+      status: 'ACCEPTED',
+      version: 3,
+    })
+    const res = await setParticipation(
+      req('/api/rfqs/r1/suppliers/rs1', {
+        method: 'PATCH',
+        headers: { 'if-match': 'W/"v2"' },
+        body: JSON.stringify({ status: 'ACCEPTED' }),
+      }),
+      { params: Promise.resolve({ id: 'r1', participationId: 'rs1' }) },
+    )
+    const b = await body(res)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('ETag')).toBe('W/"v3"')
+    expect(b.meta.status).toBe('ACCEPTED')
+    expect(rfqSupplierService.setParticipation).toHaveBeenCalledWith(expect.anything(), 'rs1', 2, {
+      status: 'ACCEPTED',
+    })
+  })
+
+  it('surfaces the service refusing SUBMITTED as 409', async () => {
+    rfqSupplierService.setParticipation.mockRejectedValue(
+      new ConflictError('Submit a response instead of setting SUBMITTED directly.'),
+    )
+    const res = await setParticipation(
+      req('/api/rfqs/r1/suppliers/rs1', {
+        method: 'PATCH',
+        headers: { 'if-match': 'W/"v2"' },
+        body: JSON.stringify({ status: 'SUBMITTED' }),
+      }),
+      { params: Promise.resolve({ id: 'r1', participationId: 'rs1' }) },
+    )
+    expect(res.status).toBe(409)
+  })
+
+  it('rejects an unknown participation status', async () => {
+    const res = await setParticipation(
+      req('/api/rfqs/r1/suppliers/rs1', {
+        method: 'PATCH',
+        headers: { 'if-match': 'W/"v2"' },
+        body: JSON.stringify({ status: 'WIZARD' }),
+      }),
+      { params: Promise.resolve({ id: 'r1', participationId: 'rs1' }) },
+    )
+    expect(res.status).toBe(422)
+  })
+})
+
+describe('approvals', () => {
+  it('records a decision and returns 201 with the new status', async () => {
+    rfqService.decide.mockResolvedValue(rfq({ status: 'PENDING_APPROVAL', version: 2 }))
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v1"' },
+        body: JSON.stringify({ decision: 'PENDING', comments: 'Looks right.' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(201)
+    expect(res.headers.get('etag')).toBe('W/"v2"')
+    const payload = await body(res)
+    expect(payload.meta).toMatchObject({ status: 'PENDING_APPROVAL', decision: 'PENDING' })
+    expect(rfqService.decide).toHaveBeenCalledWith(
+      expect.anything(),
+      'r1',
+      1,
+      expect.objectContaining({ decision: 'PENDING' }),
+    )
+  })
+
+  it('requires If-Match', async () => {
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        body: JSON.stringify({ decision: 'PENDING' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(428)
+    expect(rfqService.decide).not.toHaveBeenCalled()
+  })
+
+  it('rejects a decision outside the vocabulary', async () => {
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v1"' },
+        body: JSON.stringify({ decision: 'MAYBE' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(422)
+    expect(rfqService.decide).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an illegal transition as 409', async () => {
+    rfqService.decide.mockRejectedValue(
+      new ConflictError(
+        'Cannot move a DRAFT RFQ to APPROVED. Allowed: PENDING_APPROVAL, CANCELLED.',
+      ),
+    )
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v1"' },
+        body: JSON.stringify({ decision: 'APPROVED' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(409)
+    expect((await body(res)).errors?.[0]?.message).toContain('PENDING_APPROVAL')
+  })
+
+  it('lists the decision trail with a count', async () => {
+    rfqService.approvalHistory.mockResolvedValue([
+      { id: 'a2', sequence: 2, toStatus: 'APPROVED' },
+      { id: 'a1', sequence: 1, toStatus: 'PENDING' },
+    ])
+    const res = await listApprovals(req('/api/rfqs/r1/approvals'), params('r1'))
+    expect(res.status).toBe(200)
+    expect((await body(res)).meta).toMatchObject({ rfqId: 'r1', count: 2 })
+  })
+
+  it('is refused for a role without manage', async () => {
+    rfqService.decide.mockRejectedValue(new ForbiddenError('Not permitted.'))
+    const res = await decideRfq(
+      req('/api/rfqs/r1/approvals', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v1"' },
+        body: JSON.stringify({ decision: 'APPROVED' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('revisions', () => {
+  it('reports the current revision in meta', async () => {
+    rfqService.revisionHistory.mockResolvedValue([
+      { id: 'v2', revisionNumber: 2 },
+      { id: 'v1', revisionNumber: 1 },
+    ])
+    const res = await listRevisions(req('/api/rfqs/r1/revisions'), params('r1'))
+    expect(res.status).toBe(200)
+    expect((await body(res)).meta).toMatchObject({ rfqId: 'r1', count: 2, currentRevision: 2 })
+  })
+
+  it('reports revision 0 when there are none', async () => {
+    rfqService.revisionHistory.mockResolvedValue([])
+    const res = await listRevisions(req('/api/rfqs/r1/revisions'), params('r1'))
+    expect((await body(res)).meta).toMatchObject({ count: 0, currentRevision: 0 })
+  })
+
+  it('reports a missing RFQ as 404', async () => {
+    rfqService.revisionHistory.mockRejectedValue(new NotFoundError('RFQ not found.'))
+    const res = await listRevisions(req('/api/rfqs/nope/revisions'), params('nope'))
+    expect(res.status).toBe(404)
+  })
+})
+
 describe('GET /api/rfqs/openapi.json', () => {
   it('serves a 3.1 document covering every endpoint', async () => {
     const res = await openapi(req('/api/rfqs/openapi.json'))
@@ -509,11 +751,15 @@ describe('GET /api/rfqs/openapi.json', () => {
     expect(Object.keys(doc.paths).sort()).toEqual([
       '/',
       '/{id}',
+      '/{id}/approvals',
       '/{id}/close',
       '/{id}/items',
       '/{id}/publish',
       '/{id}/reopen',
       '/{id}/responses',
+      '/{id}/revisions',
+      '/{id}/suppliers',
+      '/{id}/suppliers/{participationId}',
     ])
   })
 })
