@@ -1,0 +1,99 @@
+import type { Rfq, RfqItem, RfqListItem, RfqParticipation, RfqResponse } from '../../types'
+
+/** Shared RFQ fixtures. One shape, so a contract change fails every test at once. */
+
+export const rfqListItem = (over: Partial<RfqListItem> = {}): RfqListItem => ({
+  id: 'r1',
+  rfqNumber: 'RFQ-2026-000001',
+  type: 'BUYER',
+  buyerId: 'acc1',
+  title: 'Q3 black pepper',
+  currency: 'USD',
+  incoterm: 'FOB',
+  destinationCountry: 'AE',
+  destinationPort: 'Jebel Ali',
+  expectedShipmentDate: null,
+  quotationDeadline: null,
+  status: 'DRAFT',
+  priority: 'NORMAL',
+  currentRevision: 1,
+  version: 1,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  deletedAt: null,
+  ...over,
+})
+
+export const rfqItem = (over: Partial<RfqItem> = {}): RfqItem => ({
+  id: 'i1',
+  lineNumber: 1,
+  productId: null,
+  customProductName: 'Black pepper 550 g/l',
+  customProductDescription: null,
+  quantity: '10',
+  unit: 'MT',
+  targetPrice: null,
+  targetCurrency: null,
+  specifications: null,
+  requiredCertifications: [],
+  packaging: null,
+  remarks: null,
+  version: 1,
+  product: null,
+  ...over,
+})
+
+export const participation = (over: Partial<RfqParticipation> = {}): RfqParticipation => ({
+  id: 'p1',
+  supplierId: 's1',
+  status: 'INVITED',
+  invitedAt: '2026-01-02T00:00:00.000Z',
+  viewedAt: null,
+  respondedAt: null,
+  submittedAt: null,
+  isLate: false,
+  quotationCurrency: null,
+  quotationIncoterm: null,
+  quotationPort: null,
+  quotationValidUntil: null,
+  quotationTotal: null,
+  version: 1,
+  supplier: {
+    id: 's1',
+    supplierCode: 'SUP-000001',
+    companyName: 'Acme Spices',
+    status: 'APPROVED',
+  },
+  ...over,
+})
+
+export const rfq = (over: Partial<Rfq> = {}): Rfq => ({
+  ...rfqListItem(),
+  description: null,
+  createdById: 'u1',
+  items: [rfqItem()],
+  suppliers: [],
+  ...over,
+})
+
+export const response = (over: Partial<RfqResponse> = {}): RfqResponse => ({
+  id: 'b1',
+  rfqSupplierId: 'p1',
+  rfqItemId: 'i1',
+  revisionNumber: 1,
+  isCurrent: true,
+  price: '100',
+  currency: 'USD',
+  moq: null,
+  moqUnit: null,
+  leadTimeDays: 30,
+  incoterm: 'FOB',
+  port: null,
+  offeredProductId: null,
+  offeredDescription: null,
+  remarks: null,
+  validUntil: null,
+  submittedAt: '2026-01-05T00:00:00.000Z',
+  version: 1,
+  ...over,
+})

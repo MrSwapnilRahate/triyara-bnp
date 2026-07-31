@@ -21,8 +21,20 @@ export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDiv
   )
 }
 
-export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn('text-md text-content font-semibold', className)} {...props} />
+export interface CardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
+  /**
+   * Heading level. Defaults to `h3`.
+   *
+   * A card under a `PageHeader` sits below its `h1`, so `h3` skips a level and
+   * fails axe's heading-order rule. Callers in that position pass `as="h2"`.
+   * The visual size is set by the class, not the tag, so changing this changes
+   * document structure only - which is the point.
+   */
+  as?: 'h2' | 'h3' | 'h4'
+}
+
+export function CardTitle({ className, as: Tag = 'h3', ...props }: CardTitleProps) {
+  return <Tag className={cn('text-md text-content font-semibold', className)} {...props} />
 }
 
 export function CardDescription({
