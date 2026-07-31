@@ -176,8 +176,16 @@ export const api = {
     request<T>(path, { ...options, method: 'GET' }),
   post: <T>(path: string, body: unknown, options?: Omit<RequestOptions, 'method' | 'body'>) =>
     request<T>(path, { ...options, method: 'POST', body }),
-  patch: <T>(path: string, body: unknown, version: number, options?: RequestOptions) =>
-    request<T>(path, { ...options, method: 'PATCH', body, version }),
+  // `version` is optional because not every PATCH in this API is version
+  // guarded: a priced document is, a tenant's display settings are not. When it
+  // is omitted no If-Match header is sent at all, rather than a malformed one.
+  patch: <T>(path: string, body: unknown, version?: number, options?: RequestOptions) =>
+    request<T>(path, {
+      ...options,
+      method: 'PATCH',
+      body,
+      ...(version === undefined ? {} : { version }),
+    }),
   // PUT is for whole-collection replacement, where an empty array is a
   // meaningful instruction rather than an omission. The only such endpoint
   // today is a quotation's charges and taxes, which the API replaces together.
