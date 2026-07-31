@@ -29,6 +29,9 @@ const { GET: listAudit } = await import('./audit/route')
 const { GET: getOrganization, PATCH: patchOrganization } = await import('./organization/route')
 const { GET: getMe, PATCH: patchMe } = await import('./me/route')
 const { GET: getSummary } = await import('./dashboard/summary/route')
+const { GET: getTrends } = await import('./dashboard/trends/route')
+const { POST: changePassword } = await import('./me/password/route')
+const { GET: searchUsers } = await import('./users/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const body = async (res: Response) =>
@@ -283,6 +286,161 @@ describe.skipIf(!process.env.DATABASE_URL)('admin API (integration, real Postgre
       expect(summary.pendingApprovals).toBe(
         summary.rfqs.pendingApproval + summary.quotations.pendingApproval,
       )
+    })
+  })
+
+  describe('dashboard trends', () => {
+    it('returns a dense monthly series, zero-filled', async () => {
+      const res = await getTrends(req('/api/v1/dashboard/trends?window=3m'))
+      expect(res.status).toBe(200)
+      const trends = (await body(res)).data as unknown as {
+        rfqs: Array<{ month: string; count: number }>
+        window: { months: number }
+      }
+      // A gap must read as "nothing happened", not as a missing month, or a
+      // chart silently compresses its own x-axis.
+      expect(trends.rfqs).toHaveLength(3)
+      expect(trends.window.months).toBe(3)
+      expect(trends.rfqs.every((p) => Number.isInteger(p.count))).toBe(true)
+    })
+
+    it('orders the funnel by lifecycle, not by size', async () => {
+      const trends = (await body(await getTrends(req('/api/v1/dashboard/trends'))))
+        .data as unknown as { approvalFunnel: { rfqs: Array<{ stage: string }> } }
+      expect(trends.approvalFunnel.rfqs.map((s) => s.stage)).toEqual([
+        'DRAFT',
+        'PENDING_APPROVAL',
+        'APPROVED',
+        'ISSUED',
+        'AWARDED',
+      ])
+    })
+
+    it('counts only this tenant', async () => {
+      const trends = (await body(await getTrends(req('/api/v1/dashboard/trends'))))
+        .data as unknown as { rfqs: Array<{ count: number }> }
+      // This org has no sourcing records; a leaking query would show others'.
+      expect(trends.rfqs.reduce((n, p) => n + p.count, 0)).toBe(0)
+    })
+  })
+
+  describe('organization settings beyond the name', () => {
+    it('stores currency, timezone, date format and language', async () => {
+      const res = await patchOrganization(
+        req('/api/v1/organization', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            defaultCurrency: 'EUR',
+            timezone: 'Europe/Berlin',
+            dateFormat: 'YYYY-MM-DD',
+            language: 'fr',
+          }),
+        }),
+      )
+      expect(res.status).toBe(200)
+      const org = (await body(await getOrganization(req('/api/v1/organization'))))
+        .data as unknown as Record<string, string>
+      expect(org).toMatchObject({
+        defaultCurrency: 'EUR',
+        timezone: 'Europe/Berlin',
+        dateFormat: 'YYYY-MM-DD',
+        language: 'fr',
+      })
+    })
+
+    it('changes one setting without restating the rest', async () => {
+      await patchOrganization(
+        req('/api/v1/organization', {
+          method: 'PATCH',
+          body: JSON.stringify({ defaultCurrency: 'GBP', timezone: 'Europe/London' }),
+        }),
+      )
+      await patchOrganization(
+        req('/api/v1/organization', { method: 'PATCH', body: JSON.stringify({ language: 'hi' }) }),
+      )
+      const org = (await body(await getOrganization(req('/api/v1/organization'))))
+        .data as unknown as Record<string, string>
+      expect(org.timezone).toBe('Europe/London')
+      expect(org.language).toBe('hi')
+    })
+
+    it('rejects a malformed currency', async () => {
+      const res = await patchOrganization(
+        req('/api/v1/organization', {
+          method: 'PATCH',
+          body: JSON.stringify({ defaultCurrency: 'euro' }),
+        }),
+      )
+      expect(res.status).toBe(422)
+    })
+  })
+
+  describe('profile beyond the name', () => {
+    it('stores an avatar and free-form preferences', async () => {
+      const res = await patchMe(
+        req('/api/v1/me', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            avatarUrl: 'https://cdn.test/a.png',
+            preferences: { density: 'compact', landingTab: 'rfqs' },
+          }),
+        }),
+      )
+      expect(res.status).toBe(200)
+      const me = (await body(await getMe(req('/api/v1/me')))).data as unknown as {
+        avatarUrl: string
+        preferences: Record<string, unknown>
+      }
+      expect(me.avatarUrl).toBe('https://cdn.test/a.png')
+      expect(me.preferences).toEqual({ density: 'compact', landingTab: 'rfqs' })
+    })
+
+    it('rejects an avatar that is not a URL', async () => {
+      const res = await patchMe(
+        req('/api/v1/me', { method: 'PATCH', body: JSON.stringify({ avatarUrl: 'not-a-url' }) }),
+      )
+      expect(res.status).toBe(422)
+    })
+  })
+
+  describe('password change', () => {
+    it('refuses when the current password is wrong', async () => {
+      const res = await changePassword(
+        req('/api/v1/me/password', {
+          method: 'POST',
+          body: JSON.stringify({
+            currentPassword: 'definitely-not-it',
+            newPassword: 'BrandNewPass1',
+          }),
+        }),
+      )
+      // The stored hash for this fixture user is 'x', so nothing verifies.
+      expect(res.status).toBe(403)
+    })
+  })
+
+  describe('user directory', () => {
+    it('finds a colleague by name and returns only the narrow projection', async () => {
+      const items = (await body(await searchUsers(req('/api/v1/users?q=admin'))))
+        .data as unknown as Array<Record<string, unknown>>
+      expect(items.length).toBeGreaterThan(0)
+      expect(Object.keys(items[0]!).sort()).toEqual(['avatarUrl', 'email', 'id', 'name'])
+    })
+
+    it('never returns another tenant users', async () => {
+      await prisma.user.upsert({
+        where: { email: 'foreign-admin@triyara.test' },
+        update: {},
+        create: {
+          organizationId: otherOrgId,
+          email: 'foreign-admin@triyara.test',
+          name: 'Foreign Admin',
+          passwordHash: 'x',
+        },
+      })
+      const items = (await body(await searchUsers(req('/api/v1/users?q=Foreign'))))
+        .data as unknown as unknown[]
+      expect(items).toEqual([])
     })
   })
 })

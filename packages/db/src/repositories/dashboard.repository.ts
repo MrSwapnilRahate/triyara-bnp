@@ -22,6 +22,7 @@ export interface DashboardSummary {
     pendingApproval: number
     sent: number
     accepted: number
+    expired: number
   }
   suppliers: { total: number; approved: number; pendingReview: number }
   products: { total: number; active: number }
@@ -46,6 +47,7 @@ export const dashboardRepository = {
       quotePending,
       quoteSent,
       quoteAccepted,
+      quoteExpired,
       supplierTotal,
       supplierApproved,
       supplierPending,
@@ -62,6 +64,7 @@ export const dashboardRepository = {
       prisma.quotation.count({ where: { ...live, status: 'PENDING_APPROVAL' } }),
       prisma.quotation.count({ where: { ...live, status: 'SENT' } }),
       prisma.quotation.count({ where: { ...live, status: 'ACCEPTED' } }),
+      prisma.quotation.count({ where: { ...live, status: 'EXPIRED' } }),
       prisma.supplier.count({ where: live }),
       prisma.supplier.count({ where: { ...live, status: 'APPROVED' } }),
       prisma.supplier.count({ where: { ...live, status: 'PENDING_REVIEW' } }),
@@ -83,6 +86,7 @@ export const dashboardRepository = {
         pendingApproval: quotePending,
         sent: quoteSent,
         accepted: quoteAccepted,
+        expired: quoteExpired,
       },
       suppliers: {
         total: supplierTotal,

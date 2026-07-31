@@ -31,8 +31,31 @@ export type ListAuditQuery = z.infer<typeof listAuditQuerySchema>
 
 // ---- Organization settings ----
 
+const iso4217 = z
+  .string()
+  .trim()
+  .length(3)
+  .regex(/^[A-Z]{3}$/, 'Must be an ISO 4217 code.')
+
+export const DATE_FORMATS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD', 'DD MMM YYYY'] as const
+export const UI_LANGUAGES = ['en', 'hi', 'ar', 'fr', 'es'] as const
+
+/**
+ * Tenant-wide DISPLAY settings. Every field is optional so a caller may change
+ * one without restating the rest.
+ *
+ * `defaultCurrency` governs what a new document is proposed in - it does not
+ * restate documents already written. A quotation stores its own currency and a
+ * sent one is a commitment, so changing this must never alter what a buyer was
+ * quoted.
+ */
 export const updateOrganizationSchema = z.object({
-  name: z.string().trim().min(1).max(200),
+  name: z.string().trim().min(1).max(200).optional(),
+  logoUrl: z.string().trim().url().max(2000).nullish(),
+  defaultCurrency: iso4217.optional(),
+  timezone: z.string().trim().min(1).max(64).optional(),
+  dateFormat: z.enum(DATE_FORMATS).optional(),
+  language: z.enum(UI_LANGUAGES).optional(),
 })
 export type UpdateOrganizationDto = z.infer<typeof updateOrganizationSchema>
 
@@ -45,6 +68,49 @@ export type UpdateOrganizationDto = z.infer<typeof updateOrganizationSchema>
  * that deliberately carries no ability check beyond authentication.
  */
 export const updateProfileSchema = z.object({
-  name: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(120).optional(),
+  avatarUrl: z.string().trim().url().max(2000).nullish(),
+  /**
+   * UI choices the server stores but never interprets - density, default
+   * landing tab, and so on. Free-form so adding one needs no migration;
+   * anything the server acts on gets a column instead.
+   */
+  preferences: z.record(z.string(), z.unknown()).optional(),
 })
 export type UpdateProfileDto = z.infer<typeof updateProfileSchema>
+
+// ---- Password ----
+
+/**
+ * Changing your own password requires proving you know the current one, so a
+ * hijacked session cannot lock the real owner out.
+ */
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Required.'),
+  newPassword: z
+    .string()
+    .min(12, 'Use at least 12 characters.')
+    .max(200)
+    .regex(/[a-z]/, 'Include a lowercase letter.')
+    .regex(/[A-Z]/, 'Include an uppercase letter.')
+    .regex(/[0-9]/, 'Include a digit.'),
+})
+export type ChangePasswordDto = z.infer<typeof changePasswordSchema>
+
+// ---- Directory (global search) ----
+
+export const listUsersQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  q: z.string().trim().max(120).optional(),
+})
+export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>
+
+// ---- Dashboard trends ----
+
+export const TREND_WINDOWS = ['3m', '6m', '12m'] as const
+
+export const trendsQuerySchema = z.object({
+  /** How far back to group by month. */
+  window: z.enum(TREND_WINDOWS).default('6m'),
+})
+export type TrendsQuery = z.infer<typeof trendsQuerySchema>
