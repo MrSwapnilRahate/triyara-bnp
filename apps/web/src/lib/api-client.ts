@@ -117,7 +117,7 @@ function parseVersion(etag: string | null): number | null {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
   /** Sent as If-Match. Required by the API for PATCH and DELETE. */
   version?: number
@@ -178,6 +178,11 @@ export const api = {
     request<T>(path, { ...options, method: 'POST', body }),
   patch: <T>(path: string, body: unknown, version: number, options?: RequestOptions) =>
     request<T>(path, { ...options, method: 'PATCH', body, version }),
+  // PUT is for whole-collection replacement, where an empty array is a
+  // meaningful instruction rather than an omission. The only such endpoint
+  // today is a quotation's charges and taxes, which the API replaces together.
+  put: <T>(path: string, body: unknown, options?: Omit<RequestOptions, 'method' | 'body'>) =>
+    request<T>(path, { ...options, method: 'PUT', body }),
   delete: <T>(path: string, version: number, options?: RequestOptions) =>
     request<T>(path, { ...options, method: 'DELETE', version }),
 }
