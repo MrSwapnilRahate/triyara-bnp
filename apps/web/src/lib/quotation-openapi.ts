@@ -1,5 +1,6 @@
 import {
   CHARGE_TYPES,
+  QUOTATION_APPROVAL_STATUSES,
   QUOTATION_INCOTERMS,
   QUOTATION_STATUSES,
   QUOTATION_TYPES,
@@ -167,6 +168,8 @@ export const quotationOpenApiDocument = {
     { name: 'Quotations', description: 'Quotation revisions.' },
     { name: 'Items', description: 'Priced lines.' },
     { name: 'Workflow', description: 'Lifecycle transitions.' },
+    { name: 'Pricing', description: 'Charges and taxes.' },
+    { name: 'History', description: 'Approval decisions, line revisions and the supersede chain.' },
   ],
   paths: {
     '/': {
@@ -330,6 +333,263 @@ export const quotationOpenApiDocument = {
                 schema: envelope({
                   type: 'array',
                   items: { $ref: '#/components/schemas/QuotationItem' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+      post: {
+        tags: ['Items'],
+        summary: 'Replace the priced lines',
+        description:
+          'Replaces every line and re-totals. Wholesale by design: the service owns the arithmetic, so there is no per-line PATCH that could leave the stored totals disagreeing with the lines. Refused with 409 once the quotation is past APPROVED - after SENT the document is a commitment, and changing it means a revision.',
+        parameters: [idParam, ifMatch],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['items'],
+                properties: {
+                  items: {
+                    type: 'array',
+                    minItems: 1,
+                    maxItems: 200,
+                    items: { $ref: '#/components/schemas/CreateQuotationItem' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Replaced. `meta` carries the recomputed totals.',
+            headers: { ETag: { schema: { type: 'string' } } },
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/QuotationItem' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/{id}/conditions': {
+      get: {
+        tags: ['Pricing'],
+        summary: 'Read the charges and taxes',
+        parameters: [idParam],
+        responses: {
+          '200': {
+            description: 'Charges and taxes as stored, with the totals in `meta`.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'object',
+                  properties: {
+                    charges: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/QuotationCharge' },
+                    },
+                    taxes: { type: 'array', items: { $ref: '#/components/schemas/QuotationTax' } },
+                  },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+      put: {
+        tags: ['Pricing'],
+        summary: 'Replace the charges and taxes',
+        description:
+          'Both collections are replaced together and the quotation is re-totalled once; two endpoints would mean two re-totals and a window where the stored totals reflect new charges but old taxes. An empty array clears that side, which is why both keys default to `[]` rather than being optional. A submitted tax `amount` and `taxableAmount` are NOT trusted for a header tax: the service recomputes tax as `ratePercent` against the running total (subtotal + charges - discounts), so a caller cannot understate tax by naming its own base. A line-scoped charge or tax must name a line on this quotation, or the call is refused with 422.',
+        parameters: [idParam, ifMatch],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  charges: {
+                    type: 'array',
+                    maxItems: 100,
+                    items: { $ref: '#/components/schemas/QuotationCharge' },
+                  },
+                  taxes: {
+                    type: 'array',
+                    maxItems: 100,
+                    items: { $ref: '#/components/schemas/QuotationTax' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Replaced and re-totalled.',
+            headers: { ETag: { schema: { type: 'string' } } },
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'object',
+                  properties: {
+                    charges: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/QuotationCharge' },
+                    },
+                    taxes: { type: 'array', items: { $ref: '#/components/schemas/QuotationTax' } },
+                  },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/{id}/approvals': {
+      get: {
+        tags: ['History'],
+        summary: 'List approval decisions',
+        description: 'The decision trail, newest first.',
+        parameters: [idParam],
+        responses: {
+          '200': {
+            description: 'Decisions, newest first.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/QuotationApproval' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+      post: {
+        tags: ['History'],
+        summary: 'Record an approval decision',
+        description:
+          'Takes the decision as data rather than as a path segment, which is what makes `PENDING` reachable: /approve and /reject hard-code theirs, so the move from DRAFT to PENDING_APPROVAL had no endpoint at all. This does not replace those two - they remain the named form of the common cases. The TRANSITIONS table, the value threshold and the margin floor all stay in the service.',
+        parameters: [idParam, ifMatch],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['decision'],
+                properties: {
+                  decision: { type: 'string', enum: QUOTATION_APPROVAL_STATUSES },
+                  comments: { type: 'string', maxLength: 2000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Decision recorded; the quotation moved.',
+            headers: { ETag: { schema: { type: 'string' } } },
+            content: {
+              'application/json': { schema: envelope({ $ref: '#/components/schemas/Quotation' }) },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/{id}/revise': {
+      post: {
+        tags: ['History'],
+        summary: 'Supersede this quotation with a new revision',
+        description:
+          'The only way to change a quotation that is already SENT. The original becomes SUPERSEDED and a NEW record is created carrying the next revision number under the same quotation number, in one transaction - so there can be no superseded quotation without a successor. Returns 201 with the new record and ITS ETag; the id in the response is a different quotation, and the caller previous version no longer applies.',
+        parameters: [idParam, ifMatch],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['reason', 'items'],
+                properties: {
+                  reason: { type: 'string', minLength: 1, maxLength: 500 },
+                  items: {
+                    type: 'array',
+                    minItems: 1,
+                    maxItems: 200,
+                    items: { $ref: '#/components/schemas/CreateQuotationItem' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'The successor quotation.',
+            headers: { ETag: { schema: { type: 'string' } } },
+            content: {
+              'application/json': { schema: envelope({ $ref: '#/components/schemas/Quotation' }) },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/{id}/revisions': {
+      get: {
+        tags: ['History'],
+        summary: 'List line revisions on this quotation',
+        description:
+          'The record of edits made to THIS document, newest first. Distinct from /chain, which is the lineage of documents that superseded one another.',
+        parameters: [idParam],
+        responses: {
+          '200': {
+            description: 'Revisions, newest first.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/QuotationRevision' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/{id}/chain': {
+      get: {
+        tags: ['History'],
+        summary: 'List every revision sharing this quotation number',
+        description:
+          'Revising creates a NEW quotation and marks the old one SUPERSEDED, so the lineage is a set of sibling records rather than versions of one row. Without this a superseded quotation is a dead end: nothing else in the API points at the document that replaced it. Keyed by id, so the caller does not need the number first and the org scoping matches every other route.',
+        parameters: [idParam],
+        responses: {
+          '200': {
+            description: 'The revision chain.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/QuotationListItem' },
                 }),
               },
             },
@@ -513,6 +773,39 @@ export const quotationOpenApiDocument = {
             description: 'Recorded but not collected: liability shifts to the buyer.',
           },
           sequence: { type: 'integer' },
+        },
+      },
+      QuotationApproval: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          sequence: { type: 'integer', description: 'Order of the decision; highest is newest.' },
+          fromStatus: { type: ['string', 'null'] },
+          toStatus: { type: 'string', enum: QUOTATION_APPROVAL_STATUSES },
+          approverId: { type: ['string', 'null'] },
+          thresholdAmount: {
+            type: ['string', 'null'],
+            description: 'The approval threshold in force at decision time.',
+          },
+          marginPercent: {
+            type: ['string', 'null'],
+            description:
+              'The margin at decision time. Null unless the reader can `manage Account`.',
+          },
+          comments: { type: ['string', 'null'] },
+          decidedAt: { type: ['string', 'null'], format: 'date-time' },
+        },
+      },
+      QuotationRevision: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          fromRevision: { type: ['integer', 'null'] },
+          toRevision: { type: 'integer' },
+          reason: { type: ['string', 'null'] },
+          changeSummary: { type: ['object', 'null'], additionalProperties: true },
+          changedById: { type: ['string', 'null'] },
+          changedAt: { type: 'string', format: 'date-time' },
         },
       },
       CreateQuotation: {

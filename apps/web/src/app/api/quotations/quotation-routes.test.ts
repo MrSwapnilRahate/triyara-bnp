@@ -36,11 +36,23 @@ const quotationService = {
   send: vi.fn(),
   accept: vi.fn(),
   expire: vi.fn(),
+  replaceItems: vi.fn(),
+  setConditions: vi.fn(),
+  approvalHistory: vi.fn(),
+  revisionHistory: vi.fn(),
+  revise: vi.fn(),
+  history: vi.fn(),
 }
 
 vi.mock('@/lib/quotation-service', () => ({ quotationService }))
 
 const { GET: listQuotations, POST: createQuotation } = await import('./route')
+const { POST: replaceItems } = await import('./[id]/items/route')
+const { GET: getConditions, PUT: setConditions } = await import('./[id]/conditions/route')
+const { GET: listApprovals, POST: decide } = await import('./[id]/approvals/route')
+const { GET: listRevisions } = await import('./[id]/revisions/route')
+const { POST: revise } = await import('./[id]/revise/route')
+const { GET: getChain } = await import('./[id]/chain/route')
 const {
   GET: getQuotation,
   PATCH: patchQuotation,
@@ -511,6 +523,265 @@ describe('workflow endpoints', () => {
   })
 })
 
+describe('lifecycle routes', () => {
+  describe('POST /:id/items', () => {
+    it('replaces the lines and returns 201 with the recomputed totals', async () => {
+      quotationService.replaceItems.mockResolvedValue(
+        quotation({ version: 4, subtotal: '2000', grandTotal: '2200' }),
+      )
+      const res = await replaceItems(
+        req('/api/quotations/q1/items', {
+          method: 'POST',
+          headers: { 'if-match': 'W/"v3"' },
+          body: JSON.stringify({ items: [validItem] }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(201)
+      expect(res.headers.get('etag')).toBe('W/"v4"')
+      expect((await body(res)).meta).toMatchObject({ subtotal: '2000', grandTotal: '2200' })
+    })
+
+    it('requires If-Match', async () => {
+      const res = await replaceItems(
+        req('/api/quotations/q1/items', {
+          method: 'POST',
+          body: JSON.stringify({ items: [validItem] }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(428)
+      expect(quotationService.replaceItems).not.toHaveBeenCalled()
+    })
+
+    it('surfaces the frozen-after-send conflict as 409', async () => {
+      quotationService.replaceItems.mockRejectedValue(
+        new ConflictError('Pricing on a SENT quotation is frozen. Create a revision instead.'),
+      )
+      const res = await replaceItems(
+        req('/api/quotations/q1/items', {
+          method: 'POST',
+          headers: { 'if-match': 'W/"v3"' },
+          body: JSON.stringify({ items: [validItem] }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(409)
+      expect((await body(res)).errors?.[0]?.message).toContain('revision')
+    })
+  })
+
+  describe('PUT /:id/conditions', () => {
+    it('sends charges and taxes to the service in one call', async () => {
+      quotationService.setConditions.mockResolvedValue(quotation({ version: 5 }))
+      const res = await setConditions(
+        req('/api/quotations/q1/conditions', {
+          method: 'PUT',
+          headers: { 'if-match': 'W/"v4"' },
+          body: JSON.stringify({
+            charges: [{ type: 'FREIGHT', amount: 100, currency: 'USD' }],
+            taxes: [
+              { type: 'GST', ratePercent: 5, taxableAmount: 100, amount: 5, currency: 'USD' },
+            ],
+          }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(200)
+      const [, id, version, charges, taxes] = quotationService.setConditions.mock.calls[0]!
+      expect(id).toBe('q1')
+      expect(version).toBe(4)
+      expect(charges).toHaveLength(1)
+      expect(taxes).toHaveLength(1)
+    })
+
+    it('treats omitted collections as empty, which is how they are cleared', async () => {
+      quotationService.setConditions.mockResolvedValue(quotation({ version: 5 }))
+      await setConditions(
+        req('/api/quotations/q1/conditions', {
+          method: 'PUT',
+          headers: { 'if-match': 'W/"v4"' },
+          body: JSON.stringify({}),
+        }),
+        params('q1'),
+      )
+      const [, , , charges, taxes] = quotationService.setConditions.mock.calls[0]!
+      expect(charges).toEqual([])
+      expect(taxes).toEqual([])
+    })
+
+    it('rejects a malformed charge', async () => {
+      const res = await setConditions(
+        req('/api/quotations/q1/conditions', {
+          method: 'PUT',
+          headers: { 'if-match': 'W/"v4"' },
+          body: JSON.stringify({ charges: [{ type: 'NONSENSE', amount: 1, currency: 'USD' }] }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(422)
+      expect(quotationService.setConditions).not.toHaveBeenCalled()
+    })
+
+    it('reads the stored conditions', async () => {
+      quotationService.get.mockResolvedValue(quotation())
+      const res = await getConditions(req('/api/quotations/q1/conditions'), params('q1'))
+      expect(res.status).toBe(200)
+      expect(await body(res)).toHaveProperty('data.charges')
+    })
+  })
+
+  describe('POST /:id/approvals', () => {
+    it('accepts PENDING, the decision no other route could send', async () => {
+      quotationService.transition.mockResolvedValue(
+        quotation({ status: 'PENDING_APPROVAL', version: 2 }),
+      )
+      const res = await decide(
+        req('/api/quotations/q1/approvals', {
+          method: 'POST',
+          headers: { 'if-match': 'W/"v1"' },
+          body: JSON.stringify({ decision: 'PENDING' }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(201)
+      expect((await body(res)).meta).toMatchObject({
+        status: 'PENDING_APPROVAL',
+        decision: 'PENDING',
+      })
+    })
+
+    it('rejects a decision outside the vocabulary', async () => {
+      const res = await decide(
+        req('/api/quotations/q1/approvals', {
+          method: 'POST',
+          headers: { 'if-match': 'W/"v1"' },
+          body: JSON.stringify({ decision: 'MAYBE' }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(422)
+      expect(quotationService.transition).not.toHaveBeenCalled()
+    })
+
+    it('surfaces an illegal transition as 409', async () => {
+      quotationService.transition.mockRejectedValue(
+        new ConflictError('A DRAFT quotation cannot move to REJECTED.'),
+      )
+      const res = await decide(
+        req('/api/quotations/q1/approvals', {
+          method: 'POST',
+          headers: { 'if-match': 'W/"v1"' },
+          body: JSON.stringify({ decision: 'REJECTED' }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(409)
+    })
+
+    it('lists the decision trail with a count', async () => {
+      quotationService.approvalHistory.mockResolvedValue([
+        { id: 'a2', sequence: 2, toStatus: 'APPROVED' },
+        { id: 'a1', sequence: 1, toStatus: 'PENDING' },
+      ])
+      const res = await listApprovals(req('/api/quotations/q1/approvals'), params('q1'))
+      expect((await body(res)).meta).toMatchObject({ quotationId: 'q1', count: 2 })
+    })
+
+    it('is refused for a role the service rejects', async () => {
+      quotationService.transition.mockRejectedValue(new ForbiddenError('Not permitted.'))
+      const res = await decide(
+        req('/api/quotations/q1/approvals', {
+          method: 'POST',
+          headers: { 'if-match': 'W/"v1"' },
+          body: JSON.stringify({ decision: 'APPROVED' }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(403)
+    })
+  })
+
+  describe('POST /:id/revise', () => {
+    it('returns 201 with the successor and names what it superseded', async () => {
+      quotationService.revise.mockResolvedValue(
+        quotation({ id: 'q2', revisionNumber: 2, version: 1 }),
+      )
+      const res = await revise(
+        req('/api/quotations/q1/revise', {
+          method: 'POST',
+          headers: { 'if-match': 'W/"v3"' },
+          body: JSON.stringify({ reason: 'Buyer renegotiated.', items: [validItem] }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(201)
+      expect((await body(res)).meta).toMatchObject({ supersededId: 'q1', revisionNumber: 2 })
+    })
+
+    it('splits items from the revision reason before delegating', async () => {
+      quotationService.revise.mockResolvedValue(quotation({ id: 'q2' }))
+      await revise(
+        req('/api/quotations/q1/revise', {
+          method: 'POST',
+          headers: { 'if-match': 'W/"v3"' },
+          body: JSON.stringify({ reason: 'Correction.', items: [validItem] }),
+        }),
+        params('q1'),
+      )
+      const [, , , itemsDto, revisionDto] = quotationService.revise.mock.calls[0]!
+      expect(itemsDto).toHaveProperty('items')
+      expect(revisionDto).toEqual({ reason: 'Correction.' })
+      expect(revisionDto).not.toHaveProperty('items')
+    })
+
+    it('requires a reason', async () => {
+      const res = await revise(
+        req('/api/quotations/q1/revise', {
+          method: 'POST',
+          headers: { 'if-match': 'W/"v3"' },
+          body: JSON.stringify({ items: [validItem] }),
+        }),
+        params('q1'),
+      )
+      expect(res.status).toBe(422)
+    })
+  })
+
+  describe('read-only history routes', () => {
+    it('reports the current revision in meta', async () => {
+      quotationService.revisionHistory.mockResolvedValue([
+        { id: 'r2', toRevision: 3 },
+        { id: 'r1', toRevision: 2 },
+      ])
+      const res = await listRevisions(req('/api/quotations/q1/revisions'), params('q1'))
+      expect((await body(res)).meta).toMatchObject({ count: 2, currentRevision: 3 })
+    })
+
+    it('reports revision 0 when there are none', async () => {
+      quotationService.revisionHistory.mockResolvedValue([])
+      const res = await listRevisions(req('/api/quotations/q1/revisions'), params('q1'))
+      expect((await body(res)).meta).toMatchObject({ count: 0, currentRevision: 0 })
+    })
+
+    it('resolves the chain through the quotation number', async () => {
+      quotationService.get.mockResolvedValue(
+        quotation({ quotationNumber: 'QT-1', revisionNumber: 2 }),
+      )
+      quotationService.history.mockResolvedValue([{ id: 'q1' }, { id: 'q2' }])
+      const res = await getChain(req('/api/quotations/q1/chain'), params('q1'))
+      expect(quotationService.history).toHaveBeenCalledWith(expect.anything(), 'QT-1')
+      expect((await body(res)).meta).toMatchObject({ quotationNumber: 'QT-1', count: 2 })
+    })
+
+    it('reports a missing quotation as 404', async () => {
+      quotationService.revisionHistory.mockRejectedValue(new NotFoundError('Quotation not found.'))
+      const res = await listRevisions(req('/api/quotations/nope/revisions'), params('nope'))
+      expect(res.status).toBe(404)
+    })
+  })
+})
+
 describe('GET /api/quotations/openapi.json', () => {
   it('serves a 3.1 document covering every endpoint', async () => {
     const res = await openapi(req('/api/quotations/openapi.json'))
@@ -521,10 +792,15 @@ describe('GET /api/quotations/openapi.json', () => {
       '/',
       '/{id}',
       '/{id}/accept',
+      '/{id}/approvals',
       '/{id}/approve',
+      '/{id}/chain',
+      '/{id}/conditions',
       '/{id}/expire',
       '/{id}/items',
       '/{id}/reject',
+      '/{id}/revise',
+      '/{id}/revisions',
       '/{id}/send',
     ])
   })
