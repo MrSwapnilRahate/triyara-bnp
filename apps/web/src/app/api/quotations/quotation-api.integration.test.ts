@@ -41,6 +41,12 @@ const { POST: reject } = await import('./[id]/reject/route')
 const { POST: send } = await import('./[id]/send/route')
 const { POST: accept } = await import('./[id]/accept/route')
 const { POST: expire } = await import('./[id]/expire/route')
+const { POST: replaceItems } = await import('./[id]/items/route')
+const { GET: getConditions, PUT: setConditions } = await import('./[id]/conditions/route')
+const { GET: listApprovals, POST: decide } = await import('./[id]/approvals/route')
+const { GET: listRevisions } = await import('./[id]/revisions/route')
+const { POST: revise } = await import('./[id]/revise/route')
+const { GET: getChain } = await import('./[id]/chain/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -263,6 +269,316 @@ describe.skipIf(!process.env.DATABASE_URL)('quotation API (integration, real Pos
       expect(del.status).toBe(200)
       expect(((await body(del)).data as unknown as { status: string }).status).toBe('WITHDRAWN')
       expect((await getQuotation(req(`/api/quotations/${q.id}`), params(q.id))).status).toBe(404)
+    })
+  })
+
+  describe('lifecycle endpoints', () => {
+    it('walks DRAFT -> PENDING_APPROVAL -> APPROVED -> SENT over HTTP alone', async () => {
+      // The review step had no route: /approve and /reject hard-code their
+      // decision, and nothing could post PENDING. A quotation could be approved
+      // but never *submitted* for approval.
+      const q = await create()
+      let version = q.version
+
+      const pending = await decide(
+        req(`/api/quotations/${q.id}/approvals`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${version}"` },
+          body: JSON.stringify({ decision: 'PENDING', comments: 'Ready for review.' }),
+        }),
+        params(q.id),
+      )
+      expect(pending.status).toBe(201)
+      const pendingBody = await body(pending)
+      expect(pendingBody.meta.status).toBe('PENDING_APPROVAL')
+      version = (pendingBody.data as unknown as { version: number }).version
+
+      const approved = await decide(
+        req(`/api/quotations/${q.id}/approvals`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${version}"` },
+          body: JSON.stringify({ decision: 'APPROVED' }),
+        }),
+        params(q.id),
+      )
+      // A Response body can only be read once.
+      const approvedBody = await body(approved)
+      expect(approvedBody.meta.status).toBe('APPROVED')
+      version = (approvedBody.data as unknown as { version: number }).version
+
+      const issued = await send(
+        req(`/api/quotations/${q.id}/send`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${version}"` },
+        }),
+        params(q.id),
+      )
+      expect(issued.status).toBe(200)
+      expect((await body(issued)).meta.status).toBe('SENT')
+    })
+
+    it('refuses a decision the transition table does not allow', async () => {
+      const q = await create()
+      const res = await decide(
+        req(`/api/quotations/${q.id}/approvals`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${q.version}"` },
+          body: JSON.stringify({ decision: 'REJECTED' }),
+        }),
+        params(q.id),
+      )
+      // DRAFT may go to PENDING_APPROVAL, APPROVED or WITHDRAWN - not REJECTED.
+      expect(res.status).toBe(409)
+    })
+
+    it('reads back the decision trail newest first', async () => {
+      const q = await create()
+      await decide(
+        req(`/api/quotations/${q.id}/approvals`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${q.version}"` },
+          body: JSON.stringify({ decision: 'PENDING' }),
+        }),
+        params(q.id),
+      )
+      const res = await listApprovals(req(`/api/quotations/${q.id}/approvals`), params(q.id))
+      expect(res.status).toBe(200)
+      const trail = await body(res)
+      expect(trail.meta.count as number).toBeGreaterThanOrEqual(1)
+      expect((trail.data as unknown as Array<{ toStatus: string }>)[0]!.toStatus).toBe('PENDING')
+    })
+
+    it('replaces lines and re-totals the stored money', async () => {
+      const q = await create()
+      const res = await replaceItems(
+        req(`/api/quotations/${q.id}/items`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${q.version}"` },
+          body: JSON.stringify({
+            items: [
+              { productId, quantity: 4, unit: 'MT', unitPrice: 250, unitCost: 200 },
+              { productId, quantity: 2, unit: 'MT', unitPrice: 500, unitCost: 400 },
+            ],
+          }),
+        }),
+        params(q.id),
+      )
+      expect(res.status).toBe(201)
+      const payload = await body(res)
+      expect(payload.data).toHaveLength(2)
+      // 4*250 + 2*500 = 2000. The service does the arithmetic, not the caller.
+      expect(Number(payload.meta.subtotal)).toBe(2000)
+    })
+
+    it('refuses to replace lines once the quotation is SENT', async () => {
+      const q = await sent()
+      const res = await replaceItems(
+        req(`/api/quotations/${q.id}/items`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${q.version}"` },
+          body: JSON.stringify({
+            items: [{ productId, quantity: 1, unit: 'MT', unitPrice: 1, unitCost: 1 }],
+          }),
+        }),
+        params(q.id),
+      )
+      expect(res.status).toBe(409)
+    })
+
+    it('sets charges and taxes together and re-totals once', async () => {
+      const q = await create()
+      const res = await setConditions(
+        req(`/api/quotations/${q.id}/conditions`, {
+          method: 'PUT',
+          headers: { 'if-match': `W/"v${q.version}"` },
+          body: JSON.stringify({
+            charges: [
+              { type: 'FREIGHT', amount: 150, currency: 'USD', label: 'Ocean freight' },
+              { type: 'DISCOUNT', amount: 50, currency: 'USD', isDeduction: true },
+            ],
+            taxes: [
+              {
+                type: 'GST',
+                ratePercent: 5,
+                taxableAmount: 1000,
+                amount: 50,
+                currency: 'USD',
+              },
+            ],
+          }),
+        }),
+        params(q.id),
+      )
+      expect(res.status).toBe(200)
+      const payload = await body(res)
+      expect(payload.meta).toMatchObject({ charges: 2, taxes: 1 })
+      expect(Number(payload.meta.chargesTotal)).toBe(150)
+      expect(Number(payload.meta.discountTotal)).toBe(50)
+
+      // The service recomputes tax from ratePercent against the running total
+      // and DISCARDS the client's `amount` and `taxableAmount`: computeTotals
+      // maps a header tax to { ratePercent, isCompound, isReverseCharge,
+      // sequence } only. So this is 5% of (1000 subtotal + 150 charges - 50
+      // discount) = 55, NOT the 50 the request asked for.
+      //
+      // That is the security-relevant behaviour here - a caller cannot
+      // understate tax by naming its own base - so the test asserts both that
+      // the computed figure is right and that the submitted one was ignored.
+      expect(Number(payload.meta.taxTotal)).toBe(55)
+      expect(Number(payload.meta.taxTotal)).not.toBe(50)
+    })
+
+    it('clears charges and taxes with empty arrays', async () => {
+      const q = await create()
+      const set = await setConditions(
+        req(`/api/quotations/${q.id}/conditions`, {
+          method: 'PUT',
+          headers: { 'if-match': `W/"v${q.version}"` },
+          body: JSON.stringify({
+            charges: [{ type: 'FREIGHT', amount: 100, currency: 'USD' }],
+            taxes: [],
+          }),
+        }),
+        params(q.id),
+      )
+      const v = (await body(set)).meta.charges
+      expect(v).toBe(1)
+
+      const version = Number(set.headers.get('etag')!.match(/v(\d+)/)![1])
+      const cleared = await setConditions(
+        req(`/api/quotations/${q.id}/conditions`, {
+          method: 'PUT',
+          headers: { 'if-match': `W/"v${version}"` },
+          body: JSON.stringify({ charges: [], taxes: [] }),
+        }),
+        params(q.id),
+      )
+      expect((await body(cleared)).meta.charges).toBe(0)
+
+      const read = await getConditions(req(`/api/quotations/${q.id}/conditions`), params(q.id))
+      expect((await body(read)).meta).toMatchObject({ charges: 0, taxes: 0 })
+    })
+
+    it('rejects a line-scoped charge naming a line from another quotation', async () => {
+      const a = await create()
+      const b = await create()
+      const res = await setConditions(
+        req(`/api/quotations/${a.id}/conditions`, {
+          method: 'PUT',
+          headers: { 'if-match': `W/"v${a.version}"` },
+          body: JSON.stringify({
+            charges: [
+              {
+                type: 'FREIGHT',
+                amount: 10,
+                currency: 'USD',
+                quotationItemId: b.items[0]!.id,
+              },
+            ],
+            taxes: [],
+          }),
+        }),
+        params(a.id),
+      )
+      expect(res.status).toBe(422)
+    })
+
+    it('revises a SENT quotation into a successor and supersedes the original', async () => {
+      const q = await sent()
+      const res = await revise(
+        req(`/api/quotations/${q.id}/revise`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${q.version}"` },
+          body: JSON.stringify({
+            reason: 'Buyer asked for a lower freight allocation.',
+            items: [{ productId, quantity: 10, unit: 'MT', unitPrice: 95, unitCost: 80 }],
+          }),
+        }),
+        params(q.id),
+      )
+      expect(res.status).toBe(201)
+      const payload = await body(res)
+      const successor = payload.data as unknown as { id: string; revisionNumber: number }
+      expect(successor.id).not.toBe(q.id)
+      expect(payload.meta.quotationNumber).toBe(q.quotationNumber)
+      expect(successor.revisionNumber).toBeGreaterThan(1)
+
+      // The original is now SUPERSEDED, and the chain shows both.
+      const chain = await body(await getChain(req(`/api/quotations/${q.id}/chain`), params(q.id)))
+      expect(chain.meta.count as number).toBeGreaterThanOrEqual(2)
+    })
+
+    it('reports revisions once the lines have been replaced', async () => {
+      const q = await sent()
+      await revise(
+        req(`/api/quotations/${q.id}/revise`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${q.version}"` },
+          body: JSON.stringify({
+            reason: 'Correction.',
+            items: [{ productId, quantity: 10, unit: 'MT', unitPrice: 90, unitCost: 80 }],
+          }),
+        }),
+        params(q.id),
+      )
+      const res = await listRevisions(req(`/api/quotations/${q.id}/revisions`), params(q.id))
+      expect(res.status).toBe(200)
+      expect((await body(res)).meta.quotationId).toBe(q.id)
+    })
+
+    it('requires If-Match on every new mutating route', async () => {
+      const q = await create()
+      const noHeader = [
+        replaceItems(
+          req(`/api/quotations/${q.id}/items`, {
+            method: 'POST',
+            body: JSON.stringify({ items: [] }),
+          }),
+          params(q.id),
+        ),
+        setConditions(
+          req(`/api/quotations/${q.id}/conditions`, {
+            method: 'PUT',
+            body: JSON.stringify({ charges: [], taxes: [] }),
+          }),
+          params(q.id),
+        ),
+        decide(
+          req(`/api/quotations/${q.id}/approvals`, {
+            method: 'POST',
+            body: JSON.stringify({ decision: 'PENDING' }),
+          }),
+          params(q.id),
+        ),
+      ]
+      for (const res of await Promise.all(noHeader)) {
+        expect(res.status).toBe(428)
+      }
+    })
+
+    it("does not leak another tenant's quotation through the new reads", async () => {
+      const foreign = await prisma.quotation.create({
+        data: {
+          organizationId: otherOrgId,
+          quotationNumber: num(),
+          type: 'FIRM',
+          buyerId: accountId,
+          title: `Foreign ${uniq()}`,
+          currency: 'USD',
+          baseCurrency: 'USD',
+          createdById: authState.userId,
+        },
+      })
+      for (const res of await Promise.all([
+        listApprovals(req(`/api/quotations/${foreign.id}/approvals`), params(foreign.id)),
+        listRevisions(req(`/api/quotations/${foreign.id}/revisions`), params(foreign.id)),
+        getChain(req(`/api/quotations/${foreign.id}/chain`), params(foreign.id)),
+        getConditions(req(`/api/quotations/${foreign.id}/conditions`), params(foreign.id)),
+      ])) {
+        // Cross-tenant is 404, never 403 - the API does not confirm existence.
+        expect([200, 404]).toContain(res.status)
+        if (res.status === 200) expect((await body(res)).data).toEqual([])
+      }
     })
   })
 
