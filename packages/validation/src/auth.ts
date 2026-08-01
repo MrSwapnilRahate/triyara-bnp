@@ -115,3 +115,15 @@ export const listLoginAttemptsQuerySchema = z.object({
   to: z.coerce.date().optional(),
 })
 export type ListLoginAttemptsQuery = z.infer<typeof listLoginAttemptsQuerySchema>
+
+// ---- Base role membership (TRY-BNP-AUTH-03) ----
+
+/**
+ * Assigning a base role. The role vocabulary is `ASSIGNABLE_ROLES`, reused from
+ * the scoped-grant schema above rather than restated - there is one list of
+ * roles in this package and both endpoints spend it.
+ */
+export const assignBaseRoleSchema = z.object({
+  role: assignableRoleSchema,
+})
+export type AssignBaseRoleDto = z.infer<typeof assignBaseRoleSchema>

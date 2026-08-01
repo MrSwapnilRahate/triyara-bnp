@@ -1,11 +1,14 @@
 import {
   type Action,
+  ACTIONS,
   assertAbility,
   type AuthContext,
   buildAbilityFor,
   isRole,
   type Role,
+  ROLES,
   type Subject,
+  SUBJECTS,
 } from '@triyara/auth'
 import type { ScopedRoleRepository } from '@triyara/db'
 
@@ -17,33 +20,10 @@ import type { ScopedRoleRepository } from '@triyara/db'
 
 export type PermissionCtx = AuthContext & { requestId?: string }
 
-// Mirrors the frozen Action/Subject unions in @triyara/auth, which are types
-// and so have no runtime representation. The exhaustiveness checks below fail
-// compilation if the frozen unions gain a member that is not mirrored here.
-const ACTIONS = ['manage', 'create', 'read', 'update', 'delete', 'verify'] as const
-const SUBJECTS = [
-  'all',
-  'Account',
-  'SupplierProfile',
-  'BuyerProfile',
-  'Contact',
-  'Address',
-  'Verification',
-  'Document',
-  'Note',
-  'Activity',
-  'User',
-  'Organization',
-  'ReferenceData',
-] as const
-
-type MissingAction = Exclude<Action, (typeof ACTIONS)[number]>
-type MissingSubject = Exclude<Subject, (typeof SUBJECTS)[number]>
-// If either of these errors, a frozen union gained a member - mirror it above.
-const _actionsExhaustive: MissingAction extends never ? true : never = true
-const _subjectsExhaustive: MissingSubject extends never ? true : never = true
-void _actionsExhaustive
-void _subjectsExhaustive
+// ACTIONS and SUBJECTS come from @triyara/auth, which now declares them as
+// runtime arrays with the unions derived from them. They used to be mirrored
+// here behind an exhaustiveness check, because the unions were types and had no
+// runtime form; that copy is gone, so there is nothing left to drift.
 
 export interface PermissionMatrix {
   userId: string
@@ -52,11 +32,31 @@ export interface PermissionMatrix {
   permissions: Record<string, Action[]>
 }
 
+/** One row of the vocabulary matrix: what a single role may do, everywhere. */
+export interface RolePermissions {
+  role: Role
+  permissions: Record<string, Action[]>
+}
+
+/**
+ * The whole authorization vocabulary, derived from CASL at read time.
+ *
+ * `actions` and `subjects` are shipped alongside the rows so a client can draw
+ * the axes of the table without keeping its own list of either. That is the
+ * point of the endpoint: the portal renders this, it does not restate it.
+ */
+export interface RoleMatrix {
+  actions: readonly Action[]
+  subjects: readonly Subject[]
+  roles: RolePermissions[]
+}
+
 export interface PermissionDeps {
   scopedRoles: ScopedRoleRepository
 }
 
-function matrixFor(userId: string, roles: Role[]): PermissionMatrix {
+/** Every subject a role set touches, and which actions it permits on each. */
+function permissionsFor(roles: Role[]): Record<string, Action[]> {
   const ability = buildAbilityFor(roles)
   const permissions: Record<string, Action[]> = {}
 
@@ -65,7 +65,11 @@ function matrixFor(userId: string, roles: Role[]): PermissionMatrix {
     if (allowed.length > 0) permissions[subject] = allowed
   }
 
-  return { userId, roles, permissions }
+  return permissions
+}
+
+function matrixFor(userId: string, roles: Role[]): PermissionMatrix {
+  return { userId, roles, permissions: permissionsFor(roles) }
 }
 
 export function createPermissionService({ scopedRoles }: PermissionDeps) {
@@ -73,6 +77,26 @@ export function createPermissionService({ scopedRoles }: PermissionDeps) {
     /** The caller's own effective permissions, from their global roles. */
     mine(ctx: PermissionCtx): PermissionMatrix {
       return matrixFor(ctx.user.id, [...ctx.user.roles])
+    },
+
+    /**
+     * What every role may do (TRY-BNP-AUTH-03).
+     *
+     * Derived from `buildAbilityFor` on each role in turn, so this is the same
+     * function the guards call - it cannot describe a permission the platform
+     * would refuse, or omit one it would allow.
+     *
+     * Deliberately not gated beyond authentication. It is the published rule
+     * book, identical for every caller and carrying no tenant data; a signed-in
+     * user learning that a VERIFIER may verify is not a disclosure, and hiding
+     * it would only push the portal into keeping its own copy.
+     */
+    roleMatrix(): RoleMatrix {
+      return {
+        actions: ACTIONS,
+        subjects: SUBJECTS,
+        roles: ROLES.map((role) => ({ role, permissions: permissionsFor([role]) })),
+      }
     },
 
     /**
