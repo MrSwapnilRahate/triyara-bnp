@@ -26,6 +26,7 @@ import { Can } from '@/lib/ability-context'
 
 import { useSupplier } from '../api/suppliers'
 import { expiringSoon, isExpired, type SupplierCertification } from '../types'
+import { SupplierCertificationsTab } from './supplier-certifications-tab'
 import { SupplierProducts } from './supplier-products'
 
 /** Supplier detail (TRY-BNP-PORTAL-01 §9). */
@@ -185,26 +186,8 @@ export function SupplierDetail({ id }: { id: string }) {
             </Card>
           </TabsContent>
 
-          <TabsContent value="certifications" className="p-gutter">
-            <Card className="max-w-3xl">
-              <CardContent className="p-0">
-                {(supplier.certifications?.length ?? 0) === 0 ? (
-                  <EmptyState
-                    size="sm"
-                    icon={<ShieldCheck />}
-                    title="No certifications"
-                    description="Buyers frequently require FSSAI, HACCP or organic certification."
-                  />
-                ) : (
-                  supplier.certifications.map((certification, index) => (
-                    <div key={certification.id}>
-                      {index > 0 ? <Separator /> : null}
-                      <CertificationRow certification={certification} />
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
+          <TabsContent value="certifications">
+            <SupplierCertificationsTab supplierId={supplier.id} />
           </TabsContent>
 
           <TabsContent value="products" className="p-gutter">

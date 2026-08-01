@@ -159,6 +159,12 @@ export {
   type SupplierSearchHit,
 } from './supplier-management/supplier.service'
 export {
+  createSupplierCertificationService,
+  type SupplierCertificationCtx,
+  type SupplierCertificationDeps,
+  type SupplierCertificationService,
+} from './supplier-management/supplier-certification.service'
+export {
   createSupplierOfferingService,
   type OfferingServiceCtx,
   type OfferingServiceDeps,
