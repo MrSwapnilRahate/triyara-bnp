@@ -191,8 +191,16 @@ export const api = {
   // today is a quotation's charges and taxes, which the API replaces together.
   put: <T>(path: string, body: unknown, options?: Omit<RequestOptions, 'method' | 'body'>) =>
     request<T>(path, { ...options, method: 'PUT', body }),
-  delete: <T>(path: string, version: number, options?: RequestOptions) =>
-    request<T>(path, { ...options, method: 'DELETE', version }),
+  // `version` is optional for the same reason it is on `patch`: not every
+  // DELETE in this API is version guarded. Removing a role membership or
+  // revoking a session deletes a set element, not a versioned document, and
+  // those endpoints send no If-Match at all rather than a meaningless one.
+  delete: <T>(path: string, version?: number, options?: RequestOptions) =>
+    request<T>(path, {
+      ...options,
+      method: 'DELETE',
+      ...(version === undefined ? {} : { version }),
+    }),
 }
 
 /** Builds a query string, dropping empty values so the URL stays readable. */

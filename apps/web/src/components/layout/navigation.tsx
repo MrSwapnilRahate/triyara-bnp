@@ -9,7 +9,6 @@ import {
   FileText,
   FolderTree,
   Gauge,
-  KeyRound,
   Layers,
   Package,
   Quote,
@@ -97,12 +96,9 @@ export const NAVIGATION: GuardedGroup[] = [
         icon: <Users />,
         requires: { action: 'manage', subject: 'User' },
       },
-      {
-        label: 'Roles',
-        href: '/admin/roles',
-        icon: <KeyRound />,
-        requires: { action: 'manage', subject: 'User' },
-      },
+      // Roles is deliberately absent until /admin/roles exists. The matrix it
+      // would show is already reachable on a person's Permissions tab, and a
+      // sidebar entry that 404s is worse than one that is missing.
       {
         label: 'Organization',
         href: '/admin/organization',
