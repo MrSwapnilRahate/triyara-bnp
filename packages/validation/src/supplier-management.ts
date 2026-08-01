@@ -183,13 +183,31 @@ export const supplierContactSchema = z.object({
   name: z.string().trim().min(1).max(200),
   role: z.enum(SUPPLIER_CONTACT_ROLES).default('OTHER'),
   designation: z.string().trim().max(200).optional(),
-  email: z.string().trim().email().max(320).optional(),
+  // `''` is accepted alongside `undefined`: a form posts empty strings for the
+  // fields nobody filled in, and a contact reached only on WhatsApp is the
+  // ordinary case here. The service maps blank to null before it stores
+  // anything, so an empty string never reaches the column.
+  email: z.union([z.string().trim().email().max(320), z.literal('')]).optional(),
   phone: z.string().trim().max(32).optional(),
   whatsapp: z.string().trim().max(32).optional(),
   isPrimary: z.boolean().default(false),
   notes: z.string().trim().max(1000).optional(),
 })
 export type SupplierContactDto = z.infer<typeof supplierContactSchema>
+/**
+ * What a FORM holds before zod applies defaults. `role` and `isPrimary` carry
+ * `.default()`, so they are optional on the way in and guaranteed on the way
+ * out - and react-hook-form needs the input side to type its field values.
+ */
+export type SupplierContactInput = z.input<typeof supplierContactSchema>
+
+/**
+ * Editing one contact. Every field optional so a caller may correct a phone
+ * number without restating the person - and `.partial()` over the create
+ * schema rather than a restatement, so the two cannot drift.
+ */
+export const updateSupplierContactSchema = supplierContactSchema.partial()
+export type UpdateSupplierContactDto = z.infer<typeof updateSupplierContactSchema>
 
 export const supplierAddressSchema = z.object({
   type: z.enum(SUPPLIER_ADDRESS_TYPES),

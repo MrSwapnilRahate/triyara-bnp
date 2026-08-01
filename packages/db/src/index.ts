@@ -193,6 +193,12 @@ export {
   type UpdateSupplierData,
 } from './repositories/supplier.repository'
 export {
+  type SupplierContactData,
+  type SupplierContactRecord,
+  type SupplierContactRepository,
+  supplierContactRepository,
+} from './repositories/supplier-contact.repository'
+export {
   type ListOfferingsParams,
   type OfferingListResult,
   type OfferingRecord,
