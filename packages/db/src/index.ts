@@ -208,6 +208,9 @@ export {
   supplierProfileRepository,
 } from './repositories/supplier-profile.repository'
 export {
+  type AdminUserListResult,
+  type AdminUserRecord,
+  type ListAdminUsersParams,
   type UserRepository,
   userRepository,
   type UserWithRoles,
