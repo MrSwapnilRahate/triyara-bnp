@@ -1,10 +1,43 @@
-import type { RoleName, User } from '@prisma/client'
+import type { RoleName, User, UserStatus } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '../client'
+import { decodeCursor, encodeCursor } from './account.repository'
 
 export interface UserWithRoles extends User {
   roles: { role: { name: RoleName } }[]
+}
+
+/**
+ * What an administrator may see about a colleague. Fixed rather than
+ * parameterised: a projection a caller can widen is a projection that will be
+ * widened.
+ */
+const adminUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+  avatarUrl: true,
+  status: true,
+  lastLoginAt: true,
+  createdAt: true,
+  roles: { select: { role: { select: { name: true } } } },
+} satisfies Prisma.UserSelect
+
+export type AdminUserRecord = Prisma.UserGetPayload<{ select: typeof adminUserSelect }>
+
+export interface ListAdminUsersParams {
+  limit: number
+  cursor?: string
+  q?: string
+  status?: UserStatus
+  role?: RoleName
+  sort?: string
+}
+
+export interface AdminUserListResult {
+  items: AdminUserRecord[]
+  nextCursor: string | null
 }
 
 // Repository for identity reads/writes. Business repositories arrive with their modules.
@@ -78,6 +111,57 @@ export const userRepository = {
 
   async updatePassword(id: string, passwordHash: string): Promise<void> {
     await prisma.user.update({ where: { id }, data: { passwordHash } })
+  },
+
+  /**
+   * The administrator's list (TRY-BNP-ADMIN-02).
+   *
+   * Additive: `searchDirectory` above is untouched and still backs global
+   * search. The two differ in what they are for, so they differ in what they
+   * return - this one carries status, roles and last sign-in, and is reachable
+   * only through a route that requires `manage User`.
+   *
+   * Still no `passwordHash` and no `preferences`. Administering someone is not
+   * a reason to read their credentials or their UI choices.
+   */
+  async listForAdmin(
+    organizationId: string,
+    params: ListAdminUsersParams,
+  ): Promise<AdminUserListResult> {
+    const where: Prisma.UserWhereInput = {
+      organizationId,
+      ...(params.status ? { status: params.status } : {}),
+      // A join filter, not a post-filter: excluding rows in the database keeps
+      // the page size honest. Filtering after the fact returns short pages and
+      // a cursor that points past rows the caller never saw.
+      ...(params.role ? { roles: { some: { role: { name: params.role } } } } : {}),
+      ...(params.q
+        ? {
+            OR: [
+              { name: { contains: params.q, mode: 'insensitive' } },
+              { email: { contains: params.q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    }
+
+    const raw = params.sort ?? '-createdAt'
+    const dir: Prisma.SortOrder = raw.startsWith('-') ? 'desc' : 'asc'
+    const field = raw.replace(/^-/, '') as 'createdAt' | 'name' | 'email'
+
+    const rows = await prisma.user.findMany({
+      where,
+      select: adminUserSelect,
+      // `id` tiebreaks in the same direction, so rows sharing a name or a
+      // creation instant cannot repeat or vanish across a page boundary.
+      orderBy: [{ [field]: dir }, { id: dir }],
+      take: params.limit + 1,
+      ...(params.cursor ? { cursor: { id: decodeCursor(params.cursor) }, skip: 1 } : {}),
+    })
+
+    const items = rows.slice(0, params.limit)
+    const nextCursor = rows.length > params.limit ? encodeCursor(items[items.length - 1]!.id) : null
+    return { items, nextCursor }
   },
 }
 

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { ASSIGNABLE_ROLES } from './auth'
+
 // Administration contracts (TRY-BNP-ADMIN-01): the audit trail, organization
 // settings and the caller's own profile.
 
@@ -104,6 +106,49 @@ export const listUsersQuerySchema = z.object({
   q: z.string().trim().max(120).optional(),
 })
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>
+
+// ---- User administration ----
+
+/** Mirrors the Prisma `UserStatus` enum. */
+export const USER_STATUSES = ['INVITED', 'ACTIVE', 'SUSPENDED', 'DEACTIVATED'] as const
+
+/**
+ * Sortable columns, each in both directions with a `-` prefix for descending -
+ * the convention the supplier and account lists already use.
+ *
+ * `lastLoginAt` is deliberately absent. It is nullable, and keyset pagination
+ * over a nullable column either drops the rows whose value is NULL or repeats
+ * them, depending on where the database puts the nulls. Offering the sort and
+ * quietly losing never-signed-in users would be worse than not offering it.
+ */
+export const ADMIN_USER_SORTS = [
+  'createdAt',
+  '-createdAt',
+  'name',
+  '-name',
+  'email',
+  '-email',
+] as const
+
+/**
+ * The administrator's view of the tenant's people (TRY-BNP-ADMIN-02).
+ *
+ * Distinct from `listUsersQuerySchema` above, which backs the directory lookup
+ * behind global search. That one is intentionally narrow - active users only,
+ * four fields, no paging - and stays exactly as it is. This one is cursor
+ * paginated, sees every status, and is gated on `manage User`.
+ */
+export const listAdminUsersQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  cursor: z.string().optional(),
+  /** Free text over name and email. */
+  q: z.string().trim().max(120).optional(),
+  status: z.enum(USER_STATUSES).optional(),
+  /** Users holding this role. */
+  role: z.enum(ASSIGNABLE_ROLES).optional(),
+  sort: z.enum(ADMIN_USER_SORTS).optional(),
+})
+export type ListAdminUsersQuery = z.infer<typeof listAdminUsersQuerySchema>
 
 // ---- Dashboard trends ----
 

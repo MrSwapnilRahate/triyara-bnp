@@ -19,6 +19,14 @@ export {
   type ProfileRecord,
 } from './admin/admin.service'
 export {
+  type AdminUserListItem,
+  type AdminUserListResponse,
+  type AdminUsersService,
+  type AdminUsersServiceCtx,
+  type AdminUsersServiceDeps,
+  createAdminUsersService,
+} from './admin/admin-users.service'
+export {
   createEmailVerificationService,
   type EmailVerificationCtx,
   type EmailVerificationDeps,
