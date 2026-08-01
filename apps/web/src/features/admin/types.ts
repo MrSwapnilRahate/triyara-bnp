@@ -88,3 +88,82 @@ export function humanise(value: string): string {
   const lower = value.toLowerCase().replace(/_/g, ' ')
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
+
+// ---- User administration (TRY-BNP-ADMIN-02, TRY-BNP-AUTH-03) ----
+
+export type UserStatus = 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED'
+export type RoleName = 'ADMIN' | 'EXPORT_MANAGER' | 'VERIFIER' | 'READ_ONLY'
+
+/** A row of GET /api/v1/admin/users. */
+export interface AdminUser {
+  id: string
+  name: string
+  email: string
+  avatarUrl: string | null
+  status: UserStatus
+  roles: RoleName[]
+  lastLoginAt: string | null
+  createdAt: string
+}
+
+/** A row of GET /api/v1/admin/users/:id/roles. */
+export interface BaseRole {
+  roleId: string
+  name: RoleName
+  description: string | null
+}
+
+/** A row of GET /api/v1/auth/sessions. */
+export interface UserSession {
+  id: string
+  userId: string
+  organizationId: string
+  tokenId: string
+  ipAddress: string | null
+  userAgent: string | null
+  createdAt: string
+  lastSeenAt: string | null
+  expiresAt: string
+  endedAt: string | null
+  endReason: string | null
+}
+
+/** A row of GET /api/v1/auth/login-attempts. */
+export interface LoginAttempt {
+  id: string
+  email: string
+  userId: string | null
+  organizationId: string | null
+  outcome: 'SUCCESS' | 'FAILED_PASSWORD' | 'FAILED_LOCKED' | 'FAILED_UNKNOWN_USER'
+  ipAddress: string | null
+  userAgent: string | null
+  createdAt: string
+}
+
+/** A row of GET /api/v1/auth/role-assignments. */
+export interface ScopedRoleAssignment {
+  id: string
+  userId: string
+  scopeType: string
+  scopeId: string
+  grantedById: string
+  grantedAt: string
+  expiresAt: string | null
+  revokedAt: string | null
+  reason: string | null
+  version: number
+  role: { id: string; name: RoleName }
+}
+
+/**
+ * GET /api/v1/auth/permission-matrix.
+ *
+ * Rendered verbatim. `actions` and `subjects` are the table's axes and arrive
+ * with the response precisely so this app never keeps a permission list of its
+ * own - the server derives all of it from `buildAbilityFor`.
+ */
+export interface PermissionMatrix {
+  actions: string[]
+  subjects: string[]
+  roles: Array<{ role: RoleName; permissions: Record<string, string[]> }>
+}
