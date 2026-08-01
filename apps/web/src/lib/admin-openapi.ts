@@ -1,3 +1,4 @@
+import { ACTIONS, SUBJECTS } from '@triyara/auth'
 import { ADMIN_USER_SORTS, ASSIGNABLE_ROLES, USER_STATUSES } from '@triyara/validation'
 
 // OpenAPI 3.1 description of the Administration REST API (TRY-BNP-ADMIN-02).
@@ -24,6 +25,14 @@ const errorEnvelope = {
     meta: { $ref: '#/components/schemas/Meta' },
     errors: { type: 'array', items: { $ref: '#/components/schemas/Error' } },
   },
+}
+
+const userIdParam = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  schema: { type: 'string' },
+  description: 'User id. A user in another organization is reported as 404, never 403.',
 }
 
 const errorResponse = (description: string) => ({
@@ -64,7 +73,11 @@ export const adminOpenApiDocument = {
   },
   servers: [{ url: '/api/v1', description: 'Administration API' }],
   security: [{ sessionCookie: [] }],
-  tags: [{ name: 'Users', description: 'The people in the caller’s organization.' }],
+  tags: [
+    { name: 'Users', description: 'The people in the caller’s organization.' },
+    { name: 'Roles', description: 'Base role membership - what a person may do.' },
+    { name: 'Reference', description: 'The authorization vocabulary itself.' },
+  ],
   paths: {
     '/admin/users': {
       get: {
@@ -149,6 +162,151 @@ export const adminOpenApiDocument = {
         },
       },
     },
+    '/admin/users/{id}/roles': {
+      get: {
+        tags: ['Roles'],
+        summary: 'List a user’s base roles',
+        description: [
+          'The roles the session is built from and CASL derives ability from.',
+          'Requires ADMIN (`manage User`).',
+          '',
+          'Distinct from `/auth/role-assignments`, which grants a role on a single',
+          'resource. This endpoint changes what a person may do outright.',
+        ].join('\n'),
+        parameters: [userIdParam],
+        responses: {
+          '200': {
+            description: 'The roles this user holds, alphabetically.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/BaseRole' },
+                }),
+              },
+            },
+          },
+          '401': { $ref: '#/components/responses/Unauthenticated' },
+          '403': { $ref: '#/components/responses/Forbidden' },
+          '404': { $ref: '#/components/responses/NotFound' },
+        },
+      },
+      post: {
+        tags: ['Roles'],
+        summary: 'Grant a base role',
+        description: [
+          'Requires ADMIN (`manage User`). Audited as `user.role_assigned`.',
+          '',
+          'No `If-Match`: a membership is a set element with a composite primary',
+          'key, not a versioned document. Granting a role the user already holds',
+          'is refused by that key with 409.',
+        ].join('\n'),
+        parameters: [userIdParam],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['role'],
+                properties: { role: { type: 'string', enum: ASSIGNABLE_ROLES } },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'The user’s roles after the grant.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/BaseRole' },
+                }),
+              },
+            },
+          },
+          '401': { $ref: '#/components/responses/Unauthenticated' },
+          '403': { $ref: '#/components/responses/Forbidden' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '409': { $ref: '#/components/responses/Conflict' },
+          '422': { $ref: '#/components/responses/ValidationError' },
+          '429': { $ref: '#/components/responses/RateLimited' },
+        },
+      },
+    },
+    '/admin/users/{id}/roles/{role}': {
+      delete: {
+        tags: ['Roles'],
+        summary: 'Revoke a base role',
+        description: [
+          'Requires ADMIN (`manage User`). Audited as `user.role_revoked`.',
+          '',
+          'Two refusals, both 409. An administrator may not remove their own',
+          'administrator role - locking yourself out should take a second person.',
+          'And an organization may not lose its last administrator; that guard is',
+          'a row lock taken inside the transaction, so two simultaneous',
+          'revocations serialize instead of both seeing another admin remain.',
+        ].join('\n'),
+        parameters: [
+          userIdParam,
+          {
+            name: 'role',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', enum: ASSIGNABLE_ROLES },
+            description: 'The role to remove. An unknown name is 422, not a no-op.',
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'The user’s roles after the revocation.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/BaseRole' },
+                }),
+              },
+            },
+          },
+          '401': { $ref: '#/components/responses/Unauthenticated' },
+          '403': { $ref: '#/components/responses/Forbidden' },
+          '404': { $ref: '#/components/responses/NotFound' },
+          '409': { $ref: '#/components/responses/Conflict' },
+          '422': { $ref: '#/components/responses/ValidationError' },
+          '429': { $ref: '#/components/responses/RateLimited' },
+        },
+      },
+    },
+    '/auth/permission-matrix': {
+      get: {
+        tags: ['Reference'],
+        summary: 'What every role may do',
+        description: [
+          'Derived from `buildAbilityFor` at read time - the same function the',
+          'guards call - so it cannot describe a permission the platform would',
+          'refuse or omit one it would allow. Nothing is stored.',
+          '',
+          '`actions` and `subjects` are returned alongside the rows so a client can',
+          'draw the axes of the table without keeping its own copy of either.',
+          '',
+          'Authentication only. The body is the published rule book: identical for',
+          'every caller and carrying no tenant data.',
+        ].join('\n'),
+        responses: {
+          '200': {
+            description: 'The full role/permission matrix.',
+            content: {
+              'application/json': {
+                schema: envelope({ $ref: '#/components/schemas/RoleMatrix' }),
+              },
+            },
+          },
+          '401': { $ref: '#/components/responses/Unauthenticated' },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
@@ -200,6 +358,47 @@ export const adminOpenApiDocument = {
           field: { type: 'string' },
         },
       },
+      BaseRole: {
+        type: 'object',
+        required: ['roleId', 'name'],
+        properties: {
+          roleId: { type: 'string' },
+          name: { type: 'string', enum: ASSIGNABLE_ROLES },
+          description: { type: ['string', 'null'] },
+        },
+      },
+      RoleMatrix: {
+        type: 'object',
+        required: ['actions', 'subjects', 'roles'],
+        properties: {
+          actions: {
+            type: 'array',
+            items: { type: 'string', enum: ACTIONS },
+            description: 'Every action in the vocabulary - the columns of the table.',
+          },
+          subjects: {
+            type: 'array',
+            items: { type: 'string', enum: SUBJECTS },
+            description: 'Every subject in the vocabulary - the rows of the table.',
+          },
+          roles: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['role', 'permissions'],
+              properties: {
+                role: { type: 'string', enum: ASSIGNABLE_ROLES },
+                permissions: {
+                  type: 'object',
+                  description:
+                    'subject -> permitted actions. A subject the role cannot touch at all is absent.',
+                  additionalProperties: { type: 'array', items: { type: 'string', enum: ACTIONS } },
+                },
+              },
+            },
+          },
+        },
+      },
       AdminUserListItem: {
         type: 'object',
         required: ['id', 'name', 'email', 'status', 'roles', 'createdAt'],
@@ -226,7 +425,12 @@ export const adminOpenApiDocument = {
     responses: {
       Unauthenticated: errorResponse('No valid session.'),
       Forbidden: errorResponse('Authenticated but lacking `manage User`, i.e. not an ADMIN.'),
+      NotFound: errorResponse('No such user in the caller’s organization, or no such role.'),
+      Conflict: errorResponse(
+        'The user already holds that role, or the revocation would remove the caller’s own administrator role or the organization’s last one.',
+      ),
       ValidationError: errorResponse('Request failed schema validation.'),
+      RateLimited: errorResponse('Write rate limit exceeded.'),
     },
   },
 } as const

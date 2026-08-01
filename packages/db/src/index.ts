@@ -216,6 +216,12 @@ export {
   type UserWithRoles,
 } from './repositories/user.repository'
 export {
+  isUniqueViolation,
+  type UserRoleRecord,
+  type UserRoleRepository,
+  userRoleRepository,
+} from './repositories/user-role.repository'
+export {
   type EmailVerificationTokenRecord,
   type UserSecurityProfileRecord,
   type UserSecurityRepository,

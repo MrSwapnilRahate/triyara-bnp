@@ -4,6 +4,7 @@ import {
   createPermissionService,
   createScopedRoleService,
   createSessionService,
+  createUserRoleService,
 } from '@triyara/core'
 import {
   loginAttemptRepository,
@@ -11,6 +12,7 @@ import {
   scopedRoleRepository,
   sessionRepository,
   userRepository,
+  userRoleRepository,
   userSecurityRepository,
 } from '@triyara/db'
 
@@ -32,6 +34,13 @@ export const sessionService = createSessionService({
 
 export const scopedRoleService = createScopedRoleService({
   repo: scopedRoleRepository,
+  roles: roleRepository,
+  users: userRepository,
+  events: eventBus,
+})
+
+export const userRoleService = createUserRoleService({
+  repo: userRoleRepository,
   roles: roleRepository,
   users: userRepository,
   events: eventBus,

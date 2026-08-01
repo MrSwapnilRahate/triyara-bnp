@@ -4,21 +4,31 @@ import type { Role } from './roles'
 
 // Actions and subjects. Subjects use string tokens now; when business models land
 // they can be swapped for typed subjects without changing call sites.
-export type Action = 'manage' | 'create' | 'read' | 'update' | 'delete' | 'verify'
-export type Subject =
-  | 'all'
-  | 'Account'
-  | 'SupplierProfile'
-  | 'BuyerProfile'
-  | 'Contact'
-  | 'Address'
-  | 'Verification'
-  | 'Document'
-  | 'Note'
-  | 'Activity'
-  | 'User'
-  | 'Organization'
-  | 'ReferenceData'
+//
+// Declared as `as const` arrays with the unions DERIVED from them, rather than
+// as bare type unions. The members are identical either way, but this gives the
+// vocabulary a runtime representation - so anything that needs to enumerate it
+// (the permission matrix, and the portal screen that renders it) reads these
+// arrays instead of keeping a copy that can drift.
+export const ACTIONS = ['manage', 'create', 'read', 'update', 'delete', 'verify'] as const
+export type Action = (typeof ACTIONS)[number]
+
+export const SUBJECTS = [
+  'all',
+  'Account',
+  'SupplierProfile',
+  'BuyerProfile',
+  'Contact',
+  'Address',
+  'Verification',
+  'Document',
+  'Note',
+  'Activity',
+  'User',
+  'Organization',
+  'ReferenceData',
+] as const
+export type Subject = (typeof SUBJECTS)[number]
 
 export type AppAbility = MongoAbility<[Action, Subject]>
 

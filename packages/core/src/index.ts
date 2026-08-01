@@ -47,6 +47,8 @@ export {
   type PermissionDeps,
   type PermissionMatrix,
   type PermissionService,
+  type RoleMatrix,
+  type RolePermissions,
 } from './auth/permission.service'
 export {
   createScopedRoleService,
@@ -61,6 +63,14 @@ export {
   type SessionServiceCtx,
   type SessionServiceDeps,
 } from './auth/session.service'
+export {
+  type AssignableRole,
+  createUserRoleService,
+  type RoleCatalogue,
+  type UserRoleCtx,
+  type UserRoleDeps,
+  type UserRoleService,
+} from './auth/user-role.service'
 export {
   type BuyerService,
   type BuyerServiceCtx,

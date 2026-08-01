@@ -1,4 +1,4 @@
-import { buildAbilityFor, type Role } from '@triyara/auth'
+import { ACTIONS, buildAbilityFor, type Role, ROLES, SUBJECTS } from '@triyara/auth'
 import type {
   ScopedRoleRecord,
   ScopedRoleRepository,
@@ -193,6 +193,35 @@ describe('permission service', () => {
     const readOnly = svc.mine(ctxFor(['READ_ONLY']))
     expect(readOnly.permissions.all).toEqual(['read'])
     expect(readOnly.permissions.Account ?? []).not.toContain('update')
+  })
+
+  it('describes every role using the same function the guards call', () => {
+    const svc = createPermissionService({ scopedRoles: fakeScopedRepo() })
+    const matrix = svc.roleMatrix()
+
+    expect(matrix.roles.map((r) => r.role).sort()).toEqual([...ROLES].sort())
+
+    // Not a restatement: every cell must agree with buildAbilityFor, which is
+    // what actually decides the answer at request time.
+    for (const { role, permissions } of matrix.roles) {
+      const ability = buildAbilityFor([role])
+      for (const subject of matrix.subjects) {
+        for (const action of matrix.actions) {
+          const claimed = (permissions[subject] ?? []).includes(action)
+          expect(claimed).toBe(ability.can(action, subject))
+        }
+      }
+    }
+  })
+
+  it('ships the vocabulary so a client never keeps its own copy', () => {
+    const svc = createPermissionService({ scopedRoles: fakeScopedRepo() })
+    const matrix = svc.roleMatrix()
+
+    // Identity, not equality: these are the arrays @triyara/auth exports, which
+    // is the whole point - there is one list and everything reads it.
+    expect(matrix.actions).toBe(ACTIONS)
+    expect(matrix.subjects).toBe(SUBJECTS)
   })
 
   it('reflects a scoped grant in the effective matrix', async () => {
