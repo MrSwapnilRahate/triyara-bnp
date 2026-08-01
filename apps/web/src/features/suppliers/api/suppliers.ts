@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   CreateSupplierDto,
   ListSuppliersQuery,
+  SupplierDocumentDto,
   SupplierOfferingDto,
+  UpdateSupplierDocumentDto,
   UpdateSupplierDto,
 } from '@triyara/validation'
 
@@ -15,6 +17,7 @@ import type {
   CertificationFacet,
   CountryFacet,
   Supplier,
+  SupplierDocumentRow,
   SupplierListItem,
   SupplierOffering,
   SupplierSearchHit,
@@ -166,6 +169,145 @@ export function useAddSupplierOffering(supplierId: string) {
       void queryClient.invalidateQueries({
         queryKey: [...supplierKeys.all, 'detail', supplierId, 'offerings'],
       })
+    },
+  })
+}
+
+// ---- Documents (TRY-BNP-SUPPLIER-DOC) ----
+
+export function useSupplierDocuments(supplierId: string | undefined) {
+  return useQuery({
+    queryKey: supplierKeys.documents(supplierId ?? ''),
+    queryFn: async ({ signal }) => {
+      const result = await api.get<SupplierDocumentRow[]>(`${BASE}/${supplierId}/documents`, {
+        signal,
+      })
+      return result.data
+    },
+    enabled: Boolean(supplierId),
+    staleTime: STALE_TIME.detail,
+  })
+}
+
+interface Presigned {
+  uploadUrl: string
+  method: 'PUT'
+  headers: Record<string, string>
+  storageKey: string
+  expiresAt: string
+}
+
+/**
+ * The two-step upload, as one call site.
+ *
+ * Presign, PUT the bytes straight at storage, then record the row. Kept
+ * together because a caller who did step one and forgot step two would leave
+ * an orphaned object nobody can find.
+ */
+export function useUploadSupplierDocument(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      file,
+      meta,
+    }: {
+      file: File
+      meta: Omit<SupplierDocumentDto, 'storageKey' | 'mimeType'>
+    }) => {
+      const presigned = await api.post<Presigned>(`${BASE}/${supplierId}/documents/presign`, {
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+      })
+
+      const put = await fetch(presigned.data.uploadUrl, {
+        method: 'PUT',
+        headers: presigned.data.headers,
+        body: file,
+      })
+      if (!put.ok) throw new Error('The file could not be uploaded. Try again.')
+
+      const result = await api.post<SupplierDocumentRow>(`${BASE}/${supplierId}/documents`, {
+        ...meta,
+        storageKey: presigned.data.storageKey,
+        mimeType: file.type,
+      })
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.documents(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+/** Swaps the file behind an existing record, keeping its identity. */
+export function useReplaceSupplierDocument(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, file, version }: { id: string; file: File; version: number }) => {
+      const presigned = await api.post<Presigned>(`${BASE}/${supplierId}/documents/presign`, {
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+      })
+      const put = await fetch(presigned.data.uploadUrl, {
+        method: 'PUT',
+        headers: presigned.data.headers,
+        body: file,
+      })
+      if (!put.ok) throw new Error('The file could not be uploaded. Try again.')
+
+      const result = await api.patch<SupplierDocumentRow>(
+        `${BASE}/${supplierId}/documents/${id}`,
+        { storageKey: presigned.data.storageKey, mimeType: file.type },
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.documents(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+export function useUpdateSupplierDocument(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      dto,
+      version,
+    }: {
+      id: string
+      dto: UpdateSupplierDocumentDto
+      version: number
+    }) => {
+      const result = await api.patch<SupplierDocumentRow>(
+        `${BASE}/${supplierId}/documents/${id}`,
+        dto,
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.documents(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+export function useDeleteSupplierDocument(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      await api.delete(`${BASE}/${supplierId}/documents/${id}`, version)
+      return id
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.documents(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
     },
   })
 }

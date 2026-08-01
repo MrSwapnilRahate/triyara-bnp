@@ -137,3 +137,22 @@ export function isExpired(certification: SupplierCertification): boolean {
   if (!certification.expiryDate) return false
   return new Date(certification.expiryDate).getTime() < Date.now()
 }
+
+/** A row of GET /api/suppliers/:id/documents. */
+export interface SupplierDocumentRow {
+  id: string
+  supplierId: string
+  type: string
+  title: string | null
+  storageKey: string | null
+  mimeType: string | null
+  fileSize: number | null
+  checksum: string | null
+  documentNumber: string | null
+  issuedDate: string | null
+  expiryDate: string | null
+  documentId: string | null
+  version: number
+  createdAt: string
+  updatedAt: string
+}

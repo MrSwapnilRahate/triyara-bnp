@@ -5,6 +5,7 @@ export const supplierKeys = {
 
   list: (query: Partial<ListSuppliersQuery>) => [...supplierKeys.all, 'list', query] as const,
   detail: (id: string) => [...supplierKeys.all, 'detail', id] as const,
+  documents: (id: string) => [...supplierKeys.all, 'detail', id, 'documents'] as const,
   offerings: (id: string, query: Record<string, unknown> = {}) =>
     [...supplierKeys.all, 'detail', id, 'offerings', query] as const,
 

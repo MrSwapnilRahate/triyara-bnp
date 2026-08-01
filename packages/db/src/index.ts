@@ -193,6 +193,12 @@ export {
   type UpdateSupplierData,
 } from './repositories/supplier.repository'
 export {
+  type SupplierDocumentData,
+  type SupplierDocumentRecord,
+  type SupplierDocumentRepository,
+  supplierDocumentRepository,
+} from './repositories/supplier-document.repository'
+export {
   type ListOfferingsParams,
   type OfferingListResult,
   type OfferingRecord,
