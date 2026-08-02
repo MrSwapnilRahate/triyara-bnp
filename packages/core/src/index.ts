@@ -177,6 +177,12 @@ export {
   type SupplierDocumentService,
 } from './supplier-management/supplier-document.service'
 export {
+  createSupplierNoteService,
+  type NoteServiceCtx,
+  type NoteServiceDeps,
+  type SupplierNoteService,
+} from './supplier-management/supplier-note.service'
+export {
   createSupplierOfferingService,
   type OfferingServiceCtx,
   type OfferingServiceDeps,

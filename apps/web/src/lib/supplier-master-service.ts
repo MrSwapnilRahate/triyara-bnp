@@ -3,12 +3,14 @@ import {
   createSupplierContactService,
   createSupplierDocumentService,
   createSupplierMasterService,
+  createSupplierNoteService,
   createSupplierOfferingService,
 } from '@triyara/core'
 import {
   supplierCertificationRepository,
   supplierContactRepository,
   supplierDocumentRepository,
+  supplierNoteRepository,
   supplierOfferingRepository,
   supplierRepository,
 } from '@triyara/db'
@@ -50,4 +52,9 @@ export const supplierDocumentService = createSupplierDocumentService({
   storage: createStorageFromEnv(),
   events: eventBus,
   maxBytes: MAX_FILE_SIZE,
+})
+
+export const supplierNoteService = createSupplierNoteService({
+  repo: supplierNoteRepository,
+  events: eventBus,
 })

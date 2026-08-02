@@ -211,6 +211,16 @@ export {
   supplierDocumentRepository,
 } from './repositories/supplier-document.repository'
 export {
+  type CreateNoteData,
+  type ListNotesParams,
+  type NoteAuthor,
+  type NoteListResult,
+  type NoteRecord,
+  type SupplierNoteRepository,
+  supplierNoteRepository,
+  type UpdateNoteData,
+} from './repositories/supplier-note.repository'
+export {
   type ListOfferingsParams,
   type OfferingListResult,
   type OfferingRecord,
@@ -288,6 +298,7 @@ export type {
   RoleScopeType,
   SessionEndReason,
   SupplierBusinessType,
+  SupplierNoteSource,
   SupplierProductStatus,
   SupplierStatus,
   TaxType,
