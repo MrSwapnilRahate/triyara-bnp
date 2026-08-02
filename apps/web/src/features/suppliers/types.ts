@@ -137,3 +137,27 @@ export function isExpired(certification: SupplierCertification): boolean {
   if (!certification.expiryDate) return false
   return new Date(certification.expiryDate).getTime() < Date.now()
 }
+
+/**
+ * A row of GET /api/suppliers/:id/contacts.
+ *
+ * Richer than the embedded `Supplier.contacts` projection, which the detail
+ * response trims for display. This is what the contacts tab edits, so it
+ * carries `whatsapp`, `notes` and the `version` an edit needs.
+ */
+export interface SupplierContact {
+  id: string
+  supplierId: string
+  name: string
+  role: string
+  designation: string | null
+  email: string | null
+  phone: string | null
+  whatsapp: string | null
+  isPrimary: boolean
+  sortOrder: number
+  notes: string | null
+  version: number
+  createdAt: string
+  updatedAt: string
+}
