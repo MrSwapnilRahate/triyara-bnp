@@ -44,6 +44,25 @@ const detailSelect = {
   gstNumber: true,
   iecNumber: true,
   panNumber: true,
+
+  // Self-registration (TRY-BNP-SUPPLIER-REG). A reviewer needs everything the
+  // supplier stated in front of them; sending them elsewhere to read the
+  // application is how details get missed.
+  isSelfRegistered: true,
+  submittedAt: true,
+  establishedYear: true,
+  employeeCount: true,
+  exportCountries: true,
+  shippingPorts: true,
+  languages: true,
+  packaging: true,
+  paymentTerms: true,
+  containerCapacity: true,
+  moq: true,
+  productionCapacity: true,
+  leadTimeDays: true,
+  proposedProducts: true,
+  claimedCertifications: true,
   contacts: {
     where: { deletedAt: null },
     orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],

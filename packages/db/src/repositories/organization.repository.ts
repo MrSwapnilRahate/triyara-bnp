@@ -17,6 +17,18 @@ export const organizationRepository = {
   },
 
   /**
+   * Resolves a tenant by its stable handle.
+   *
+   * Needed by public registration, which has no session to take an
+   * organization from and must not accept one from the request. Returns only
+   * the id: the caller is deciding where a row belongs, not displaying a
+   * tenant, and an unauthenticated path should hold no more than it needs.
+   */
+  findBySlug(slug: string): Promise<{ id: string } | null> {
+    return prisma.organization.findUnique({ where: { slug }, select: { id: true } })
+  },
+
+  /**
    * Updates the tenant's display settings. `slug` is deliberately absent: it is
    * the tenant's stable handle, referenced by seeds and fixtures, and changing
    * it would silently break anything holding the old one.
