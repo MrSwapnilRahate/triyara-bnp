@@ -1,9 +1,11 @@
 import {
+  createSupplierCertificationService,
   createSupplierContactService,
   createSupplierMasterService,
   createSupplierOfferingService,
 } from '@triyara/core'
 import {
+  supplierCertificationRepository,
   supplierContactRepository,
   supplierOfferingRepository,
   supplierRepository,
@@ -31,5 +33,10 @@ export const supplierOfferingService = createSupplierOfferingService({
 
 export const supplierContactService = createSupplierContactService({
   repo: supplierContactRepository,
+  events: eventBus,
+})
+
+export const supplierCertificationService = createSupplierCertificationService({
+  repo: supplierCertificationRepository,
   events: eventBus,
 })

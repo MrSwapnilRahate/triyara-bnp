@@ -56,6 +56,14 @@ export const SUPPLIER_ADDRESS_TYPES = [
   'DISPATCH_POINT',
 ] as const
 
+export const CERTIFICATION_STATUSES = [
+  'ACTIVE',
+  'PENDING_RENEWAL',
+  'EXPIRED',
+  'SUSPENDED',
+  'REVOKED',
+] as const
+
 export const CERTIFICATION_TYPES = [
   'ISO',
   'FSSAI',
@@ -228,15 +236,35 @@ export const supplierAddressSchema = z.object({
 })
 export type SupplierAddressDto = z.infer<typeof supplierAddressSchema>
 
+/** Treats an empty form field as "not provided" rather than as a bad value. */
+const blankToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === '' ? undefined : v), schema)
+
 export const supplierCertificationSchema = z.object({
   type: z.enum(CERTIFICATION_TYPES),
   certificateNumber: z.string().trim().min(1).max(120),
   issuedBy: z.string().trim().max(200).optional(),
-  issuedDate: z.coerce.date().optional(),
-  expiryDate: z.coerce.date().optional(),
+  // A date input posts `''` for the days nobody filled in, and
+  // `z.coerce.date()` turns that into an Invalid Date rather than "absent" -
+  // which would make a certificate with no recorded expiry impossible to save.
+  // Blank is normalised to undefined before coercion; the column stays null.
+  issuedDate: blankToUndefined(z.coerce.date().optional()),
+  expiryDate: blankToUndefined(z.coerce.date().optional()),
   scope: z.string().trim().max(500).optional(),
+  /** Present on the model; a desk marks a certificate SUSPENDED or EXPIRED. */
+  status: z.enum(CERTIFICATION_STATUSES).optional(),
 })
 export type SupplierCertificationDto = z.infer<typeof supplierCertificationSchema>
+/** What a FORM holds before zod applies defaults. */
+export type SupplierCertificationInput = z.input<typeof supplierCertificationSchema>
+
+/**
+ * Editing one certification. Every field optional so a caller may correct an
+ * expiry date without restating the certificate - and `.partial()` over the
+ * create schema rather than a restatement, so the two cannot drift.
+ */
+export const updateSupplierCertificationSchema = supplierCertificationSchema.partial()
+export type UpdateSupplierCertificationDto = z.infer<typeof updateSupplierCertificationSchema>
 
 // ---- Product offerings (the catalog bridge) ----
 

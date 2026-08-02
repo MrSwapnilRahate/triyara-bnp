@@ -4,8 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   CreateSupplierDto,
   ListSuppliersQuery,
+  SupplierCertificationDto,
   SupplierContactDto,
   SupplierOfferingDto,
+  UpdateSupplierCertificationDto,
   UpdateSupplierContactDto,
   UpdateSupplierDto,
 } from '@triyara/validation'
@@ -17,6 +19,7 @@ import type {
   CertificationFacet,
   CountryFacet,
   Supplier,
+  SupplierCertificationRow,
   SupplierContact,
   SupplierListItem,
   SupplierOffering,
@@ -244,6 +247,90 @@ export function useDeleteSupplierContact(supplierId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: supplierKeys.contacts(supplierId) })
       void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+// ---- Certifications (TRY-BNP-SUPPLIER-CERT) ----
+
+/**
+ * What a supplier holds. Its own cache entry rather than read off the supplier
+ * detail, so recording a certificate refreshes the list without refetching the
+ * whole record.
+ */
+export function useSupplierCertificationList(supplierId: string | undefined) {
+  return useQuery({
+    queryKey: supplierKeys.certificationsFor(supplierId ?? ''),
+    queryFn: async ({ signal }) => {
+      const result = await api.get<SupplierCertificationRow[]>(
+        `${BASE}/${supplierId}/certifications`,
+        { signal },
+      )
+      return result.data
+    },
+    enabled: Boolean(supplierId),
+    staleTime: STALE_TIME.detail,
+  })
+}
+
+export function useAddSupplierCertification(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (dto: SupplierCertificationDto) => {
+      const result = await api.post<SupplierCertificationRow>(
+        `${BASE}/${supplierId}/certifications`,
+        dto,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certificationsFor(supplierId) })
+      // The detail response embeds certifications too, and the tenant-wide
+      // facet list feeds the supplier filter - both go stale on a new record.
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certifications() })
+    },
+  })
+}
+
+export function useUpdateSupplierCertification(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      dto,
+      version,
+    }: {
+      id: string
+      dto: UpdateSupplierCertificationDto
+      version: number
+    }) => {
+      const result = await api.patch<SupplierCertificationRow>(
+        `${BASE}/${supplierId}/certifications/${id}`,
+        dto,
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certificationsFor(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certifications() })
+    },
+  })
+}
+
+export function useDeleteSupplierCertification(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      await api.delete(`${BASE}/${supplierId}/certifications/${id}`, version)
+      return id
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certificationsFor(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certifications() })
     },
   })
 }

@@ -139,6 +139,29 @@ export function isExpired(certification: SupplierCertification): boolean {
 }
 
 /**
+ * A row of GET /api/suppliers/:id/certifications.
+ *
+ * Richer than the embedded `Supplier.certifications` projection: this is what
+ * the tab edits, so it carries `scope`, `status` and the `version` an edit
+ * needs.
+ */
+export interface SupplierCertificationRow {
+  id: string
+  supplierId: string
+  type: string
+  certificateNumber: string
+  issuedBy: string | null
+  issuedDate: string | null
+  expiryDate: string | null
+  status: string
+  scope: string | null
+  supplierDocumentId: string | null
+  version: number
+  createdAt: string
+  updatedAt: string
+}
+
+/**
  * A row of GET /api/suppliers/:id/contacts.
  *
  * Richer than the embedded `Supplier.contacts` projection, which the detail
