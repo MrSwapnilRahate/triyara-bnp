@@ -165,6 +165,12 @@ export {
   type SupplierCertificationService,
 } from './supplier-management/supplier-certification.service'
 export {
+  createSupplierContactService,
+  type SupplierContactCtx,
+  type SupplierContactDeps,
+  type SupplierContactService,
+} from './supplier-management/supplier-contact.service'
+export {
   createSupplierOfferingService,
   type OfferingServiceCtx,
   type OfferingServiceDeps,
