@@ -4,8 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   CreateSupplierDto,
   ListSuppliersQuery,
+  SupplierCertificationDto,
+  SupplierContactDto,
   SupplierDocumentDto,
   SupplierOfferingDto,
+  UpdateSupplierCertificationDto,
+  UpdateSupplierContactDto,
   UpdateSupplierDocumentDto,
   UpdateSupplierDto,
 } from '@triyara/validation'
@@ -17,6 +21,8 @@ import type {
   CertificationFacet,
   CountryFacet,
   Supplier,
+  SupplierCertificationRow,
+  SupplierContact,
   SupplierDocumentRow,
   SupplierListItem,
   SupplierOffering,
@@ -169,6 +175,165 @@ export function useAddSupplierOffering(supplierId: string) {
       void queryClient.invalidateQueries({
         queryKey: [...supplierKeys.all, 'detail', supplierId, 'offerings'],
       })
+    },
+  })
+}
+
+// ---- Contacts (TRY-BNP-SUPPLIER-CONTACT) ----
+
+/**
+ * The people at a supplier. Kept in its own cache entry rather than read off
+ * the supplier detail, so adding a contact refreshes the list without refetching
+ * the whole record - and so the tab still works while the detail is stale.
+ */
+export function useSupplierContacts(supplierId: string | undefined) {
+  return useQuery({
+    queryKey: supplierKeys.contacts(supplierId ?? ''),
+    queryFn: async ({ signal }) => {
+      const result = await api.get<SupplierContact[]>(`${BASE}/${supplierId}/contacts`, { signal })
+      return result.data
+    },
+    enabled: Boolean(supplierId),
+    staleTime: STALE_TIME.detail,
+  })
+}
+
+export function useAddSupplierContact(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (dto: SupplierContactDto) => {
+      const result = await api.post<SupplierContact>(`${BASE}/${supplierId}/contacts`, dto)
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.contacts(supplierId) })
+      // The detail response embeds contacts too; without this the header and
+      // the tab would disagree until the next navigation.
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+export function useUpdateSupplierContact(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      dto,
+      version,
+    }: {
+      id: string
+      dto: UpdateSupplierContactDto
+      version: number
+    }) => {
+      const result = await api.patch<SupplierContact>(
+        `${BASE}/${supplierId}/contacts/${id}`,
+        dto,
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.contacts(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+export function useDeleteSupplierContact(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      await api.delete(`${BASE}/${supplierId}/contacts/${id}`, version)
+      return id
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.contacts(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+// ---- Certifications (TRY-BNP-SUPPLIER-CERT) ----
+
+/**
+ * What a supplier holds. Its own cache entry rather than read off the supplier
+ * detail, so recording a certificate refreshes the list without refetching the
+ * whole record.
+ */
+export function useSupplierCertificationList(supplierId: string | undefined) {
+  return useQuery({
+    queryKey: supplierKeys.certificationsFor(supplierId ?? ''),
+    queryFn: async ({ signal }) => {
+      const result = await api.get<SupplierCertificationRow[]>(
+        `${BASE}/${supplierId}/certifications`,
+        { signal },
+      )
+      return result.data
+    },
+    enabled: Boolean(supplierId),
+    staleTime: STALE_TIME.detail,
+  })
+}
+
+export function useAddSupplierCertification(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (dto: SupplierCertificationDto) => {
+      const result = await api.post<SupplierCertificationRow>(
+        `${BASE}/${supplierId}/certifications`,
+        dto,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certificationsFor(supplierId) })
+      // The detail response embeds certifications too, and the tenant-wide
+      // facet list feeds the supplier filter - both go stale on a new record.
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certifications() })
+    },
+  })
+}
+
+export function useUpdateSupplierCertification(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      dto,
+      version,
+    }: {
+      id: string
+      dto: UpdateSupplierCertificationDto
+      version: number
+    }) => {
+      const result = await api.patch<SupplierCertificationRow>(
+        `${BASE}/${supplierId}/certifications/${id}`,
+        dto,
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certificationsFor(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certifications() })
+    },
+  })
+}
+
+export function useDeleteSupplierCertification(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      await api.delete(`${BASE}/${supplierId}/certifications/${id}`, version)
+      return id
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certificationsFor(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certifications() })
     },
   })
 }

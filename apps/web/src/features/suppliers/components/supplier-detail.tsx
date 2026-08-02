@@ -26,6 +26,8 @@ import { Can } from '@/lib/ability-context'
 
 import { useSupplier } from '../api/suppliers'
 import { expiringSoon, isExpired, type SupplierCertification } from '../types'
+import { SupplierCertificationsTab } from './supplier-certifications-tab'
+import { SupplierContactsTab } from './supplier-contacts-tab'
 import { SupplierDocumentsTab } from './supplier-documents-tab'
 import { SupplierProducts } from './supplier-products'
 
@@ -124,39 +126,8 @@ export function SupplierDetail({ id }: { id: string }) {
             </div>
           </TabsContent>
 
-          <TabsContent value="contacts" className="p-gutter">
-            <Card className="max-w-3xl">
-              <CardContent className="p-0">
-                {(supplier.contacts?.length ?? 0) === 0 ? (
-                  <EmptyState size="sm" title="No contacts" />
-                ) : (
-                  supplier.contacts.map((contact, index) => (
-                    <div key={contact.id}>
-                      {index > 0 ? <Separator /> : null}
-                      <div className="flex items-start justify-between gap-gap-lg px-gutter py-gap-lg">
-                        <div>
-                          <p className="text-base font-medium text-content">
-                            {contact.name}
-                            {contact.isPrimary ? (
-                              <Badge size="sm" tone="accent" className="ml-gap">
-                                Primary
-                              </Badge>
-                            ) : null}
-                          </p>
-                          <p className="text-xs text-content-muted">
-                            {contact.designation ?? contact.role}
-                          </p>
-                        </div>
-                        <div className="text-right text-xs text-content-muted">
-                          <p>{contact.email ?? '—'}</p>
-                          <p>{contact.phone ?? '—'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
+          <TabsContent value="contacts">
+            <SupplierContactsTab supplierId={supplier.id} />
           </TabsContent>
 
           <TabsContent value="addresses" className="p-gutter">
@@ -187,26 +158,8 @@ export function SupplierDetail({ id }: { id: string }) {
             </Card>
           </TabsContent>
 
-          <TabsContent value="certifications" className="p-gutter">
-            <Card className="max-w-3xl">
-              <CardContent className="p-0">
-                {(supplier.certifications?.length ?? 0) === 0 ? (
-                  <EmptyState
-                    size="sm"
-                    icon={<ShieldCheck />}
-                    title="No certifications"
-                    description="Buyers frequently require FSSAI, HACCP or organic certification."
-                  />
-                ) : (
-                  supplier.certifications.map((certification, index) => (
-                    <div key={certification.id}>
-                      {index > 0 ? <Separator /> : null}
-                      <CertificationRow certification={certification} />
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
+          <TabsContent value="certifications">
+            <SupplierCertificationsTab supplierId={supplier.id} />
           </TabsContent>
 
           <TabsContent value="documents">

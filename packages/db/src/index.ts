@@ -193,6 +193,18 @@ export {
   type UpdateSupplierData,
 } from './repositories/supplier.repository'
 export {
+  type SupplierCertificationData,
+  type SupplierCertificationRecord,
+  type SupplierCertificationRepository,
+  supplierCertificationRepository,
+} from './repositories/supplier-certification.repository'
+export {
+  type SupplierContactData,
+  type SupplierContactRecord,
+  type SupplierContactRepository,
+  supplierContactRepository,
+} from './repositories/supplier-contact.repository'
+export {
   type SupplierDocumentData,
   type SupplierDocumentRecord,
   type SupplierDocumentRepository,

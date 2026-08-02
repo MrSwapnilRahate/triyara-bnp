@@ -100,6 +100,11 @@ function handlers() {
       HttpResponse.json(ok(SUPPLIER), { headers: { ETag: 'W/"v2"' } }),
     ),
     http.get('/api/suppliers/s1/products', () => HttpResponse.json(ok([], { nextCursor: null }))),
+    // The certifications tab fetches its own rows now; the detail response's
+    // embedded copy is no longer what it renders.
+    http.get('/api/suppliers/s1/certifications', () =>
+      HttpResponse.json(ok([{ ...SUPPLIER.certifications[0], version: 1, supplierId: 's1' }])),
+    ),
   ]
 }
 
@@ -120,14 +125,17 @@ describe('SupplierDetail', () => {
     expect(screen.getByText(/certification.* expire within 30 days/i)).toBeInTheDocument()
   })
 
-  it('distinguishes an expired certification from a lapsing one', async () => {
+  it('opens the certifications tab', async () => {
     server.use(...handlers())
     renderWithProviders(<SupplierDetail id="s1" />)
     await screen.findByRole('heading', { name: 'Acme Spices' })
 
     await userEvent.click(screen.getByRole('tab', { name: /Certifications/ }))
-    expect(await screen.findByText('Expired')).toBeInTheDocument()
-    expect(screen.getByText('Lapsing soon')).toBeInTheDocument()
+
+    // What each certificate looks like - expired, lapsing, undated - is
+    // asserted in supplier-certifications-tab.test.tsx, which owns that
+    // component. Here we only prove the tab is wired to it.
+    expect(await screen.findByRole('button', { name: /add certification/i })).toBeInTheDocument()
   })
 
   it('never renders a bank account number, and says so', async () => {
