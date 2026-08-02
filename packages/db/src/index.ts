@@ -211,6 +211,14 @@ export {
   supplierDocumentRepository,
 } from './repositories/supplier-document.repository'
 export {
+  type HistoryParams,
+  type HistoryResult,
+  type SupplierHistoryRepository,
+  supplierHistoryRepository,
+  type SupplierQuotationHistoryItem,
+  type SupplierRfqHistoryItem,
+} from './repositories/supplier-history.repository'
+export {
   type CreateNoteData,
   type ListNotesParams,
   type NoteAuthor,
@@ -245,6 +253,12 @@ export {
   supplierRegistrationRepository,
   type VerifiedUpload,
 } from './repositories/supplier-registration.repository'
+export {
+  collectScoreSignals,
+  type SupplierScoreRepository,
+  supplierScoreRepository,
+  type SupplierScoreSignals,
+} from './repositories/supplier-score.repository'
 export {
   type AdminUserListResult,
   type AdminUserRecord,

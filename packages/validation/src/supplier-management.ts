@@ -161,6 +161,21 @@ export const listSuppliersQuerySchema = z.object({
   isVerified: z.enum(['true', 'false']).optional(),
   /** Suppliers offering a specific catalog product. */
   productId: z.string().optional(),
+  /**
+   * Upper bound on the OFFERING's minimum order quantity.
+   *
+   * Deliberately not `Supplier.moq`, which is free text ("1 x 20ft container")
+   * and cannot be compared. Combined with `productId` this asks one question of
+   * one offering: who can supply THIS product at or below THIS quantity.
+   */
+  maxMoq: z.coerce.number().nonnegative().finite().optional(),
+  /** Suppliers currently holding this certification. */
+  certification: z.enum(CERTIFICATION_TYPES).optional(),
+  /** Substring, because both columns are free text on the supplier record. */
+  packaging: z.string().trim().max(200).optional(),
+  paymentTerms: z.string().trim().max(200).optional(),
+  /** Exact membership of the supplier's export markets. */
+  exportCountry: z.string().trim().length(2).optional(),
   tagId: z.string().optional(),
   gstNumber: z.string().trim().optional(),
   iecNumber: z.string().trim().optional(),
@@ -410,6 +425,13 @@ export const supplierFacetQuerySchema = z.object({
   includeDeleted: z.enum(['true', 'false']).optional(),
 })
 export type SupplierFacetQuery = z.infer<typeof supplierFacetQuerySchema>
+
+/** Paging for a supplier's RFQ and quotation history. */
+export const supplierHistoryQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  cursor: z.string().optional(),
+})
+export type SupplierHistoryQuery = z.infer<typeof supplierHistoryQuerySchema>
 
 /** `GET /api/suppliers/:id/products` - offerings scoped to one supplier. */
 export const listSupplierProductsQuerySchema = listOfferingsQuerySchema.omit({ supplierId: true })

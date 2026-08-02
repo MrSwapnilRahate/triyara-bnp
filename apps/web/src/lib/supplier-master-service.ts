@@ -3,6 +3,7 @@ import {
   createSupplierContactService,
   createSupplierDocumentService,
   createSupplierMasterService,
+  createSupplierMatchingService,
   createSupplierNoteService,
   createSupplierOfferingService,
 } from '@triyara/core'
@@ -10,9 +11,11 @@ import {
   supplierCertificationRepository,
   supplierContactRepository,
   supplierDocumentRepository,
+  supplierHistoryRepository,
   supplierNoteRepository,
   supplierOfferingRepository,
   supplierRepository,
+  supplierScoreRepository,
 } from '@triyara/db'
 import { createStorageFromEnv } from '@triyara/storage'
 import { MAX_FILE_SIZE } from '@triyara/validation'
@@ -57,4 +60,15 @@ export const supplierDocumentService = createSupplierDocumentService({
 export const supplierNoteService = createSupplierNoteService({
   repo: supplierNoteRepository,
   events: eventBus,
+})
+
+// Supplier intelligence & matching (TRY-BNP-SUPPLIER-MATCH).
+//
+// `search` is the EXISTING supplier list, passed in rather than reimplemented:
+// the shortlist has to return exactly what the supplier screens return, or the
+// two would answer the same question differently.
+export const supplierMatchingService = createSupplierMatchingService({
+  search: (ctx, query) => supplierMasterService.list(ctx, query),
+  scores: supplierScoreRepository,
+  history: supplierHistoryRepository,
 })
