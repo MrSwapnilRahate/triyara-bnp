@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { MAX_FILE_SIZE, mimeTypeSchema } from './document'
+
 // Supplier Management contracts (TRY-BNP-SUPPLIER-02).
 // Named supplier-management to avoid clashing with the frozen supplier.ts,
 // which serves the frozen SupplierProfile module.
@@ -54,6 +56,14 @@ export const SUPPLIER_ADDRESS_TYPES = [
   'WAREHOUSE',
   'BRANCH',
   'DISPATCH_POINT',
+] as const
+
+export const CERTIFICATION_STATUSES = [
+  'ACTIVE',
+  'PENDING_RENEWAL',
+  'EXPIRED',
+  'SUSPENDED',
+  'REVOKED',
 ] as const
 
 export const CERTIFICATION_TYPES = [
@@ -183,13 +193,31 @@ export const supplierContactSchema = z.object({
   name: z.string().trim().min(1).max(200),
   role: z.enum(SUPPLIER_CONTACT_ROLES).default('OTHER'),
   designation: z.string().trim().max(200).optional(),
-  email: z.string().trim().email().max(320).optional(),
+  // `''` is accepted alongside `undefined`: a form posts empty strings for the
+  // fields nobody filled in, and a contact reached only on WhatsApp is the
+  // ordinary case here. The service maps blank to null before it stores
+  // anything, so an empty string never reaches the column.
+  email: z.union([z.string().trim().email().max(320), z.literal('')]).optional(),
   phone: z.string().trim().max(32).optional(),
   whatsapp: z.string().trim().max(32).optional(),
   isPrimary: z.boolean().default(false),
   notes: z.string().trim().max(1000).optional(),
 })
 export type SupplierContactDto = z.infer<typeof supplierContactSchema>
+/**
+ * What a FORM holds before zod applies defaults. `role` and `isPrimary` carry
+ * `.default()`, so they are optional on the way in and guaranteed on the way
+ * out - and react-hook-form needs the input side to type its field values.
+ */
+export type SupplierContactInput = z.input<typeof supplierContactSchema>
+
+/**
+ * Editing one contact. Every field optional so a caller may correct a phone
+ * number without restating the person - and `.partial()` over the create
+ * schema rather than a restatement, so the two cannot drift.
+ */
+export const updateSupplierContactSchema = supplierContactSchema.partial()
+export type UpdateSupplierContactDto = z.infer<typeof updateSupplierContactSchema>
 
 export const supplierAddressSchema = z.object({
   type: z.enum(SUPPLIER_ADDRESS_TYPES),
@@ -210,15 +238,40 @@ export const supplierAddressSchema = z.object({
 })
 export type SupplierAddressDto = z.infer<typeof supplierAddressSchema>
 
+/**
+ * Treats an empty form field as "not provided" rather than as a bad value.
+ * A date input posts `''` for the days nobody filled in, and `z.coerce.date()`
+ * would otherwise turn that into an Invalid Date - making a certificate or
+ * document with no recorded expiry impossible to save.
+ */
+const blankToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === '' ? undefined : v), schema)
+
 export const supplierCertificationSchema = z.object({
   type: z.enum(CERTIFICATION_TYPES),
   certificateNumber: z.string().trim().min(1).max(120),
   issuedBy: z.string().trim().max(200).optional(),
-  issuedDate: z.coerce.date().optional(),
-  expiryDate: z.coerce.date().optional(),
+  // A date input posts `''` for the days nobody filled in, and
+  // `z.coerce.date()` turns that into an Invalid Date rather than "absent" -
+  // which would make a certificate with no recorded expiry impossible to save.
+  // Blank is normalised to undefined before coercion; the column stays null.
+  issuedDate: blankToUndefined(z.coerce.date().optional()),
+  expiryDate: blankToUndefined(z.coerce.date().optional()),
   scope: z.string().trim().max(500).optional(),
+  /** Present on the model; a desk marks a certificate SUSPENDED or EXPIRED. */
+  status: z.enum(CERTIFICATION_STATUSES).optional(),
 })
 export type SupplierCertificationDto = z.infer<typeof supplierCertificationSchema>
+/** What a FORM holds before zod applies defaults. */
+export type SupplierCertificationInput = z.input<typeof supplierCertificationSchema>
+
+/**
+ * Editing one certification. Every field optional so a caller may correct an
+ * expiry date without restating the certificate - and `.partial()` over the
+ * create schema rather than a restatement, so the two cannot drift.
+ */
+export const updateSupplierCertificationSchema = supplierCertificationSchema.partial()
+export type UpdateSupplierCertificationDto = z.infer<typeof updateSupplierCertificationSchema>
 
 // ---- Notes (the CRM timeline) ----
 
@@ -361,3 +414,55 @@ export type SupplierFacetQuery = z.infer<typeof supplierFacetQuerySchema>
 /** `GET /api/suppliers/:id/products` - offerings scoped to one supplier. */
 export const listSupplierProductsQuerySchema = listOfferingsQuerySchema.omit({ supplierId: true })
 export type ListSupplierProductsQuery = z.infer<typeof listSupplierProductsQuerySchema>
+
+// ---- Supplier documents (TRY-BNP-SUPPLIER-DOC) ----
+
+export const SUPPLIER_DOCUMENT_TYPES = [
+  'GST',
+  'IEC',
+  'PAN',
+  'CANCELLED_CHEQUE',
+  'MSME',
+  'IMPORT_EXPORT_LICENSE',
+  'FACTORY_LICENSE',
+  'COMPANY_PROFILE',
+  'CATALOG',
+  'LAB_REPORT',
+  'AGREEMENT',
+  'OTHER',
+] as const
+
+/** Step one of the upload: ask for somewhere to put the bytes. */
+export const presignSupplierDocumentSchema = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  // The platform's existing allow-list, not a looser one: a supplier document
+  // is the same class of file as any other and gets the same restriction.
+  mimeType: mimeTypeSchema,
+  sizeBytes: z.number().int().positive().max(MAX_FILE_SIZE),
+})
+export type PresignSupplierDocumentDto = z.infer<typeof presignSupplierDocumentSchema>
+
+/**
+ * Step two: record the row once the bytes are up.
+ *
+ * `fileSize` and `checksum` are absent on purpose - the service reads both
+ * from storage rather than believing the browser, so they cannot be claimed.
+ */
+export const supplierDocumentSchema = z.object({
+  type: z.enum(SUPPLIER_DOCUMENT_TYPES),
+  storageKey: z.string().trim().min(1).max(500),
+  mimeType: mimeTypeSchema.optional(),
+  title: z.string().trim().max(250).optional(),
+  documentNumber: z.string().trim().max(120).optional(),
+  issuedDate: blankToUndefined(z.coerce.date().optional()),
+  expiryDate: blankToUndefined(z.coerce.date().optional()),
+})
+export type SupplierDocumentDto = z.infer<typeof supplierDocumentSchema>
+export type SupplierDocumentInput = z.input<typeof supplierDocumentSchema>
+
+/**
+ * Editing. `storageKey` optional: present when a newer file replaces the old
+ * one, absent when only the metadata is being corrected.
+ */
+export const updateSupplierDocumentSchema = supplierDocumentSchema.partial()
+export type UpdateSupplierDocumentDto = z.infer<typeof updateSupplierDocumentSchema>

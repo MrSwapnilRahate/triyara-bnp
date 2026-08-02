@@ -4,8 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   CreateSupplierDto,
   ListSuppliersQuery,
+  SupplierCertificationDto,
+  SupplierContactDto,
+  SupplierDocumentDto,
   SupplierNoteDto,
   SupplierOfferingDto,
+  UpdateSupplierCertificationDto,
+  UpdateSupplierContactDto,
+  UpdateSupplierDocumentDto,
   UpdateSupplierDto,
   UpdateSupplierNoteDto,
 } from '@triyara/validation'
@@ -17,6 +23,9 @@ import type {
   CertificationFacet,
   CountryFacet,
   Supplier,
+  SupplierCertificationRow,
+  SupplierContact,
+  SupplierDocumentRow,
   SupplierListItem,
   SupplierNote,
   SupplierOffering,
@@ -158,6 +167,319 @@ export function useSupplierOfferings(
   })
 }
 
+export function useAddSupplierOffering(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (dto: SupplierOfferingDto) => {
+      const result = await api.post<SupplierOffering>(`${BASE}/${supplierId}/products`, dto)
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: [...supplierKeys.all, 'detail', supplierId, 'offerings'],
+      })
+    },
+  })
+}
+
+// ---- Contacts (TRY-BNP-SUPPLIER-CONTACT) ----
+
+/**
+ * The people at a supplier. Kept in its own cache entry rather than read off
+ * the supplier detail, so adding a contact refreshes the list without refetching
+ * the whole record - and so the tab still works while the detail is stale.
+ */
+export function useSupplierContacts(supplierId: string | undefined) {
+  return useQuery({
+    queryKey: supplierKeys.contacts(supplierId ?? ''),
+    queryFn: async ({ signal }) => {
+      const result = await api.get<SupplierContact[]>(`${BASE}/${supplierId}/contacts`, { signal })
+      return result.data
+    },
+    enabled: Boolean(supplierId),
+    staleTime: STALE_TIME.detail,
+  })
+}
+
+export function useAddSupplierContact(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (dto: SupplierContactDto) => {
+      const result = await api.post<SupplierContact>(`${BASE}/${supplierId}/contacts`, dto)
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.contacts(supplierId) })
+      // The detail response embeds contacts too; without this the header and
+      // the tab would disagree until the next navigation.
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+export function useUpdateSupplierContact(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      dto,
+      version,
+    }: {
+      id: string
+      dto: UpdateSupplierContactDto
+      version: number
+    }) => {
+      const result = await api.patch<SupplierContact>(
+        `${BASE}/${supplierId}/contacts/${id}`,
+        dto,
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.contacts(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+export function useDeleteSupplierContact(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      await api.delete(`${BASE}/${supplierId}/contacts/${id}`, version)
+      return id
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.contacts(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+// ---- Certifications (TRY-BNP-SUPPLIER-CERT) ----
+
+/**
+ * What a supplier holds. Its own cache entry rather than read off the supplier
+ * detail, so recording a certificate refreshes the list without refetching the
+ * whole record.
+ */
+export function useSupplierCertificationList(supplierId: string | undefined) {
+  return useQuery({
+    queryKey: supplierKeys.certificationsFor(supplierId ?? ''),
+    queryFn: async ({ signal }) => {
+      const result = await api.get<SupplierCertificationRow[]>(
+        `${BASE}/${supplierId}/certifications`,
+        { signal },
+      )
+      return result.data
+    },
+    enabled: Boolean(supplierId),
+    staleTime: STALE_TIME.detail,
+  })
+}
+
+export function useAddSupplierCertification(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (dto: SupplierCertificationDto) => {
+      const result = await api.post<SupplierCertificationRow>(
+        `${BASE}/${supplierId}/certifications`,
+        dto,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certificationsFor(supplierId) })
+      // The detail response embeds certifications too, and the tenant-wide
+      // facet list feeds the supplier filter - both go stale on a new record.
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certifications() })
+    },
+  })
+}
+
+export function useUpdateSupplierCertification(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      dto,
+      version,
+    }: {
+      id: string
+      dto: UpdateSupplierCertificationDto
+      version: number
+    }) => {
+      const result = await api.patch<SupplierCertificationRow>(
+        `${BASE}/${supplierId}/certifications/${id}`,
+        dto,
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certificationsFor(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certifications() })
+    },
+  })
+}
+
+export function useDeleteSupplierCertification(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      await api.delete(`${BASE}/${supplierId}/certifications/${id}`, version)
+      return id
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certificationsFor(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.certifications() })
+    },
+  })
+}
+
+// ---- Documents (TRY-BNP-SUPPLIER-DOC) ----
+
+export function useSupplierDocuments(supplierId: string | undefined) {
+  return useQuery({
+    queryKey: supplierKeys.documents(supplierId ?? ''),
+    queryFn: async ({ signal }) => {
+      const result = await api.get<SupplierDocumentRow[]>(`${BASE}/${supplierId}/documents`, {
+        signal,
+      })
+      return result.data
+    },
+    enabled: Boolean(supplierId),
+    staleTime: STALE_TIME.detail,
+  })
+}
+
+interface Presigned {
+  uploadUrl: string
+  method: 'PUT'
+  headers: Record<string, string>
+  storageKey: string
+  expiresAt: string
+}
+
+/**
+ * The two-step upload, as one call site.
+ *
+ * Presign, PUT the bytes straight at storage, then record the row. Kept
+ * together because a caller who did step one and forgot step two would leave
+ * an orphaned object nobody can find.
+ */
+export function useUploadSupplierDocument(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      file,
+      meta,
+    }: {
+      file: File
+      meta: Omit<SupplierDocumentDto, 'storageKey' | 'mimeType'>
+    }) => {
+      const presigned = await api.post<Presigned>(`${BASE}/${supplierId}/documents/presign`, {
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+      })
+
+      const put = await fetch(presigned.data.uploadUrl, {
+        method: 'PUT',
+        headers: presigned.data.headers,
+        body: file,
+      })
+      if (!put.ok) throw new Error('The file could not be uploaded. Try again.')
+
+      const result = await api.post<SupplierDocumentRow>(`${BASE}/${supplierId}/documents`, {
+        ...meta,
+        storageKey: presigned.data.storageKey,
+        mimeType: file.type,
+      })
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.documents(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+/** Swaps the file behind an existing record, keeping its identity. */
+export function useReplaceSupplierDocument(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, file, version }: { id: string; file: File; version: number }) => {
+      const presigned = await api.post<Presigned>(`${BASE}/${supplierId}/documents/presign`, {
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+      })
+      const put = await fetch(presigned.data.uploadUrl, {
+        method: 'PUT',
+        headers: presigned.data.headers,
+        body: file,
+      })
+      if (!put.ok) throw new Error('The file could not be uploaded. Try again.')
+
+      const result = await api.patch<SupplierDocumentRow>(
+        `${BASE}/${supplierId}/documents/${id}`,
+        { storageKey: presigned.data.storageKey, mimeType: file.type },
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.documents(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+export function useUpdateSupplierDocument(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      dto,
+      version,
+    }: {
+      id: string
+      dto: UpdateSupplierDocumentDto
+      version: number
+    }) => {
+      const result = await api.patch<SupplierDocumentRow>(
+        `${BASE}/${supplierId}/documents/${id}`,
+        dto,
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.documents(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
+export function useDeleteSupplierDocument(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      await api.delete(`${BASE}/${supplierId}/documents/${id}`, version)
+      return id
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.documents(supplierId) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
+    },
+  })
+}
+
 // ---- Notes (the CRM timeline) ----
 
 export function useSupplierNotes(
@@ -226,21 +548,6 @@ export function useDeleteSupplierNote(supplierId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: supplierKeys.notesFor(supplierId) })
-    },
-  })
-}
-
-export function useAddSupplierOffering(supplierId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (dto: SupplierOfferingDto) => {
-      const result = await api.post<SupplierOffering>(`${BASE}/${supplierId}/products`, dto)
-      return result.data
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: [...supplierKeys.all, 'detail', supplierId, 'offerings'],
-      })
     },
   })
 }
