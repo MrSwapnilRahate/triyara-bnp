@@ -171,6 +171,12 @@ export {
   type SupplierContactService,
 } from './supplier-management/supplier-contact.service'
 export {
+  createSupplierDocumentService,
+  type SupplierDocumentCtx,
+  type SupplierDocumentDeps,
+  type SupplierDocumentService,
+} from './supplier-management/supplier-document.service'
+export {
   createSupplierOfferingService,
   type OfferingServiceCtx,
   type OfferingServiceDeps,

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { MAX_FILE_SIZE, mimeTypeSchema } from './document'
+
 // Supplier Management contracts (TRY-BNP-SUPPLIER-02).
 // Named supplier-management to avoid clashing with the frozen supplier.ts,
 // which serves the frozen SupplierProfile module.
@@ -236,7 +238,12 @@ export const supplierAddressSchema = z.object({
 })
 export type SupplierAddressDto = z.infer<typeof supplierAddressSchema>
 
-/** Treats an empty form field as "not provided" rather than as a bad value. */
+/**
+ * Treats an empty form field as "not provided" rather than as a bad value.
+ * A date input posts `''` for the days nobody filled in, and `z.coerce.date()`
+ * would otherwise turn that into an Invalid Date - making a certificate or
+ * document with no recorded expiry impossible to save.
+ */
 const blankToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((v) => (v === '' ? undefined : v), schema)
 
@@ -356,3 +363,55 @@ export type SupplierFacetQuery = z.infer<typeof supplierFacetQuerySchema>
 /** `GET /api/suppliers/:id/products` - offerings scoped to one supplier. */
 export const listSupplierProductsQuerySchema = listOfferingsQuerySchema.omit({ supplierId: true })
 export type ListSupplierProductsQuery = z.infer<typeof listSupplierProductsQuerySchema>
+
+// ---- Supplier documents (TRY-BNP-SUPPLIER-DOC) ----
+
+export const SUPPLIER_DOCUMENT_TYPES = [
+  'GST',
+  'IEC',
+  'PAN',
+  'CANCELLED_CHEQUE',
+  'MSME',
+  'IMPORT_EXPORT_LICENSE',
+  'FACTORY_LICENSE',
+  'COMPANY_PROFILE',
+  'CATALOG',
+  'LAB_REPORT',
+  'AGREEMENT',
+  'OTHER',
+] as const
+
+/** Step one of the upload: ask for somewhere to put the bytes. */
+export const presignSupplierDocumentSchema = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  // The platform's existing allow-list, not a looser one: a supplier document
+  // is the same class of file as any other and gets the same restriction.
+  mimeType: mimeTypeSchema,
+  sizeBytes: z.number().int().positive().max(MAX_FILE_SIZE),
+})
+export type PresignSupplierDocumentDto = z.infer<typeof presignSupplierDocumentSchema>
+
+/**
+ * Step two: record the row once the bytes are up.
+ *
+ * `fileSize` and `checksum` are absent on purpose - the service reads both
+ * from storage rather than believing the browser, so they cannot be claimed.
+ */
+export const supplierDocumentSchema = z.object({
+  type: z.enum(SUPPLIER_DOCUMENT_TYPES),
+  storageKey: z.string().trim().min(1).max(500),
+  mimeType: mimeTypeSchema.optional(),
+  title: z.string().trim().max(250).optional(),
+  documentNumber: z.string().trim().max(120).optional(),
+  issuedDate: blankToUndefined(z.coerce.date().optional()),
+  expiryDate: blankToUndefined(z.coerce.date().optional()),
+})
+export type SupplierDocumentDto = z.infer<typeof supplierDocumentSchema>
+export type SupplierDocumentInput = z.input<typeof supplierDocumentSchema>
+
+/**
+ * Editing. `storageKey` optional: present when a newer file replaces the old
+ * one, absent when only the metadata is being corrected.
+ */
+export const updateSupplierDocumentSchema = supplierDocumentSchema.partial()
+export type UpdateSupplierDocumentDto = z.infer<typeof updateSupplierDocumentSchema>

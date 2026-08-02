@@ -1,15 +1,19 @@
 import {
   createSupplierCertificationService,
   createSupplierContactService,
+  createSupplierDocumentService,
   createSupplierMasterService,
   createSupplierOfferingService,
 } from '@triyara/core'
 import {
   supplierCertificationRepository,
   supplierContactRepository,
+  supplierDocumentRepository,
   supplierOfferingRepository,
   supplierRepository,
 } from '@triyara/db'
+import { createStorageFromEnv } from '@triyara/storage'
+import { MAX_FILE_SIZE } from '@triyara/validation'
 
 import { eventBus } from './event-bus'
 
@@ -39,4 +43,11 @@ export const supplierContactService = createSupplierContactService({
 export const supplierCertificationService = createSupplierCertificationService({
   repo: supplierCertificationRepository,
   events: eventBus,
+})
+
+export const supplierDocumentService = createSupplierDocumentService({
+  repo: supplierDocumentRepository,
+  storage: createStorageFromEnv(),
+  events: eventBus,
+  maxBytes: MAX_FILE_SIZE,
 })

@@ -205,6 +205,12 @@ export {
   supplierContactRepository,
 } from './repositories/supplier-contact.repository'
 export {
+  type SupplierDocumentData,
+  type SupplierDocumentRecord,
+  type SupplierDocumentRepository,
+  supplierDocumentRepository,
+} from './repositories/supplier-document.repository'
+export {
   type ListOfferingsParams,
   type OfferingListResult,
   type OfferingRecord,
