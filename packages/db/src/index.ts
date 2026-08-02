@@ -41,6 +41,18 @@ export {
   buyerProfileRepository,
 } from './repositories/buyer-profile.repository'
 export {
+  type BuyerApprovalRecord,
+  type BuyerCompany,
+  type BuyerContactData,
+  type BuyerLogistics,
+  type BuyerProductData,
+  type BuyerRegistrationData,
+  type BuyerRegistrationRepository,
+  buyerRegistrationRepository,
+  type BuyerRegistrationResult,
+  type BuyerUpload,
+} from './repositories/buyer-registration.repository'
+export {
   type CatalogReferenceRepository,
   catalogReferenceRepository,
   type ListDefinitionsParams,

@@ -29,6 +29,12 @@ export default async function BuyerProfilePage({ params }: Params) {
       accountName={account.legalName}
       profile={profile}
       canWrite={canWrite}
+      review={{
+        id: account.id,
+        registrationStatus: account.registrationStatus,
+        isSelfRegistered: account.isSelfRegistered,
+        version: account.version,
+      }}
     />
   )
 }
