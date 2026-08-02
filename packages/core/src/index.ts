@@ -189,6 +189,14 @@ export {
   type SupplierOfferingService,
 } from './supplier-management/supplier-offering.service'
 export {
+  createSupplierRegistrationService,
+  type OrganizationLookup,
+  type RegistrationServiceCtx,
+  type RegistrationServiceDeps,
+  type SupplierRegistrationService,
+  SYSTEM_ACTOR_ID,
+} from './supplier-management/supplier-registration.service'
+export {
   createVerificationService,
   type ReviewerLookup,
   type VerificationService,

@@ -236,6 +236,16 @@ export {
   supplierProfileRepository,
 } from './repositories/supplier-profile.repository'
 export {
+  type RegistrationBusiness,
+  type RegistrationCompany,
+  type RegistrationContact,
+  type RegistrationData,
+  type RegistrationResult,
+  type SupplierRegistrationRepository,
+  supplierRegistrationRepository,
+  type VerifiedUpload,
+} from './repositories/supplier-registration.repository'
+export {
   type AdminUserListResult,
   type AdminUserRecord,
   type ListAdminUsersParams,

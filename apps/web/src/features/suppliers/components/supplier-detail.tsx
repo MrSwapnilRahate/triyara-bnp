@@ -25,12 +25,13 @@ import { InlineQueryError } from '@/components/data/query-boundary'
 import { Can } from '@/lib/ability-context'
 
 import { useSupplier } from '../api/suppliers'
-import { expiringSoon, isExpired, type SupplierCertification } from '../types'
+import { expiringSoon, isExpired, type Supplier, type SupplierCertification } from '../types'
 import { SupplierCertificationsTab } from './supplier-certifications-tab'
 import { SupplierContactsTab } from './supplier-contacts-tab'
 import { SupplierDocumentsTab } from './supplier-documents-tab'
 import { SupplierNotes } from './supplier-notes'
 import { SupplierProducts } from './supplier-products'
+import { SupplierReviewPanel } from './supplier-review-panel'
 
 /** Supplier detail (TRY-BNP-PORTAL-01 §9). */
 export function SupplierDetail({ id }: { id: string }) {
@@ -44,7 +45,7 @@ export function SupplierDetail({ id }: { id: string }) {
       </div>
     )
 
-  const { supplier } = query.data
+  const { supplier, version } = query.data
   const lapsing = expiringSoon(supplier.certifications ?? [])
 
   return (
@@ -105,7 +106,9 @@ export function SupplierDetail({ id }: { id: string }) {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="p-gutter">
+          <TabsContent value="overview" className="space-y-gutter p-gutter">
+            <SupplierReviewPanel supplier={supplier} version={version} />
+
             <div className="grid max-w-4xl gap-gutter sm:grid-cols-2">
               <Card>
                 <CardHeader>
@@ -126,6 +129,8 @@ export function SupplierDetail({ id }: { id: string }) {
                 </Alert>
               ) : null}
             </div>
+
+            <SupplierTradeProfile supplier={supplier} />
           </TabsContent>
 
           <TabsContent value="contacts">
@@ -258,6 +263,97 @@ function CertificationRow({ certification }: { certification: SupplierCertificat
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * What the supplier told us about how they trade.
+ *
+ * Rendered only when there is something to show, so a supplier keyed in by the
+ * team does not get an empty card. `proposedProducts` and
+ * `claimedCertifications` are labelled as claims on purpose: neither has been
+ * verified, and the wording is what stops a reviewer reading them as fact.
+ */
+function SupplierTradeProfile({ supplier }: { supplier: Supplier }) {
+  const lists: Array<[string, string[] | undefined]> = [
+    ['Export countries', supplier.exportCountries],
+    ['Shipping ports', supplier.shippingPorts],
+    ['Languages', supplier.languages],
+  ]
+  const facts: Array<[string, string | null | undefined]> = [
+    ['MOQ', supplier.moq],
+    ['Production capacity', supplier.productionCapacity],
+    ['Lead time', supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : null],
+    ['Container capacity', supplier.containerCapacity],
+    ['Packaging', supplier.packaging],
+    ['Payment terms', supplier.paymentTerms],
+    ['Established', supplier.establishedYear ? String(supplier.establishedYear) : null],
+    ['Employees', supplier.employeeCount ? String(supplier.employeeCount) : null],
+  ]
+
+  const claims: Array<[string, string[] | undefined]> = [
+    ['Products stated', supplier.proposedProducts],
+    ['Certifications claimed', supplier.claimedCertifications],
+  ]
+
+  const anything =
+    lists.some(([, v]) => v && v.length > 0) ||
+    facts.some(([, v]) => Boolean(v)) ||
+    claims.some(([, v]) => v && v.length > 0)
+  if (!anything) return null
+
+  return (
+    <Card className="max-w-4xl">
+      <CardHeader>
+        <CardTitle>Trade profile</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-gutter">
+        <dl className="grid gap-gap sm:grid-cols-2">
+          {facts
+            .filter(([, value]) => Boolean(value))
+            .map(([label, value]) => (
+              <Row key={label} label={label} value={value ?? null} />
+            ))}
+        </dl>
+
+        {lists
+          .filter(([, values]) => values && values.length > 0)
+          .map(([label, values]) => (
+            <div key={label}>
+              <p className="text-xs text-content-muted">{label}</p>
+              <ul className="mt-gap-xs flex flex-wrap gap-gap-xs">
+                {values!.map((value) => (
+                  <li key={value}>
+                    <Badge tone="neutral" size="sm">
+                      {value}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+
+        {claims
+          .filter(([, values]) => values && values.length > 0)
+          .map(([label, values]) => (
+            <div key={label}>
+              <p className="text-xs text-content-muted">
+                {label}{' '}
+                <span className="text-content-subtle">— stated by the supplier, not verified</span>
+              </p>
+              <ul className="mt-gap-xs flex flex-wrap gap-gap-xs">
+                {values!.map((value) => (
+                  <li key={value}>
+                    <Badge tone="warning" size="sm">
+                      {value}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+      </CardContent>
+    </Card>
   )
 }
 

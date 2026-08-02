@@ -46,6 +46,22 @@ export interface Supplier extends SupplierListItem {
   gstNumber: string | null
   iecNumber: string | null
   panNumber: string | null
+  /** True when the record came from the public registration form. */
+  isSelfRegistered?: boolean
+  submittedAt?: string | null
+  establishedYear?: number | null
+  employeeCount?: number | null
+  exportCountries?: string[]
+  shippingPorts?: string[]
+  languages?: string[]
+  packaging?: string | null
+  paymentTerms?: string | null
+  containerCapacity?: string | null
+  moq?: string | null
+  productionCapacity?: string | null
+  leadTimeDays?: number | null
+  proposedProducts?: string[]
+  claimedCertifications?: string[]
   contacts: Array<{
     id: string
     name: string

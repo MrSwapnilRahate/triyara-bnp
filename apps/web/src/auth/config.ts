@@ -2,7 +2,16 @@ import type { Role } from '@triyara/auth'
 import type { NextAuthConfig } from 'next-auth'
 
 // Public pages that never require a session.
-const PUBLIC_PATHS = ['/', '/login', '/forgot-password', '/reset-password']
+const PUBLIC_PATHS = [
+  '/',
+  '/login',
+  '/forgot-password',
+  '/reset-password',
+  // Supplier self-registration. A supplier we have never met has no account, so
+  // sending them to /login would defeat the entire point of the form.
+  '/register/supplier',
+  '/register/supplier/thank-you',
+]
 
 // Edge-safe base config (no Node-only deps). Used by middleware and extended by the
 // Node instance in ./index.ts which adds the Credentials provider.
