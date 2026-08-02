@@ -7,6 +7,10 @@ export const supplierKeys = {
   detail: (id: string) => [...supplierKeys.all, 'detail', id] as const,
   offerings: (id: string, query: Record<string, unknown> = {}) =>
     [...supplierKeys.all, 'detail', id, 'offerings', query] as const,
+  /** Prefix, so any filtered page of a supplier's notes invalidates together. */
+  notesFor: (id: string) => [...supplierKeys.all, 'detail', id, 'notes'] as const,
+  notes: (id: string, query: Record<string, unknown> = {}) =>
+    [...supplierKeys.notesFor(id), query] as const,
 
   search: (query: string) => [...supplierKeys.all, 'search', query] as const,
   countries: () => [...supplierKeys.all, 'countries'] as const,

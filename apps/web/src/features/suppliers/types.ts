@@ -123,6 +123,35 @@ export interface SupplierOffering {
   product?: { id: string; sku: string; name: string } | null
 }
 
+export type SupplierNoteSource =
+  'WHATSAPP' | 'INSTAGRAM' | 'LINKEDIN' | 'EMAIL' | 'PHONE' | 'TRADEINDIA' | 'INDIAMART' | 'OTHER'
+
+export interface SupplierNote {
+  id: string
+  supplierId: string
+  authorId: string
+  body: string
+  source: SupplierNoteSource | null
+  editedAt: string | null
+  version: number
+  createdAt: string
+  updatedAt: string
+  /** Null when the author's user record is gone; the note itself survives. */
+  author: { id: string; name: string; email: string } | null
+}
+
+/** Channel labels. The enum is SHOUTY; these are what people call them. */
+export const NOTE_SOURCE_LABELS: Record<SupplierNoteSource, string> = {
+  WHATSAPP: 'WhatsApp',
+  INSTAGRAM: 'Instagram',
+  LINKEDIN: 'LinkedIn',
+  EMAIL: 'Email',
+  PHONE: 'Phone',
+  TRADEINDIA: 'TradeIndia',
+  INDIAMART: 'IndiaMART',
+  OTHER: 'Other',
+}
+
 /** Certifications lapsing within 30 days, for the detail-page warning. */
 export function expiringSoon(certifications: SupplierCertification[], days = 30): number {
   const threshold = Date.now() + days * 86_400_000

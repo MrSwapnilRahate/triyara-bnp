@@ -26,6 +26,7 @@ import { Can } from '@/lib/ability-context'
 
 import { useSupplier } from '../api/suppliers'
 import { expiringSoon, isExpired, type SupplierCertification } from '../types'
+import { SupplierNotes } from './supplier-notes'
 import { SupplierProducts } from './supplier-products'
 
 /** Supplier detail (TRY-BNP-PORTAL-01 §9). */
@@ -94,6 +95,7 @@ export function SupplierDetail({ id }: { id: string }) {
               Certifications
             </TabsTrigger>
             <TabsTrigger value="products">Products</TabsTrigger>
+            <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="banking" count={supplier.bankAccounts?.length ?? 0}>
               Banking
             </TabsTrigger>
@@ -209,6 +211,10 @@ export function SupplierDetail({ id }: { id: string }) {
 
           <TabsContent value="products" className="p-gutter">
             <SupplierProducts supplierId={supplier.id} />
+          </TabsContent>
+
+          <TabsContent value="notes" className="p-gutter">
+            <SupplierNotes supplierId={supplier.id} />
           </TabsContent>
 
           <TabsContent value="banking" className="p-gutter">

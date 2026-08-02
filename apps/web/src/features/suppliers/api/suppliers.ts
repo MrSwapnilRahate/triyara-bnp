@@ -4,8 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   CreateSupplierDto,
   ListSuppliersQuery,
+  SupplierNoteDto,
   SupplierOfferingDto,
   UpdateSupplierDto,
+  UpdateSupplierNoteDto,
 } from '@triyara/validation'
 
 import { api, type ApiMeta, queryString } from '@/lib/api-client'
@@ -16,6 +18,7 @@ import type {
   CountryFacet,
   Supplier,
   SupplierListItem,
+  SupplierNote,
   SupplierOffering,
   SupplierSearchHit,
 } from '../types'
@@ -152,6 +155,78 @@ export function useSupplierOfferings(
     },
     staleTime: STALE_TIME.list,
     placeholderData: (previous) => previous,
+  })
+}
+
+// ---- Notes (the CRM timeline) ----
+
+export function useSupplierNotes(
+  supplierId: string | undefined,
+  query: Record<string, string | undefined> = {},
+) {
+  return useQuery({
+    queryKey: supplierKeys.notes(supplierId ?? '', query),
+    enabled: Boolean(supplierId),
+    queryFn: async ({ signal }): Promise<{ items: SupplierNote[]; meta: ApiMeta }> => {
+      const result = await api.get<SupplierNote[]>(
+        `${BASE}/${supplierId}/notes${queryString(query)}`,
+        { signal },
+      )
+      return { items: result.data ?? [], meta: result.meta }
+    },
+    staleTime: STALE_TIME.list,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useAddSupplierNote(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (dto: SupplierNoteDto) => {
+      const result = await api.post<SupplierNote>(`${BASE}/${supplierId}/notes`, dto)
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.notesFor(supplierId) })
+    },
+  })
+}
+
+export function useUpdateSupplierNote(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      id,
+      dto,
+      version,
+    }: {
+      id: string
+      dto: UpdateSupplierNoteDto
+      version: number
+    }) => {
+      const result = await api.patch<SupplierNote>(
+        `${BASE}/${supplierId}/notes/${id}`,
+        dto,
+        version,
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.notesFor(supplierId) })
+    },
+  })
+}
+
+export function useDeleteSupplierNote(supplierId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      await api.delete(`${BASE}/${supplierId}/notes/${id}`, version)
+      return id
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.notesFor(supplierId) })
+    },
   })
 }
 

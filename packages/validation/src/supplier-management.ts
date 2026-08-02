@@ -220,6 +220,57 @@ export const supplierCertificationSchema = z.object({
 })
 export type SupplierCertificationDto = z.infer<typeof supplierCertificationSchema>
 
+// ---- Notes (the CRM timeline) ----
+
+/** The channels a supplier actually reaches Triyara on. */
+export const SUPPLIER_NOTE_SOURCES = [
+  'WHATSAPP',
+  'INSTAGRAM',
+  'LINKEDIN',
+  'EMAIL',
+  'PHONE',
+  'TRADEINDIA',
+  'INDIAMART',
+  'OTHER',
+] as const
+export const supplierNoteSourceSchema = z.enum(SUPPLIER_NOTE_SOURCES)
+
+/**
+ * Notes are pasted from chat threads, so the ceiling is generous and the body
+ * is trimmed but never reshaped. `min(1)` after trimming rejects a note that is
+ * only whitespace, which would otherwise sit in the timeline saying nothing.
+ */
+const noteBody = z.string().trim().min(1, 'A note needs some text.').max(10_000)
+
+export const supplierNoteSchema = z.object({
+  body: noteBody,
+  source: supplierNoteSourceSchema.optional(),
+})
+export type SupplierNoteDto = z.infer<typeof supplierNoteSchema>
+
+/**
+ * Every field optional, but at least one required: a PATCH that changes nothing
+ * still costs a version bump, so it is a client bug worth reporting.
+ */
+export const updateSupplierNoteSchema = z
+  .object({
+    body: noteBody.optional(),
+    /** Explicit null clears the channel; absent leaves it untouched. */
+    source: supplierNoteSourceSchema.nullable().optional(),
+  })
+  .refine((v) => v.body !== undefined || v.source !== undefined, {
+    message: 'Provide a body or a source to update.',
+  })
+export type UpdateSupplierNoteDto = z.infer<typeof updateSupplierNoteSchema>
+
+export const listSupplierNotesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  cursor: z.string().optional(),
+  source: supplierNoteSourceSchema.optional(),
+  authorId: z.string().optional(),
+})
+export type ListSupplierNotesQuery = z.infer<typeof listSupplierNotesQuerySchema>
+
 // ---- Product offerings (the catalog bridge) ----
 
 export const supplierOfferingSchema = z.object({

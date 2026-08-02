@@ -159,6 +159,12 @@ export {
   type SupplierSearchHit,
 } from './supplier-management/supplier.service'
 export {
+  createSupplierNoteService,
+  type NoteServiceCtx,
+  type NoteServiceDeps,
+  type SupplierNoteService,
+} from './supplier-management/supplier-note.service'
+export {
   createSupplierOfferingService,
   type OfferingServiceCtx,
   type OfferingServiceDeps,
