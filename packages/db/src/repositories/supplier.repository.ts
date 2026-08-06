@@ -32,6 +32,18 @@ const listSelect = {
   isVerified: true,
   verifiedAt: true,
   accountId: true,
+
+  // Matching scalars (TRY-BNP-SUPPLIER-MATCH). A shortlist has to show WHY a
+  // supplier is on it, or the reader opens every row to find out — which is
+  // the thirty seconds this is meant to save. Scalars only: the projection
+  // still excludes every owned collection, as below.
+  exportCountries: true,
+  packaging: true,
+  paymentTerms: true,
+  moq: true,
+  leadTimeDays: true,
+  productionCapacity: true,
+
   version: true,
   createdAt: true,
   updatedAt: true,
@@ -157,6 +169,13 @@ export interface ListSuppliersParams {
   city?: string
   isVerified?: boolean
   productId?: string
+  /** Upper bound on an OFFERING's minimum order quantity, not the company's. */
+  maxMoq?: number
+  certification?: CertificationType
+  packaging?: string
+  paymentTerms?: string
+  /** ISO 3166-1 alpha-2; membership of the supplier's export markets. */
+  exportCountry?: string
   tagId?: string
   gstNumber?: string
   iecNumber?: string
@@ -258,9 +277,51 @@ export const supplierRepository = {
       ...(params.panNumber ? { panNumber: params.panNumber } : {}),
       ...(params.tagId ? { tags: { some: { tagId: params.tagId } } } : {}),
       // "Who supplies product X?" - the sourcing question.
-      ...(params.productId
-        ? { offerings: { some: { productId: params.productId, deletedAt: null } } }
+      // Product and MOQ are ONE `some`, not two.
+      //
+      // Two separate clauses would mean "supplies product X" AND "has some
+      // offering at or below this MOQ" — which a supplier satisfies with two
+      // unrelated offerings, putting it on the shortlist for a product it
+      // cannot actually supply at that quantity. Sourcing asks a single
+      // question about a single offering, so it is expressed as one.
+      ...(params.productId || params.maxMoq !== undefined
+        ? {
+            offerings: {
+              some: {
+                deletedAt: null,
+                ...(params.productId ? { productId: params.productId } : {}),
+                ...(params.maxMoq === undefined
+                  ? {}
+                  : // An offering with no stated MOQ is not evidence of
+                    // meeting one, so it is excluded rather than assumed zero.
+                    { moq: { lte: params.maxMoq, not: null } }),
+              },
+            },
+          }
         : {}),
+
+      // Held, current, and not withdrawn. An expired certificate answers a
+      // different question from the one a sourcing filter is asking.
+      ...(params.certification
+        ? {
+            certifications: {
+              some: { type: params.certification, status: 'ACTIVE', deletedAt: null },
+            },
+          }
+        : {}),
+
+      // Free text on the supplier record, so substring is the only honest
+      // match available: "25kg PP bags" has no structure to compare against.
+      ...(params.packaging
+        ? { packaging: { contains: params.packaging, mode: 'insensitive' } }
+        : {}),
+      ...(params.paymentTerms
+        ? { paymentTerms: { contains: params.paymentTerms, mode: 'insensitive' } }
+        : {}),
+
+      // A real array column, so this is an exact membership test rather than a
+      // substring one — "AE" will not match "UAE" or "SAE".
+      ...(params.exportCountry ? { exportCountries: { has: params.exportCountry } } : {}),
       ...(params.q
         ? {
             OR: [
