@@ -91,6 +91,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
         q: query.q,
         type: query.type,
         status: query.status,
+        openOnly: query.openOnly === 'true',
         priority: query.priority,
         buyerId: query.buyerId,
         supplierId: query.supplierId,

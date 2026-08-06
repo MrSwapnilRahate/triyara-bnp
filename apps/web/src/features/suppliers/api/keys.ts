@@ -15,6 +15,14 @@ export const supplierKeys = {
   notes: (id: string, query: Record<string, unknown> = {}) =>
     [...supplierKeys.notesFor(id), query] as const,
 
+  // Matching (TRY-BNP-SUPPLIER-MATCH). Under the same root so a supplier
+  // mutation anywhere invalidates the shortlist too.
+  shortlist: (query: Record<string, unknown> = {}) =>
+    [...supplierKeys.all, 'shortlist', query] as const,
+  score: (id: string) => [...supplierKeys.all, 'detail', id, 'score'] as const,
+  rfqHistory: (id: string) => [...supplierKeys.all, 'detail', id, 'rfqs'] as const,
+  quotationHistory: (id: string) => [...supplierKeys.all, 'detail', id, 'quotations'] as const,
+
   search: (query: string) => [...supplierKeys.all, 'search', query] as const,
   countries: () => [...supplierKeys.all, 'countries'] as const,
   certifications: () => [...supplierKeys.all, 'certifications'] as const,
