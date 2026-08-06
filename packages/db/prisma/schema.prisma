@@ -50,6 +50,16 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Tenant-wide display settings (TRY-BNP-ADMIN-01). Every column is nullable
+  // or defaulted, so the migration is additive and existing rows stay valid.
+  // These govern PRESENTATION only - a quotation still stores its own currency,
+  // because changing the tenant default must never restate a sent document.
+  logoUrl         String?
+  defaultCurrency String  @default("USD")
+  timezone        String  @default("UTC")
+  dateFormat      String  @default("DD/MM/YYYY")
+  language        String  @default("en")
+
   users    User[]
   accounts Account[]
 
@@ -74,6 +84,12 @@ model User {
   passwordHash   String
   status         UserStatus @default(ACTIVE)
   lastLoginAt    DateTime?
+
+  // Personal presentation (TRY-BNP-ADMIN-01). `preferences` is free-form JSON
+  // on purpose: it holds UI choices the server never interprets, so adding one
+  // must not need a migration. Anything the server acts on gets a column.
+  avatarUrl      String?
+  preferences    Json?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -1115,6 +1131,13 @@ enum SupplierDocumentType {
   MSME
   IMPORT_EXPORT_LICENSE
   FACTORY_LICENSE
+  /// Distinct from FACTORY_LICENCE: photographs of the premises, which the
+  /// registration form asks for and reviewers look at first. Filing them under
+  /// OTHER would bury them among unrelated attachments.
+  FACTORY_PHOTOS
+  /// A certificate scan supplied at registration, before anyone has verified it
+  /// into a SupplierCertification row.
+  CERTIFICATE
   COMPANY_PROFILE
   CATALOG
   LAB_REPORT
@@ -1156,6 +1179,21 @@ enum PerformanceSource {
   IMPORTED
 }
 
+/// Where a supplier conversation actually happened. Sourcing at Triyara runs
+/// across a supplier's channel of choice, not ours, so the channel is part of
+/// the record: "we agreed $1800 CIF" is worth far less than knowing it was
+/// agreed on WhatsApp on a date, by a named person, and can be found again.
+enum SupplierNoteSource {
+  WHATSAPP
+  INSTAGRAM
+  LINKEDIN
+  EMAIL
+  PHONE
+  TRADEINDIA
+  INDIAMART
+  OTHER
+}
+
 // NOTE: `Incoterm` is NOT declared here. It is owned by the Product Catalog
 // and reused as-is; redefining it would fail to compile.
 
@@ -1191,6 +1229,49 @@ model Supplier {
   isVerified Boolean        @default(false)
   verifiedAt DateTime?
 
+  /// Company-level trade profile, captured when a supplier registers itself.
+  ///
+  /// These live on Supplier rather than on SupplierProfile — which already has
+  /// exportCountries, packaging, paymentTerms and languages — because
+  /// SupplierProfile is FROZEN and hangs off a non-null `accountId`. A supplier
+  /// filling in a public form has no Account, so that model is unreachable to
+  /// it. Two aggregates that share a word, as the service comments note.
+  establishedYear   Int?
+  employeeCount     Int?
+  exportCountries   String[]
+  shippingPorts     String[]
+  languages         String[]
+  packaging         String?
+  paymentTerms      String?
+  containerCapacity String?
+
+  /// Company-level supply defaults. Per-product terms still belong on
+  /// SupplierProductOffering; these are what a registrant states once, before
+  /// anyone has agreed a product line with them.
+  moq                String?
+  productionCapacity String?
+  leadTimeDays       Int?
+
+  /// Products a registrant named that are not in the catalog. An offering needs
+  /// a real `productId` (the FK is Restrict), so without somewhere to put these
+  /// the answer would simply be discarded. Admin converts them into catalog
+  /// products, and offerings, during review.
+  proposedProducts String[]
+
+  /// Certifications the registrant SAYS they hold, with the scan attached as a
+  /// document. Deliberately not SupplierCertification rows: that model requires
+  /// a certificateNumber and asserts the supplier holds the certificate, which
+  /// is a statement only a reviewer who has read the scan is entitled to make.
+  /// The claim and the verified record are different things, and conflating
+  /// them would let an unverified applicant appear certified.
+  claimedCertifications String[]
+
+  /// Whether this record arrived through the public registration form rather
+  /// than being keyed in by the team. The review queue treats the two
+  /// differently: nothing on a self-registered record has been checked by us.
+  isSelfRegistered Boolean   @default(false)
+  submittedAt      DateTime?
+
   /// Optional seam to the frozen Account aggregate, so a supplier that is also
   /// a known partner is not two disconnected records. Plain nullable link -
   /// the Account module is not modified. See §4.1.
@@ -1215,6 +1296,7 @@ model Supplier {
   performance            SupplierPerformance[]
   approvals              SupplierApproval[]
   tags                   SupplierTag[]
+  notes                  SupplierNote[]
   rfqParticipations      RFQSupplier[]
   quotationSourceOptions QuotationSourceOption[]
 
@@ -1419,6 +1501,42 @@ model SupplierDocument {
   @@index([organizationId, expiryDate])
   @@index([documentId])
   @@index([supplierId, deletedAt])
+}
+
+/// Free-text CRM timeline against a supplier: the running record of what was
+/// said, by whom, on which channel. Deliberately unstructured — MOQ, target
+/// price, payment terms, sample status and negotiation history arrive mixed
+/// together in one WhatsApp message, and forcing them into columns would lose
+/// the ones nobody anticipated.
+///
+/// `authorId` carries no foreign key, matching VerificationNote, RFQComment and
+/// AuditLog: an authored historical record must not become undeletable, or
+/// silently disappear, because of what later happens to the user row. Author
+/// identity is resolved by a separate lookup in the repository.
+model SupplierNote {
+  id             String @id @default(cuid())
+  supplierId     String
+  organizationId String
+
+  authorId String
+  body     String              @db.Text
+  source   SupplierNoteSource?
+
+  /// Null until the body is first changed. Distinguishes "written once" from
+  /// "revised", which matters when a note records an agreed price.
+  editedAt DateTime?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  /// The timeline read: one supplier, newest first, deleted rows excluded.
+  @@index([supplierId, deletedAt, createdAt])
+  @@index([organizationId, authorId])
+  @@index([organizationId, source])
 }
 
 // ==========================================================================

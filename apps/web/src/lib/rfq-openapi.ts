@@ -1,4 +1,5 @@
 import {
+  RFQ_APPROVAL_STATUSES,
   RFQ_INCOTERMS,
   RFQ_PRIORITIES,
   RFQ_STATUSES,
@@ -125,6 +126,11 @@ export const rfqOpenApiDocument = {
       '  EVALUATING -> AWARDED -> CLOSED, with CANCELLED and EXPIRED as exits.',
       'Illegal moves return 409 naming the states that are legal from here.',
       '',
+      'Reaching ISSUED has two prerequisites, both refused with 409 if unmet:',
+      'the RFQ must be APPROVED, which is driven by POST /{id}/approvals one',
+      'decision at a time (there is no jump from DRAFT straight to APPROVED),',
+      'and it must have at least one invited supplier from POST /{id}/suppliers.',
+      '',
       'Once ISSUED, commercial terms (currency, incoterm, deadline, destination',
       'port) are frozen: the RFQ is out with suppliers. Changing lines cuts a new',
       'revision rather than editing in place.',
@@ -135,8 +141,10 @@ export const rfqOpenApiDocument = {
   tags: [
     { name: 'RFQs', description: 'Request-for-quotation records.' },
     { name: 'Items', description: 'The lines an RFQ asks suppliers to quote.' },
+    { name: 'Suppliers', description: 'Invited suppliers and their participation.' },
     { name: 'Responses', description: 'Supplier bids.' },
     { name: 'Workflow', description: 'Lifecycle transitions.' },
+    { name: 'History', description: 'Approval decisions and line-item revisions.' },
   ],
   paths: {
     '/': {
@@ -338,6 +346,194 @@ export const rfqOpenApiDocument = {
         },
       },
     },
+    '/{id}/suppliers': {
+      get: {
+        tags: ['Suppliers'],
+        summary: 'List invited suppliers',
+        description:
+          'Who was invited to bid, and where each one stands. `id` on a participation row is the `rfqSupplierId` a bid is submitted against.',
+        parameters: [idParam],
+        responses: {
+          '200': {
+            description: 'Invited suppliers with their participation state.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/RfqParticipation' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+      post: {
+        tags: ['Suppliers'],
+        summary: 'Invite suppliers to bid',
+        description:
+          'Idempotent per supplier: an already-invited supplier is skipped rather than duplicated, so this returns 200 rather than 201. Refused once the RFQ is AWARDED, CLOSED, CANCELLED or EXPIRED. At least one invited supplier is required before the RFQ can be published.',
+        parameters: [idParam],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['supplierIds'],
+                properties: {
+                  supplierIds: {
+                    type: 'array',
+                    minItems: 1,
+                    maxItems: 100,
+                    items: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'The full invited set after the invitation.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/RfqParticipation' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/{id}/approvals': {
+      get: {
+        tags: ['History'],
+        summary: 'List approval decisions',
+        description: 'The decision trail, newest first.',
+        parameters: [idParam],
+        responses: {
+          '200': {
+            description: 'Decisions, newest first.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/RfqApproval' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+      post: {
+        tags: ['History'],
+        summary: 'Record an approval decision',
+        description:
+          'Drives the sourcing status: PENDING moves an RFQ to PENDING_APPROVAL, APPROVED to APPROVED, REJECTED and CANCELLED to their exits. Each decision must be legal from the current status, so DRAFT cannot jump straight to APPROVED. Approving an RFQ with no lines is refused. Requires ADMIN (`manage Account`).',
+        parameters: [idParam, ifMatch],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['decision'],
+                properties: {
+                  decision: { type: 'string', enum: RFQ_APPROVAL_STATUSES },
+                  comments: { type: 'string', maxLength: 2000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Decision recorded; the RFQ moved.',
+            headers: { ETag: { schema: { type: 'string' } } },
+            content: {
+              'application/json': {
+                schema: envelope({ $ref: '#/components/schemas/Rfq' }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/{id}/revisions': {
+      get: {
+        tags: ['History'],
+        summary: 'List line-item revisions',
+        description:
+          'Newest first. Each entry carries the snapshot taken when the lines were replaced, so a reviewer can see what the RFQ asked for at the point a supplier quoted against it. Creating an RFQ records revision 1.',
+        parameters: [idParam],
+        responses: {
+          '200': {
+            description: 'Revisions, newest first.',
+            content: {
+              'application/json': {
+                schema: envelope({
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/RfqRevision' },
+                }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/{id}/suppliers/{participationId}': {
+      patch: {
+        tags: ['Suppliers'],
+        summary: 'Record where a supplier stands',
+        description:
+          'Moves a participation to VIEWED, ACCEPTED, DECLINED, NO_RESPONSE or WITHDRAWN. A decline needs a reason. SUBMITTED is refused: a bid is recorded by POSTing a response, so a participation can never claim a bid that does not exist.',
+        parameters: [
+          idParam,
+          {
+            name: 'participationId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            description: 'The rfqSupplierId from GET /{id}/suppliers.',
+          },
+          ifMatch,
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  status: { type: 'string', enum: RFQ_SUPPLIER_STATUSES },
+                  declineReason: { type: 'string', maxLength: 1000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Updated.',
+            headers: { ETag: { schema: { type: 'string' } } },
+            content: {
+              'application/json': {
+                schema: envelope({ $ref: '#/components/schemas/RfqParticipation' }),
+              },
+            },
+          },
+          ...errorResponses,
+        },
+      },
+    },
     '/{id}/responses': {
       get: {
         tags: ['Responses'],
@@ -517,6 +713,33 @@ export const rfqOpenApiDocument = {
           status: { type: 'string', enum: RFQ_SUPPLIER_STATUSES },
           isLate: { type: 'boolean' },
           supplier: { type: ['object', 'null'], additionalProperties: true },
+        },
+      },
+      RfqApproval: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          sequence: { type: 'integer', description: 'Order of the decision; highest is newest.' },
+          fromStatus: { type: ['string', 'null'], enum: [...RFQ_APPROVAL_STATUSES, null] },
+          toStatus: { type: 'string', enum: RFQ_APPROVAL_STATUSES },
+          approverId: { type: ['string', 'null'] },
+          comments: { type: ['string', 'null'] },
+          decidedAt: { type: ['string', 'null'], format: 'date-time' },
+        },
+      },
+      RfqRevision: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          revisionNumber: { type: 'integer' },
+          reason: { type: ['string', 'null'] },
+          snapshot: {
+            type: 'object',
+            additionalProperties: true,
+            description: 'The RFQ as it stood after this revision was cut.',
+          },
+          changedById: { type: ['string', 'null'] },
+          changedAt: { type: 'string', format: 'date-time' },
         },
       },
       RfqResponse: {

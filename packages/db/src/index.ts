@@ -18,6 +18,21 @@ export {
   type ListActivitiesParams,
   type NewActivity,
 } from './repositories/activity.repository'
+export type {
+  AnalyticsRepository,
+  CountryPoint,
+  DashboardTrends,
+  FunnelStage,
+  MonthlyPoint,
+} from './repositories/analytics.repository'
+export { analyticsRepository } from './repositories/analytics.repository'
+export type {
+  AuditListResult,
+  AuditRecord,
+  AuditRepository,
+  ListAuditParams,
+} from './repositories/audit.repository'
+export { auditRepository } from './repositories/audit.repository'
 export {
   type AddBuyerProductData,
   type BuyerProfileData,
@@ -42,6 +57,8 @@ export {
   type ListCategoriesParams,
   type UpdateCategoryData,
 } from './repositories/category.repository'
+export type { DashboardRepository, DashboardSummary } from './repositories/dashboard.repository'
+export { dashboardRepository } from './repositories/dashboard.repository'
 export {
   type CreateDocumentInput,
   type DocumentListItem,
@@ -77,6 +94,10 @@ export {
   type UpsertPreference,
 } from './repositories/notification-preference.repository'
 export { orgUserRepository } from './repositories/org-user.repository'
+export type {
+  OrganizationRepository,
+  OrganizationSettingsData,
+} from './repositories/organization.repository'
 export { organizationRepository } from './repositories/organization.repository'
 export { passwordResetRepository } from './repositories/password-reset.repository'
 export {
@@ -172,6 +193,42 @@ export {
   type UpdateSupplierData,
 } from './repositories/supplier.repository'
 export {
+  type SupplierCertificationData,
+  type SupplierCertificationRecord,
+  type SupplierCertificationRepository,
+  supplierCertificationRepository,
+} from './repositories/supplier-certification.repository'
+export {
+  type SupplierContactData,
+  type SupplierContactRecord,
+  type SupplierContactRepository,
+  supplierContactRepository,
+} from './repositories/supplier-contact.repository'
+export {
+  type SupplierDocumentData,
+  type SupplierDocumentRecord,
+  type SupplierDocumentRepository,
+  supplierDocumentRepository,
+} from './repositories/supplier-document.repository'
+export {
+  type HistoryParams,
+  type HistoryResult,
+  type SupplierHistoryRepository,
+  supplierHistoryRepository,
+  type SupplierQuotationHistoryItem,
+  type SupplierRfqHistoryItem,
+} from './repositories/supplier-history.repository'
+export {
+  type CreateNoteData,
+  type ListNotesParams,
+  type NoteAuthor,
+  type NoteListResult,
+  type NoteRecord,
+  type SupplierNoteRepository,
+  supplierNoteRepository,
+  type UpdateNoteData,
+} from './repositories/supplier-note.repository'
+export {
   type ListOfferingsParams,
   type OfferingListResult,
   type OfferingRecord,
@@ -186,7 +243,36 @@ export {
   type SupplierProfileRepository,
   supplierProfileRepository,
 } from './repositories/supplier-profile.repository'
-export { userRepository, type UserWithRoles } from './repositories/user.repository'
+export {
+  type RegistrationBusiness,
+  type RegistrationCompany,
+  type RegistrationContact,
+  type RegistrationData,
+  type RegistrationResult,
+  type SupplierRegistrationRepository,
+  supplierRegistrationRepository,
+  type VerifiedUpload,
+} from './repositories/supplier-registration.repository'
+export {
+  collectScoreSignals,
+  type SupplierScoreRepository,
+  supplierScoreRepository,
+  type SupplierScoreSignals,
+} from './repositories/supplier-score.repository'
+export {
+  type AdminUserListResult,
+  type AdminUserRecord,
+  type ListAdminUsersParams,
+  type UserRepository,
+  userRepository,
+  type UserWithRoles,
+} from './repositories/user.repository'
+export {
+  isUniqueViolation,
+  type UserRoleRecord,
+  type UserRoleRepository,
+  userRoleRepository,
+} from './repositories/user-role.repository'
 export {
   type EmailVerificationTokenRecord,
   type UserSecurityProfileRecord,
@@ -236,6 +322,7 @@ export type {
   RoleScopeType,
   SessionEndReason,
   SupplierBusinessType,
+  SupplierNoteSource,
   SupplierProductStatus,
   SupplierStatus,
   TaxType,

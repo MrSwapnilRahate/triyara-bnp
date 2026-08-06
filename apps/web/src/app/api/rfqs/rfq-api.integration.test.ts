@@ -36,6 +36,10 @@ const { GET: listResponses, POST: submitResponse } = await import('./[id]/respon
 const { POST: publishRfq } = await import('./[id]/publish/route')
 const { POST: closeRfq } = await import('./[id]/close/route')
 const { POST: reopenRfq } = await import('./[id]/reopen/route')
+const { GET: listSuppliers, POST: inviteSuppliers } = await import('./[id]/suppliers/route')
+const { PATCH: setParticipation } = await import('./[id]/suppliers/[participationId]/route')
+const { GET: listApprovals, POST: decideRfq } = await import('./[id]/approvals/route')
+const { GET: listRevisions } = await import('./[id]/revisions/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -264,6 +268,230 @@ describe.skipIf(!process.env.DATABASE_URL)('RFQ API (integration, real PostgreSQ
       )
       expect(del.status).toBe(200)
       expect((await getRfq(req(`/api/rfqs/${rfq.id}`), params(rfq.id))).status).toBe(404)
+    })
+  })
+
+  describe('lifecycle endpoints', () => {
+    it('takes an RFQ all the way to ISSUED over HTTP alone', async () => {
+      // The point of both new routes. Publishing used to be unreachable twice
+      // over: issue() refuses an RFQ that is not APPROVED *and* one with no
+      // invited suppliers, and neither decide() nor invite() was exposed. These
+      // very tests had to reach past HTTP into Prisma to get to either state.
+      //
+      // Every step below is an HTTP call. No Prisma writes.
+      const rfq = await create()
+      let version = rfq.version
+
+      const invited = await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, {
+          method: 'POST',
+          body: JSON.stringify({ supplierIds: [supplierId] }),
+        }),
+        params(rfq.id),
+      )
+      expect(invited.status).toBe(200)
+      expect((await body(invited)).data).toHaveLength(1)
+
+      // DRAFT -> PENDING_APPROVAL -> APPROVED, one decision at a time. The
+      // service refuses a jump straight to APPROVED, which is why this is two
+      // calls and not one.
+      for (const decision of ['PENDING', 'APPROVED'] as const) {
+        const decided = await decideRfq(
+          req(`/api/rfqs/${rfq.id}/approvals`, {
+            method: 'POST',
+            headers: { 'if-match': `W/"v${version}"` },
+            body: JSON.stringify({ decision }),
+          }),
+          params(rfq.id),
+        )
+        expect(decided.status).toBe(201)
+        const payload = await body(decided)
+        expect(payload.meta.status).toBe(decision === 'PENDING' ? 'PENDING_APPROVAL' : 'APPROVED')
+        version = (payload.data as unknown as { version: number }).version
+      }
+
+      const published = await publishRfq(
+        req(`/api/rfqs/${rfq.id}/publish`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${version}"` },
+        }),
+        params(rfq.id),
+      )
+      expect(published.status).toBe(200)
+      expect((await body(published)).meta.status).toBe('ISSUED')
+
+      // ...and the decision trail is readable afterwards.
+      const trail = await body(
+        await listApprovals(req(`/api/rfqs/${rfq.id}/approvals`), params(rfq.id)),
+      )
+      expect(trail.meta.count).toBeGreaterThanOrEqual(2)
+      // Newest first, so the most recent decision leads.
+      expect((trail.data as unknown as Array<{ toStatus: string }>)[0]!.toStatus).toBe('APPROVED')
+    })
+
+    it('refuses to publish an RFQ that was never approved', async () => {
+      // The guard the walk above has to satisfy. Inviting alone is not enough.
+      const rfq = await create()
+      await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, {
+          method: 'POST',
+          body: JSON.stringify({ supplierIds: [supplierId] }),
+        }),
+        params(rfq.id),
+      )
+      const res = await publishRfq(
+        req(`/api/rfqs/${rfq.id}/publish`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${rfq.version}"` },
+        }),
+        params(rfq.id),
+      )
+      expect(res.status).toBe(409)
+    })
+
+    it('refuses a decision the transition table does not allow', async () => {
+      const rfq = await create()
+      const res = await decideRfq(
+        req(`/api/rfqs/${rfq.id}/approvals`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${rfq.version}"` },
+          body: JSON.stringify({ decision: 'APPROVED' }),
+        }),
+        params(rfq.id),
+      )
+      // DRAFT may only go to PENDING_APPROVAL or CANCELLED.
+      expect(res.status).toBe(409)
+    })
+
+    it('is idempotent per supplier - inviting twice does not duplicate', async () => {
+      const rfq = await create()
+      const payload = JSON.stringify({ supplierIds: [supplierId, supplierId2] })
+
+      await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, { method: 'POST', body: payload }),
+        params(rfq.id),
+      )
+      const second = await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, { method: 'POST', body: payload }),
+        params(rfq.id),
+      )
+      expect((await body(second)).data).toHaveLength(2)
+
+      const listed = await body(
+        await listSuppliers(req(`/api/rfqs/${rfq.id}/suppliers`), params(rfq.id)),
+      )
+      expect(listed.data).toHaveLength(2)
+      expect(listed.meta).toMatchObject({ count: 2, submitted: 0 })
+    })
+
+    it('refuses to invite to a CLOSED RFQ', async () => {
+      const rfq = await create()
+      await prisma.rFQ.update({ where: { id: rfq.id }, data: { status: 'CLOSED' } })
+      const res = await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, {
+          method: 'POST',
+          body: JSON.stringify({ supplierIds: [supplierId] }),
+        }),
+        params(rfq.id),
+      )
+      expect(res.status).toBe(409)
+    })
+
+    it('records a decline with its reason', async () => {
+      const rfq = await create()
+      await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, {
+          method: 'POST',
+          body: JSON.stringify({ supplierIds: [supplierId] }),
+        }),
+        params(rfq.id),
+      )
+      const listed = await body(
+        await listSuppliers(req(`/api/rfqs/${rfq.id}/suppliers`), params(rfq.id)),
+      )
+      const participation = (listed.data as unknown as Array<{ id: string; version: number }>)[0]!
+
+      const res = await setParticipation(
+        req(`/api/rfqs/${rfq.id}/suppliers/${participation.id}`, {
+          method: 'PATCH',
+          headers: { 'if-match': `W/"v${participation.version}"` },
+          body: JSON.stringify({ status: 'DECLINED', declineReason: 'Capacity is committed.' }),
+        }),
+        { params: Promise.resolve({ id: rfq.id, participationId: participation.id }) },
+      )
+      expect(res.status).toBe(200)
+      expect((await body(res)).meta.status).toBe('DECLINED')
+    })
+
+    it('refuses a decline with no reason', async () => {
+      const rfq = await create()
+      await inviteSuppliers(
+        req(`/api/rfqs/${rfq.id}/suppliers`, {
+          method: 'POST',
+          body: JSON.stringify({ supplierIds: [supplierId] }),
+        }),
+        params(rfq.id),
+      )
+      const listed = await body(
+        await listSuppliers(req(`/api/rfqs/${rfq.id}/suppliers`), params(rfq.id)),
+      )
+      const participation = (listed.data as unknown as Array<{ id: string; version: number }>)[0]!
+
+      const res = await setParticipation(
+        req(`/api/rfqs/${rfq.id}/suppliers/${participation.id}`, {
+          method: 'PATCH',
+          headers: { 'if-match': `W/"v${participation.version}"` },
+          body: JSON.stringify({ status: 'DECLINED' }),
+        }),
+        { params: Promise.resolve({ id: rfq.id, participationId: participation.id }) },
+      )
+      expect(res.status).toBe(422)
+    })
+
+    it('reports revisions once the lines have been replaced', async () => {
+      const rfq = await create()
+
+      // Creating an RFQ already records revision 1 - the lines it was raised
+      // with - so the interesting assertion is the increment, not the floor.
+      const before = await body(
+        await listRevisions(req(`/api/rfqs/${rfq.id}/revisions`), params(rfq.id)),
+      )
+      expect(before.meta).toMatchObject({ count: 1, currentRevision: 1 })
+
+      const revised = await replaceItems(
+        req(`/api/rfqs/${rfq.id}/items`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${rfq.version}"` },
+          body: JSON.stringify({
+            items: [{ customProductName: 'Revised line', quantity: 5, unit: 'MT' }],
+          }),
+        }),
+        params(rfq.id),
+      )
+      expect(revised.status).toBe(201)
+
+      const after = await body(
+        await listRevisions(req(`/api/rfqs/${rfq.id}/revisions`), params(rfq.id)),
+      )
+      expect(after.meta).toMatchObject({ count: 2, currentRevision: 2 })
+      // The snapshot is taken AFTER the replacement, by design: each revision
+      // row reproduces the RFQ as it stood when suppliers quoted against it.
+      expect(JSON.stringify((after.data as unknown[])[0])).toContain('Revised line')
+    })
+
+    it("does not leak another tenant's participations", async () => {
+      const foreign = await prisma.rFQ.create({
+        data: {
+          organizationId: otherOrgId,
+          rfqNumber: num(),
+          type: 'INTERNAL',
+          title: `Foreign ${uniq()}`,
+          createdById: authState.userId,
+        },
+      })
+      const res = await listSuppliers(req(`/api/rfqs/${foreign.id}/suppliers`), params(foreign.id))
+      // The service scopes by organization, so a foreign RFQ simply has none.
+      expect((await body(res)).data).toHaveLength(0)
     })
   })
 

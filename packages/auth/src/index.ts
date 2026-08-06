@@ -1,4 +1,11 @@
-export { type Action, type AppAbility, buildAbilityFor, type Subject } from './abilities'
+export {
+  type Action,
+  ACTIONS,
+  type AppAbility,
+  buildAbilityFor,
+  type Subject,
+  SUBJECTS,
+} from './abilities'
 export { assertAbility, assertRole, type AuthContext, resolveContext } from './guards'
 export { hashPassword, verifyPassword } from './password'
 export { createInMemoryRateLimiter, type RateLimiter } from './rate-limit'

@@ -1,5 +1,15 @@
+import { AuthLayout, cn } from '@triyara/ui'
 import type { ReactNode } from 'react'
 
+import { Brand } from '@/components/layout/brand'
+
+/**
+ * Unauthenticated shell, now on the design system.
+ *
+ * The public API is unchanged (title, subtitle, children, inputClass,
+ * buttonClass), so the three existing auth pages are restyled without being
+ * touched. That is the point of keeping the seam here.
+ */
 export function AuthShell({
   title,
   subtitle,
@@ -10,17 +20,22 @@ export function AuthShell({
   children: ReactNode
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center px-6">
-      <div className="bg-navy-elevated/60 w-full max-w-sm rounded-2xl border border-white/10 p-8">
-        <h1 className="text-gold text-xl font-bold">{title}</h1>
-        {subtitle ? <p className="mt-1 text-sm text-white/50">{subtitle}</p> : null}
-        <div className="mt-6">{children}</div>
-      </div>
-    </main>
+    <AuthLayout brand={<Brand href="" />} title={title} description={subtitle}>
+      {children}
+    </AuthLayout>
   )
 }
 
-export const inputClass =
-  'w-full rounded-lg border border-white/15 bg-navy/50 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-gold/60 focus:outline-none'
-export const buttonClass =
-  'w-full rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-gold-light disabled:opacity-50'
+/** Field and button classes for the existing auth forms. */
+export const inputClass = cn(
+  'focus-ring h-9 w-full rounded-sm border border-line bg-surface px-2.5 text-base text-content',
+  'placeholder:text-content-subtle hover:border-line-strong',
+  'aria-[invalid=true]:border-danger',
+)
+
+export const buttonClass = cn(
+  'focus-ring inline-flex h-9 w-full items-center justify-center rounded-sm',
+  'bg-accent px-4 text-base font-medium text-accent-fg',
+  'transition-colors duration-fast hover:bg-accent-hover active:bg-accent-active',
+  'disabled:pointer-events-none disabled:opacity-50',
+)

@@ -12,6 +12,21 @@ export {
   createActivityService,
 } from './activity/activity.service'
 export {
+  type AdminService,
+  type AdminServiceCtx,
+  type AdminServiceDeps,
+  createAdminService,
+  type ProfileRecord,
+} from './admin/admin.service'
+export {
+  type AdminUserListItem,
+  type AdminUserListResponse,
+  type AdminUsersService,
+  type AdminUsersServiceCtx,
+  type AdminUsersServiceDeps,
+  createAdminUsersService,
+} from './admin/admin-users.service'
+export {
   createEmailVerificationService,
   type EmailVerificationCtx,
   type EmailVerificationDeps,
@@ -32,6 +47,8 @@ export {
   type PermissionDeps,
   type PermissionMatrix,
   type PermissionService,
+  type RoleMatrix,
+  type RolePermissions,
 } from './auth/permission.service'
 export {
   createScopedRoleService,
@@ -46,6 +63,14 @@ export {
   type SessionServiceCtx,
   type SessionServiceDeps,
 } from './auth/session.service'
+export {
+  type AssignableRole,
+  createUserRoleService,
+  type RoleCatalogue,
+  type UserRoleCtx,
+  type UserRoleDeps,
+  type UserRoleService,
+} from './auth/user-role.service'
 export {
   type BuyerService,
   type BuyerServiceCtx,
@@ -134,11 +159,56 @@ export {
   type SupplierSearchHit,
 } from './supplier-management/supplier.service'
 export {
+  createSupplierCertificationService,
+  type SupplierCertificationCtx,
+  type SupplierCertificationDeps,
+  type SupplierCertificationService,
+} from './supplier-management/supplier-certification.service'
+export {
+  createSupplierContactService,
+  type SupplierContactCtx,
+  type SupplierContactDeps,
+  type SupplierContactService,
+} from './supplier-management/supplier-contact.service'
+export {
+  createSupplierDocumentService,
+  type SupplierDocumentCtx,
+  type SupplierDocumentDeps,
+  type SupplierDocumentService,
+} from './supplier-management/supplier-document.service'
+export {
+  createSupplierMatchingService,
+  type MatchingCtx,
+  type MatchingDeps,
+  type ScoredSupplierListResult,
+  type SupplierMatchingService,
+} from './supplier-management/supplier-matching.service'
+export {
+  createSupplierNoteService,
+  type NoteServiceCtx,
+  type NoteServiceDeps,
+  type SupplierNoteService,
+} from './supplier-management/supplier-note.service'
+export {
   createSupplierOfferingService,
   type OfferingServiceCtx,
   type OfferingServiceDeps,
   type SupplierOfferingService,
 } from './supplier-management/supplier-offering.service'
+export {
+  createSupplierRegistrationService,
+  type OrganizationLookup,
+  type RegistrationServiceCtx,
+  type RegistrationServiceDeps,
+  type SupplierRegistrationService,
+  SYSTEM_ACTOR_ID,
+} from './supplier-management/supplier-registration.service'
+export {
+  MAX_SUPPLIER_SCORE,
+  type ScoreComponent,
+  scoreSupplier,
+  type SupplierScore,
+} from './supplier-management/supplier-score'
 export {
   createVerificationService,
   type ReviewerLookup,
