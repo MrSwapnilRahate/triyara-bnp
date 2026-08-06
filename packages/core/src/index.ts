@@ -190,6 +190,13 @@ export {
   type SupplierDocumentService,
 } from './supplier-management/supplier-document.service'
 export {
+  createSupplierMatchingService,
+  type MatchingCtx,
+  type MatchingDeps,
+  type ScoredSupplierListResult,
+  type SupplierMatchingService,
+} from './supplier-management/supplier-matching.service'
+export {
   createSupplierNoteService,
   type NoteServiceCtx,
   type NoteServiceDeps,
@@ -209,6 +216,12 @@ export {
   type SupplierRegistrationService,
   SYSTEM_ACTOR_ID,
 } from './supplier-management/supplier-registration.service'
+export {
+  MAX_SUPPLIER_SCORE,
+  type ScoreComponent,
+  scoreSupplier,
+  type SupplierScore,
+} from './supplier-management/supplier-score'
 export {
   createVerificationService,
   type ReviewerLookup,
