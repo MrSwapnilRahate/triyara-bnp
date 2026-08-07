@@ -1,4 +1,4 @@
-export type AdminAccessRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+export type AdminAccessRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED'
 
 export interface AdminAccessRequest {
   id: string
@@ -12,6 +12,9 @@ export interface AdminAccessRequest {
   decidedById: string | null
   decidedAt: string | null
   decisionReason: string | null
+  revokedById: string | null
+  revokedAt: string | null
+  revocationReason: string | null
   version: number
   createdAt: string
   updatedAt: string

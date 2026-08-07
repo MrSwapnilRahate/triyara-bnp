@@ -85,7 +85,7 @@ export function DocumentsView({
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-gold text-2xl font-bold">Documents</h1>
+        <h1 className="text-2xl font-bold text-gold">Documents</h1>
         {canWrite ? (
           <button className={btn} onClick={() => setShowUpload(true)}>
             Upload document
@@ -424,10 +424,10 @@ function UploadDialog({
       onClick={onClose}
     >
       <div
-        className="bg-navy-elevated w-full max-w-md rounded-2xl border border-white/10 p-6"
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-navy-elevated p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-gold text-lg font-bold">Upload document</h2>
+        <h2 className="text-lg font-bold text-gold">Upload document</h2>
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
           <select name="accountId" required className={`${field} w-full`} defaultValue="">
             <option value="" disabled>

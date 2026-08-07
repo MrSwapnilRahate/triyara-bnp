@@ -53,7 +53,19 @@ export function useRequestAdminAccess() {
   })
 }
 
-function useDecision(action: 'approve' | 'reject') {
+/** The caller's own latest request, whatever its state. Drives their UI. */
+export function useMyAccessRequest() {
+  return useQuery({
+    queryKey: accessRequestKeys.mine(),
+    queryFn: async ({ signal }) => {
+      const result = await api.get<AdminAccessRequest | null>(`${BASE}/mine`, { signal })
+      return result.data
+    },
+    staleTime: STALE_TIME.detail,
+  })
+}
+
+function useDecision(action: 'approve' | 'reject' | 'revoke') {
   const client = useQueryClient()
   return useMutation({
     mutationFn: async ({
@@ -80,3 +92,4 @@ function useDecision(action: 'approve' | 'reject') {
 
 export const useApproveRequest = () => useDecision('approve')
 export const useRejectRequest = () => useDecision('reject')
+export const useRevokeRequest = () => useDecision('revoke')

@@ -346,3 +346,30 @@ export function adminAccessRejected(input: { requesterName: string; reason: stri
     ]),
   }
 }
+
+export function adminAccessRevoked(input: { requesterName: string; reason: string }): Rendered {
+  const html = renderLayout({
+    heading: 'Your administrator access has been withdrawn',
+    bodyHtml: paras(
+      `Hello ${esc(input.requesterName)},`,
+      'Your administrator access on the TRIYARA Business Network has been withdrawn. Your account is unchanged and you can still sign in.',
+      `<strong>Reason</strong><br>${esc(input.reason)}`,
+      'If you believe this was a mistake, you can submit a new admin access request or contact your super administrator.',
+    ),
+  })
+  return {
+    subject: 'Administrator access withdrawn',
+    html,
+    text: renderText([
+      `Hello ${input.requesterName},`,
+      '',
+      'Your administrator access on the TRIYARA Business Network has been withdrawn.',
+      'Your account is unchanged and you can still sign in.',
+      '',
+      `Reason: ${input.reason}`,
+      '',
+      'If you believe this was a mistake, you can submit a new admin access request',
+      'or contact your super administrator.',
+    ]),
+  }
+}

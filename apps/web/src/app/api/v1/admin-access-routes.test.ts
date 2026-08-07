@@ -32,6 +32,8 @@ const adminAccessRequestService = {
   list: vi.fn(),
   approve: vi.fn(),
   reject: vi.fn(),
+  revoke: vi.fn(),
+  myLatest: vi.fn(),
 }
 vi.mock('@/lib/admin-access-request-service', () => ({ adminAccessRequestService }))
 
@@ -44,6 +46,8 @@ vi.mock('@/lib/admin-access-notify', () => ({ notifyAdminAccessDecision }))
 const { GET: listRequests, POST: createRequest } = await import('./admin-access-requests/route')
 const { POST: approveRequest } = await import('./admin-access-requests/[id]/approve/route')
 const { POST: rejectRequest } = await import('./admin-access-requests/[id]/reject/route')
+const { POST: revokeRequest } = await import('./admin-access-requests/[id]/revoke/route')
+const { GET: myRequest } = await import('./admin-access-requests/mine/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -243,5 +247,78 @@ describe('POST /api/v1/admin-access-requests/:id/reject', () => {
     expect(res.status).toBe(200)
     expect((await body(res)).meta.status).toBe('REJECTED')
     expect(notifyAdminAccessDecision).toHaveBeenCalledWith(expect.anything(), 'rejected')
+  })
+})
+
+describe('POST /api/v1/admin-access-requests/:id/revoke', () => {
+  const post = (payload: unknown, headers: Record<string, string> = {}) =>
+    revokeRequest(
+      req('/api/v1/admin-access-requests/req1/revoke', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...headers },
+        body: JSON.stringify(payload),
+      }),
+      params('req1'),
+    )
+
+  it('requires If-Match', async () => {
+    expect((await post({ reason: 'Left the sourcing team.' })).status).toBe(428)
+    expect(adminAccessRequestService.revoke).not.toHaveBeenCalled()
+  })
+
+  it('requires a reason of substance', async () => {
+    // The person is told why they lost access, so "no" is not enough.
+    expect((await post({}, { 'if-match': 'W/"v2"' })).status).toBe(422)
+    expect((await post({ reason: 'no' }, { 'if-match': 'W/"v2"' })).status).toBe(422)
+    expect(adminAccessRequestService.revoke).not.toHaveBeenCalled()
+  })
+
+  it('revokes and reports the new status', async () => {
+    adminAccessRequestService.revoke.mockResolvedValue({
+      request: record({ status: 'REVOKED', version: 3, revocationReason: 'Left the team.' }),
+      requesterUserId: 'u1',
+    })
+    const res = await post({ reason: 'Left the sourcing team.' }, { 'if-match': 'W/"v2"' })
+    const b = await body(res)
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('ETag')).toBe('W/"v3"')
+    expect(b.meta.status).toBe('REVOKED')
+    expect(adminAccessRequestService.revoke).toHaveBeenCalledWith(expect.anything(), 'req1', 2, {
+      reason: 'Left the sourcing team.',
+    })
+    expect(notifyAdminAccessDecision).toHaveBeenCalledWith(expect.anything(), 'revoked')
+  })
+
+  it('maps a stale version to 412', async () => {
+    adminAccessRequestService.revoke.mockRejectedValue(new PreconditionFailedError())
+    expect((await post({ reason: 'Left the team.' }, { 'if-match': 'W/"v2"' })).status).toBe(412)
+  })
+
+  it('maps a non-super-admin to 403 and notifies nobody', async () => {
+    adminAccessRequestService.revoke.mockRejectedValue(new ForbiddenError('not super'))
+    expect((await post({ reason: 'Left the team.' }, { 'if-match': 'W/"v2"' })).status).toBe(403)
+    expect(notifyAdminAccessDecision).not.toHaveBeenCalled()
+  })
+
+  it('maps revoking a non-approved request to 409', async () => {
+    adminAccessRequestService.revoke.mockRejectedValue(new ConflictError('only approved'))
+    expect((await post({ reason: 'Left the team.' }, { 'if-match': 'W/"v2"' })).status).toBe(409)
+  })
+})
+
+describe('GET /api/v1/admin-access-requests/mine', () => {
+  it('returns the caller own latest request', async () => {
+    adminAccessRequestService.myLatest.mockResolvedValue(record({ status: 'REVOKED' }))
+    const res = await myRequest(req('/api/v1/admin-access-requests/mine'))
+    expect(res.status).toBe(200)
+    expect((await body(res)).data).toMatchObject({ status: 'REVOKED' })
+  })
+
+  it('returns null when they have never asked', async () => {
+    adminAccessRequestService.myLatest.mockResolvedValue(null)
+    const res = await myRequest(req('/api/v1/admin-access-requests/mine'))
+    expect(res.status).toBe(200)
+    expect((await body(res)).data).toBeNull()
   })
 })

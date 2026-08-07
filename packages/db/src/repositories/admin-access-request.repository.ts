@@ -19,6 +19,9 @@ const requestSelect = {
   decidedById: true,
   decidedAt: true,
   decisionReason: true,
+  revokedById: true,
+  revokedAt: true,
+  revocationReason: true,
   version: true,
   createdAt: true,
   updatedAt: true,
@@ -227,6 +230,85 @@ export const adminAccessRequestRepository = {
         },
       })
       return after
+    })
+  },
+
+  /**
+   * Revokes access granted by an approved request.
+   *
+   * Removes the ADMIN role and marks the request REVOKED in one transaction:
+   * a role removed without the record leaves an audit that still says the
+   * person is an administrator, and a record without the removal leaves them
+   * one. The approval fields are left intact - who granted the access and who
+   * withdrew it are different facts.
+   */
+  async revoke(
+    ctx: MutationCtx,
+    id: string,
+    expectedVersion: number,
+    reason: string,
+  ): Promise<AdminAccessRequestRecord> {
+    return prisma.$transaction(async (tx) => {
+      const before = await tx.adminAccessRequest.findFirst({
+        where: { id, organizationId: ctx.organizationId },
+        select: { status: true, userId: true, requesterEmail: true },
+      })
+      if (!before) throw new NotFoundError('Request not found.')
+      if (before.status !== 'APPROVED') {
+        throw new ConflictError(
+          `Only approved access can be revoked. This request is ${before.status.toLowerCase()}.`,
+        )
+      }
+
+      const updated = await tx.adminAccessRequest.updateMany({
+        where: {
+          id,
+          organizationId: ctx.organizationId,
+          status: 'APPROVED',
+          version: expectedVersion,
+        },
+        data: {
+          status: 'REVOKED',
+          revokedById: ctx.actorId,
+          revokedAt: new Date(),
+          revocationReason: reason,
+          version: { increment: 1 },
+        },
+      })
+      if (updated.count === 0) throw new PreconditionFailedError()
+
+      const adminRole = await tx.role.findFirstOrThrow({
+        where: { name: 'ADMIN' },
+        select: { id: true },
+      })
+      // deleteMany rather than delete: the grant may already be gone, and the
+      // request still needs marking so the history is complete.
+      await tx.userRole.deleteMany({ where: { userId: before.userId, roleId: adminRole.id } })
+
+      const after = await tx.adminAccessRequest.findUniqueOrThrow({
+        where: { id },
+        select: requestSelect,
+      })
+      await writeAudit(tx, {
+        organizationId: ctx.organizationId,
+        actorId: ctx.actorId,
+        requestId: ctx.requestId,
+        entityType: 'AdminAccessRequest',
+        entityId: id,
+        action: 'admin_access_request.revoked',
+        before: { status: before.status },
+        after: { status: after.status, revokedFrom: before.requesterEmail, reason },
+      })
+      return after
+    })
+  },
+
+  /** The person's most recent request, whatever its state. Drives the UI. */
+  findLatestForUser(userId: string): Promise<AdminAccessRequestRecord | null> {
+    return prisma.adminAccessRequest.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: requestSelect,
     })
   },
 

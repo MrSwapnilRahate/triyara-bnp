@@ -166,7 +166,7 @@ export function ActivityFeed({
       {loading ? <p className="py-2 text-center text-xs text-white/40">Loading...</p> : null}
       {cursor && !loading ? (
         <div className="mt-2 text-center">
-          <button onClick={() => void loadMore()} className="hover:text-gold text-sm text-white/60">
+          <button onClick={() => void loadMore()} className="text-sm text-white/60 hover:text-gold">
             Load more
           </button>
         </div>

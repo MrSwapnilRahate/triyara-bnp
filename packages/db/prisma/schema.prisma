@@ -2993,6 +2993,13 @@ model AdminAccessRequest {
   decidedAt      DateTime?
   decisionReason String?   @db.Text
 
+  /// Revocation is recorded alongside the approval rather than overwriting it.
+  /// Who granted the access and who took it away are different facts, and an
+  /// audit that keeps only the second cannot answer the first.
+  revokedById      String?
+  revokedAt        DateTime?
+  revocationReason String?   @db.Text
+
   version   Int      @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3009,4 +3016,8 @@ enum AdminAccessRequestStatus {
   PENDING
   APPROVED
   REJECTED
+  /// Access was granted and later withdrawn. A terminal state for this
+  /// request; the person may submit a fresh one, and the partial unique index
+  /// only covers PENDING so nothing blocks that.
+  REVOKED
 }

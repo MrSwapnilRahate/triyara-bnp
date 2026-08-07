@@ -72,7 +72,7 @@ export function AccountsView({
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-gold text-2xl font-bold">Accounts</h1>
+        <h1 className="text-2xl font-bold text-gold">Accounts</h1>
         {canWrite ? (
           <button className={btn} onClick={() => setDialog({ type: 'create' })}>
             New account
@@ -282,8 +282,8 @@ export function AccountsView({
 function Modal({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-navy-elevated w-full max-w-md rounded-2xl border border-white/10 p-6">
-        <h2 className="text-gold text-lg font-semibold">{title}</h2>
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-navy-elevated p-6">
+        <h2 className="text-lg font-semibold text-gold">{title}</h2>
         <div className="mt-4">{children}</div>
       </div>
     </div>
@@ -394,10 +394,10 @@ function BulkToolbar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
   return (
     <form
       action={action}
-      className="border-gold/25 bg-gold/[0.06] mt-4 flex items-center gap-3 rounded-lg border px-4 py-2"
+      className="mt-4 flex items-center gap-3 rounded-lg border border-gold/25 bg-gold/[0.06] px-4 py-2"
     >
       <input type="hidden" name="ids" value={ids.join(',')} />
-      <span className="text-gold text-sm">{ids.length} selected</span>
+      <span className="text-sm text-gold">{ids.length} selected</span>
       <select name="relationshipStatus" defaultValue="ACTIVE" className={`${field} w-40`}>
         {RELATIONSHIP_STATUSES.map((s) => (
           <option key={s} value={s}>

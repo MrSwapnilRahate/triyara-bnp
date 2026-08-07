@@ -10,6 +10,7 @@ import type {
   CreateAdminAccessRequestDto,
   ListAdminAccessRequestsQuery,
   RejectAdminAccessRequestDto,
+  RevokeAdminAccessDto,
 } from '@triyara/validation'
 
 import { assertSuperAdmin, isSuperAdmin } from '../security/super-admin'
@@ -195,6 +196,71 @@ export function createAdminAccessRequestService({ repo, events }: AdminAccessReq
         }),
       )
       return { request, requesterUserId: request.userId }
+    },
+
+    /**
+     * Withdraws access previously granted.
+     *
+     * Super Admin only, and no other administrator may do it - an ADMIN who
+     * could revoke another ADMIN could remove everyone who disagreed with
+     * them, which is the same escalation the grant path already refuses.
+     *
+     * Revoking your own is refused for the same reason approving your own is:
+     * the record must never show someone changing their own standing.
+     */
+    async revoke(
+      ctx: AdminAccessRequestCtx,
+      id: string,
+      expectedVersion: number,
+      dto: RevokeAdminAccessDto,
+    ): Promise<DecisionResult> {
+      assertSuperAdmin(ctx.user.email)
+
+      const current = await repo.findById(ctx.organizationId, id)
+      if (!current) throw new NotFoundError('Request not found.')
+
+      if (current.userId === ctx.user.id) {
+        throw new ForbiddenError('You cannot revoke your own administrator access.')
+      }
+      if (isSuperAdmin(current.requesterEmail)) {
+        // Stage-1 has one super administrator. Removing their ADMIN would
+        // leave nobody able to decide any future request.
+        throw new ConflictError(
+          'The super administrator cannot have their administrator access revoked.',
+        )
+      }
+      if (current.status !== 'APPROVED') {
+        throw new ConflictError(
+          `Only approved access can be revoked. This request is ${current.status.toLowerCase()}.`,
+        )
+      }
+
+      const request = await repo.revoke(mutationCtx(ctx), id, expectedVersion, dto.reason)
+
+      await events.emit(
+        makeEvent({
+          type: 'admin_access_request.revoked',
+          organizationId: ctx.organizationId,
+          actorId: ctx.user.id,
+          data: {
+            requestId: request.id,
+            userId: request.userId,
+            requesterEmail: request.requesterEmail,
+          },
+        }),
+      )
+      return { request, requesterUserId: request.userId }
+    },
+
+    /**
+     * The caller's own latest request, whatever its state.
+     *
+     * Drives what the person sees: a pending notice, a rejection, or the
+     * banner telling them their access was withdrawn. Not gated - it is their
+     * own record, and the repository scopes it to their user id.
+     */
+    async myLatest(ctx: AdminAccessRequestCtx): Promise<AdminAccessRequestRecord | null> {
+      return repo.findLatestForUser(ctx.user.id)
     },
 
     /** Whether the signed-in caller may see the decision queue at all. */

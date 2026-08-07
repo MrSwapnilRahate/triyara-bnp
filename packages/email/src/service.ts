@@ -267,6 +267,24 @@ export function createEmailService(deps: EmailServiceDeps) {
       )
     },
 
+    async adminAccessRevoked(input: {
+      requesterName: string
+      requesterEmail: string
+      reason: string
+    }): Promise<SendResult> {
+      const to = addressesFor('admin_access_revoked', [
+        { name: input.requesterName, email: input.requesterEmail },
+      ])
+      return deliver(
+        'admin_access_revoked',
+        to,
+        templates.adminAccessRevoked({
+          requesterName: input.requesterName,
+          reason: input.reason,
+        }),
+      )
+    },
+
     /**
      * Staff invitation. There is no invite flow in the product yet - admin user
      * creation exposes no invite endpoint - so nothing calls this today. It

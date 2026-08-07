@@ -39,12 +39,14 @@ vi.mock('@/lib/email', () => ({
     adminAccessRequested: vi.fn(async () => ({ status: 'sent', id: 'e', attempts: 1 })),
     adminAccessApproved: vi.fn(async () => ({ status: 'sent', id: 'e', attempts: 1 })),
     adminAccessRejected: vi.fn(async () => ({ status: 'sent', id: 'e', attempts: 1 })),
+    adminAccessRevoked: vi.fn(async () => ({ status: 'sent', id: 'e', attempts: 1 })),
   },
 }))
 
 const { GET: listRequests, POST: createRequest } = await import('./admin-access-requests/route')
 const { POST: approveRequest } = await import('./admin-access-requests/[id]/approve/route')
 const { POST: rejectRequest } = await import('./admin-access-requests/[id]/reject/route')
+const { POST: revokeRequest } = await import('./admin-access-requests/[id]/revoke/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -311,5 +313,130 @@ describe.skipIf(!process.env.DATABASE_URL)('admin access requests (integration)'
     authState.email = other.email
     authState.roles = ['ADMIN']
     expect((await listRequests(req('/api/v1/admin-access-requests'))).status).toBe(403)
+  })
+
+  describe('revocation', () => {
+    /** Walks a person all the way to holding ADMIN through the workflow. */
+    async function approvedAdmin() {
+      const user = await makeUser(`rv-${uniq()}@triyara.test`, 'VERIFIER')
+      const created = (await body(await submitAs(user.id, user.email, ['VERIFIER'])))
+        .data as unknown as { id: string; version: number }
+
+      asSuper()
+      const res = await approveRequest(
+        req(`/api/v1/admin-access-requests/${created.id}/approve`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${created.version}"` },
+        }),
+        params(created.id),
+      )
+      const after = (await body(res)).data as unknown as { version: number }
+      return { user, requestId: created.id, version: after.version }
+    }
+
+    const revoke = (id: string, version: number, reason = 'Left the sourcing team last month.') =>
+      revokeRequest(
+        req(`/api/v1/admin-access-requests/${id}/revoke`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${version}"`, 'content-type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        }),
+        params(id),
+      )
+
+    it('removes the ADMIN role and marks the request in one transaction', async () => {
+      const { user, requestId, version } = await approvedAdmin()
+      expect(
+        await prisma.userRole.findFirst({ where: { userId: user.id, roleId: adminRoleId } }),
+      ).not.toBeNull()
+
+      asSuper()
+      expect((await revoke(requestId, version)).status).toBe(200)
+
+      const row = await prisma.adminAccessRequest.findUniqueOrThrow({ where: { id: requestId } })
+      expect(row.status).toBe('REVOKED')
+      expect(row.revokedById).toBe(superId)
+      expect(row.revokedAt).not.toBeNull()
+      expect(row.revocationReason).toBe('Left the sourcing team last month.')
+      // The approval record survives: who granted and who withdrew are
+      // different facts.
+      expect(row.decidedById).toBe(superId)
+      expect(row.decidedAt).not.toBeNull()
+
+      expect(
+        await prisma.userRole.findFirst({ where: { userId: user.id, roleId: adminRoleId } }),
+      ).toBeNull()
+
+      const audit = await prisma.auditLog.findFirst({
+        where: { entityId: requestId, action: 'admin_access_request.revoked' },
+      })
+      expect(audit).not.toBeNull()
+    })
+
+    it('refuses an ordinary ADMIN and leaves the role in place', async () => {
+      const { user, requestId, version } = await approvedAdmin()
+
+      const other = await makeUser(`otheradm-${uniq()}@triyara.test`, 'ADMIN')
+      authState.userId = other.id
+      authState.email = other.email
+      authState.roles = ['ADMIN']
+
+      expect((await revoke(requestId, version)).status).toBe(403)
+
+      const row = await prisma.adminAccessRequest.findUniqueOrThrow({ where: { id: requestId } })
+      expect(row.status).toBe('APPROVED')
+      expect(
+        await prisma.userRole.findFirst({ where: { userId: user.id, roleId: adminRoleId } }),
+      ).not.toBeNull()
+    })
+
+    it('refuses a stale version and changes nothing', async () => {
+      const { user, requestId, version } = await approvedAdmin()
+      asSuper()
+      expect((await revoke(requestId, version + 5)).status).toBe(412)
+
+      const row = await prisma.adminAccessRequest.findUniqueOrThrow({ where: { id: requestId } })
+      expect(row.status).toBe('APPROVED')
+      expect(
+        await prisma.userRole.findFirst({ where: { userId: user.id, roleId: adminRoleId } }),
+      ).not.toBeNull()
+    })
+
+    it('refuses a second revocation', async () => {
+      const { requestId, version } = await approvedAdmin()
+      asSuper()
+      const first = await revoke(requestId, version)
+      expect(first.status).toBe(200)
+      const after = (await body(first)).data as unknown as { version: number }
+
+      expect((await revoke(requestId, after.version)).status).toBe(409)
+    })
+
+    it('lets the person ask again after revocation, keeping the history', async () => {
+      const { user, requestId, version } = await approvedAdmin()
+      asSuper()
+      await revoke(requestId, version)
+
+      // The partial index only covers PENDING, so a revoked request blocks
+      // nothing.
+      expect((await submitAs(user.id, user.email, ['VERIFIER'])).status).toBe(201)
+
+      const rows = await prisma.adminAccessRequest.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'asc' },
+      })
+      expect(rows.map((r) => r.status)).toEqual(['REVOKED', 'PENDING'])
+    })
+
+    it('shows revoked requests in the queue history', async () => {
+      const { requestId, version } = await approvedAdmin()
+      asSuper()
+      await revoke(requestId, version)
+
+      const res = await listRequests(req('/api/v1/admin-access-requests?status=REVOKED'))
+      expect(res.status).toBe(200)
+      const items = (await body(res)).data as unknown as { id: string }[]
+      expect(items.some((i) => i.id === requestId)).toBe(true)
+    })
   })
 })

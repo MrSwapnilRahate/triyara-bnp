@@ -55,10 +55,10 @@ export function SupplierProfileView({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/accounts" className="hover:text-gold text-xs text-white/40">
+      <Link href="/accounts" className="text-xs text-white/40 hover:text-gold">
         &larr; Accounts
       </Link>
-      <h1 className="text-gold mt-2 text-2xl font-bold">{accountName}</h1>
+      <h1 className="mt-2 text-2xl font-bold text-gold">{accountName}</h1>
       <p className="text-sm text-white/40">Supplier profile</p>
 
       {!profile ? (
@@ -76,7 +76,7 @@ export function SupplierProfileView({
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`px-3 py-2 text-sm capitalize ${tab === t ? 'border-gold text-gold border-b-2' : 'text-white/50 hover:text-white'}`}
+                className={`px-3 py-2 text-sm capitalize ${tab === t ? 'border-b-2 border-gold text-gold' : 'text-white/50 hover:text-white'}`}
               >
                 {t}
               </button>

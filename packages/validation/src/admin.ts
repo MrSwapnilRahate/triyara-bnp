@@ -176,7 +176,7 @@ export type TrendsQuery = z.infer<typeof trendsQuerySchema>
 
 // ---- Admin access requests (TRY-BNP-SUPERADMIN-01) ----
 
-export const ADMIN_ACCESS_REQUEST_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const
+export const ADMIN_ACCESS_REQUEST_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'REVOKED'] as const
 export const adminAccessRequestStatusSchema = z.enum(ADMIN_ACCESS_REQUEST_STATUSES)
 export type AdminAccessRequestStatusName = z.infer<typeof adminAccessRequestStatusSchema>
 
@@ -209,3 +209,9 @@ export const listAdminAccessRequestsQuerySchema = z.object({
     .optional(),
 })
 export type ListAdminAccessRequestsQuery = z.infer<typeof listAdminAccessRequestsQuerySchema>
+
+/** Revoking. A reason is mandatory - the person is told why they lost access. */
+export const revokeAdminAccessSchema = z.object({
+  reason: z.string().trim().min(10).max(2000),
+})
+export type RevokeAdminAccessDto = z.infer<typeof revokeAdminAccessSchema>

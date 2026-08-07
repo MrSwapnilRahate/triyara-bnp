@@ -19,10 +19,11 @@ import { emailService } from './email'
  */
 export async function notifyAdminAccessDecision(
   result: DecisionResult,
-  decision: 'approved' | 'rejected',
+  decision: 'approved' | 'rejected' | 'revoked',
 ): Promise<string> {
   const { request, requesterUserId } = result
   const approved = decision === 'approved'
+  const revoked = decision === 'revoked'
 
   try {
     await notificationRepository.createWithRecipients(
@@ -35,10 +36,16 @@ export async function notifyAdminAccessDecision(
         entityId: requesterUserId,
         accountId: null,
         eventName: `admin_access_request.${decision}`,
-        title: approved ? 'Administrator access granted' : 'Administrator access declined',
-        body: approved
-          ? 'Your request for administrator access was approved. Sign out and back in to pick up your new permissions.'
-          : `Your request for administrator access was declined. ${request.decisionReason ?? ''}`.trim(),
+        title: revoked
+          ? 'Administrator access withdrawn'
+          : approved
+            ? 'Administrator access granted'
+            : 'Administrator access declined',
+        body: revoked
+          ? `Your administrator access has been withdrawn. ${request.revocationReason ?? ''}`.trim()
+          : approved
+            ? 'Your request for administrator access was approved.'
+            : `Your request for administrator access was declined. ${request.decisionReason ?? ''}`.trim(),
         metadata: { requestId: request.id, decision },
       },
       [{ userId: requesterUserId, channels: ['IN_APP'] }],
@@ -47,16 +54,29 @@ export async function notifyAdminAccessDecision(
     logger.error({ err: String(err), requestId: request.id }, 'admin_access.notification_failed')
   }
 
-  const delivery = approved
-    ? await emailService.adminAccessApproved({
-        requesterName: request.requesterName,
-        requesterEmail: request.requesterEmail,
-      })
-    : await emailService.adminAccessRejected({
-        requesterName: request.requesterName,
-        requesterEmail: request.requesterEmail,
-        reason: request.decisionReason ?? '',
-      })
-
-  return delivery.status
+  try {
+    const delivery = revoked
+      ? await emailService.adminAccessRevoked({
+          requesterName: request.requesterName,
+          requesterEmail: request.requesterEmail,
+          reason: request.revocationReason ?? '',
+        })
+      : approved
+        ? await emailService.adminAccessApproved({
+            requesterName: request.requesterName,
+            requesterEmail: request.requesterEmail,
+          })
+        : await emailService.adminAccessRejected({
+            requesterName: request.requesterName,
+            requesterEmail: request.requesterEmail,
+            reason: request.decisionReason ?? '',
+          })
+    return delivery.status
+  } catch (err) {
+    // The decision and the role change are already committed. Turning an email
+    // problem into a 500 here would report failure for something that
+    // irreversibly happened, and would tempt the caller to retry it.
+    logger.error({ err: String(err), requestId: request.id }, 'admin_access.email_failed')
+    return 'failed'
+  }
 }

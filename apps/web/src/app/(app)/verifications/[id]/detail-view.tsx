@@ -84,12 +84,12 @@ export function VerificationDetail({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/verifications" className="hover:text-gold text-xs text-white/40">
+      <Link href="/verifications" className="text-xs text-white/40 hover:text-gold">
         &larr; Verification queue
       </Link>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-gold text-2xl font-bold">{accountName}</h1>
+          <h1 className="text-2xl font-bold text-gold">{accountName}</h1>
           <p className="text-sm text-white/40">
             Status <span className="font-semibold text-white">{s}</span>
             {v.decision ? <> &middot; {v.decision}</> : null}
@@ -288,7 +288,7 @@ export function VerificationDetail({
         <ol className="mt-3 space-y-2 border-l border-white/10 pl-4">
           {history.map((h) => (
             <li key={h.id} className="relative text-sm text-white/60">
-              <span className="bg-gold absolute -left-[21px] top-1.5 h-2 w-2 rounded-full" />
+              <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-gold" />
               <span className="text-white">{h.toStatus}</span>
               <span className="text-white/30">
                 {' '}
@@ -429,7 +429,7 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
       onClick={onClose}
     >
       <div
-        className="bg-navy-elevated w-full max-w-md rounded-2xl border border-white/10 p-6"
+        className="w-full max-w-md rounded-2xl border border-white/10 bg-navy-elevated p-6"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -458,7 +458,7 @@ function DialogForm({
         onSubmit(new FormData(e.currentTarget))
       }}
     >
-      <h2 className="text-gold text-lg font-bold">{title}</h2>
+      <h2 className="text-lg font-bold text-gold">{title}</h2>
       <div className="mt-4 space-y-3">{children}</div>
       <div className="mt-5 flex justify-end">
         <button className={btn} disabled={busy}>

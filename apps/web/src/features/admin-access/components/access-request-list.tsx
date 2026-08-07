@@ -38,6 +38,7 @@ import {
   useAccessRequests,
   useApproveRequest,
   useRejectRequest,
+  useRevokeRequest,
 } from '../api/requests'
 import type { AdminAccessRequest, AdminAccessRequestStatus } from '../types'
 
@@ -45,12 +46,14 @@ const TABS: { value: AdminAccessRequestStatus; label: string }[] = [
   { value: 'PENDING', label: 'Pending' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'REJECTED', label: 'Rejected' },
+  { value: 'REVOKED', label: 'Revoked' },
 ]
 
-const TONE: Record<AdminAccessRequestStatus, 'warning' | 'success' | 'danger'> = {
+const TONE: Record<AdminAccessRequestStatus, 'warning' | 'success' | 'danger' | 'neutral'> = {
   PENDING: 'warning',
   APPROVED: 'success',
   REJECTED: 'danger',
+  REVOKED: 'neutral',
 }
 
 /**
@@ -73,9 +76,16 @@ export function AccessRequestList() {
     limit: '50',
   })
 
-  const [rejecting, setRejecting] = useState<AdminAccessRequest | null>(null)
+  // One dialog for both refusals: declining a request and withdrawing granted
+  // access ask the same thing of the super administrator - a reason - and the
+  // mode decides which endpoint receives it.
+  const [deciding, setDeciding] = useState<{
+    request: AdminAccessRequest
+    mode: 'reject' | 'revoke'
+  } | null>(null)
   const approve = useApproveRequest()
   const reject = useRejectRequest()
+  const revoke = useRevokeRequest()
   const [reason, setReason] = useState('')
 
   async function onApprove(request: AdminAccessRequest) {
@@ -90,12 +100,17 @@ export function AccessRequestList() {
     }
   }
 
-  async function onReject() {
-    if (!rejecting) return
+  async function onDecide() {
+    if (!deciding) return
+    const { request, mode } = deciding
     try {
-      await reject.mutateAsync({ id: rejecting.id, version: rejecting.version, reason })
-      toast.success('Request declined', `${rejecting.requesterName} has been told.`)
-      setRejecting(null)
+      const mutation = mode === 'revoke' ? revoke : reject
+      await mutation.mutateAsync({ id: request.id, version: request.version, reason })
+      toast.success(
+        mode === 'revoke' ? 'Access revoked' : 'Request declined',
+        `${request.requesterName} has been told.`,
+      )
+      setDeciding(null)
       setReason('')
     } catch (error) {
       const described = describeApiError(error)
@@ -184,7 +199,7 @@ export function AccessRequestList() {
                           <Button
                             size="sm"
                             variant="secondary"
-                            onClick={() => setRejecting(request)}
+                            onClick={() => setDeciding({ request, mode: 'reject' })}
                           >
                             Decline
                           </Button>
@@ -197,6 +212,14 @@ export function AccessRequestList() {
                             Approve
                           </Button>
                         </div>
+                      ) : request.status === 'APPROVED' ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setDeciding({ request, mode: 'revoke' })}
+                        >
+                          Revoke access
+                        </Button>
                       ) : (
                         <Badge tone={TONE[request.status]} size="sm">
                           {request.status.charAt(0) + request.status.slice(1).toLowerCase()}
@@ -240,14 +263,20 @@ export function AccessRequestList() {
         </Tabs>
       </div>
 
-      <Dialog open={rejecting !== null} onOpenChange={(open) => !open && setRejecting(null)}>
+      <Dialog open={deciding !== null} onOpenChange={(open) => !open && setDeciding(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Decline this request</DialogTitle>
+            <DialogTitle>
+              {deciding?.mode === 'revoke' ? 'Revoke administrator access' : 'Decline this request'}
+            </DialogTitle>
           </DialogHeader>
           <div className="px-gutter py-gap-lg">
             <p className="text-sm text-content-muted">
-              {rejecting ? `${rejecting.requesterName} asked for administrator access.` : null}
+              {deciding
+                ? deciding.mode === 'revoke'
+                  ? `${deciding.request.requesterName} will lose administrator access immediately.`
+                  : `${deciding.request.requesterName} asked for administrator access.`
+                : null}
             </p>
             <Label htmlFor="decline-reason" required className="mt-gap-lg block">
               Reason
@@ -264,16 +293,16 @@ export function AccessRequestList() {
             </p>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setRejecting(null)}>
+            <Button variant="ghost" onClick={() => setDeciding(null)}>
               Cancel
             </Button>
             <Button
               variant="primary"
-              loading={reject.isPending}
+              loading={reject.isPending || revoke.isPending}
               disabled={reason.trim().length < 10}
-              onClick={() => void onReject()}
+              onClick={() => void onDecide()}
             >
-              Decline request
+              {deciding?.mode === 'revoke' ? 'Revoke access' : 'Decline request'}
             </Button>
           </DialogFooter>
         </DialogContent>

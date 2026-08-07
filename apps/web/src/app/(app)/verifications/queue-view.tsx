@@ -67,7 +67,7 @@ export function VerificationQueue({
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-gold text-2xl font-bold">Verification queue</h1>
+        <h1 className="text-2xl font-bold text-gold">Verification queue</h1>
         {canCreate ? (
           <button className={btn} onClick={() => setCreating((v) => !v)}>
             Start verification
@@ -161,7 +161,7 @@ export function VerificationQueue({
         <div className="mt-4 text-center">
           <Link
             href={`/verifications?${new URLSearchParams({ ...Object.fromEntries(sp), cursor: nextCursor }).toString()}`}
-            className="hover:text-gold text-sm text-white/60"
+            className="text-sm text-white/60 hover:text-gold"
           >
             Load more
           </Link>
