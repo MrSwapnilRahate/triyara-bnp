@@ -1,6 +1,6 @@
 import { assertAbility, type AuthContext } from '@triyara/auth'
 import type {
-  AdminAccessRequestListResult,
+  AdminAccessRequestCounts,
   AdminAccessRequestRecord,
   AdminAccessRequestRepository,
 } from '@triyara/db'
@@ -33,9 +33,33 @@ import { assertSuperAdmin, isSuperAdmin } from '../security/super-admin'
 
 export type AdminAccessRequestCtx = AuthContext & { requestId?: string }
 
+/** Resolves actor ids to names. The decision columns carry no foreign key. */
+export interface ActorNameLookup {
+  findNamesByIds(ids: string[]): Promise<Map<string, { name: string; email: string }>>
+}
+
+export interface OrganizationNameLookup {
+  findById(id: string): Promise<{ name: string } | null>
+}
+
 export interface AdminAccessRequestDeps {
   repo: AdminAccessRequestRepository
   events: EventBus
+  users: ActorNameLookup
+  organizations: OrganizationNameLookup
+}
+
+/** A request with the lifecycle spelled out: who did what, and when. */
+export interface AdminAccessRequestView extends AdminAccessRequestRecord {
+  organizationName: string | null
+  decidedByName: string | null
+  revokedByName: string | null
+}
+
+export interface AdminAccessRequestListView {
+  items: AdminAccessRequestView[]
+  nextCursor: string | null
+  counts: AdminAccessRequestCounts
 }
 
 /** What the caller needs to deliver notifications and email after a decision. */
@@ -53,7 +77,37 @@ function holdsAdmin(ctx: AdminAccessRequestCtx): boolean {
   return (ctx.user.roles ?? []).includes('ADMIN')
 }
 
-export function createAdminAccessRequestService({ repo, events }: AdminAccessRequestDeps) {
+export function createAdminAccessRequestService({
+  repo,
+  events,
+  users,
+  organizations,
+}: AdminAccessRequestDeps) {
+  /**
+   * Attaches the names behind the ids.
+   *
+   * One lookup for the whole page rather than one per row, and it tolerates a
+   * missing user: an actor who has since been removed leaves the id in the
+   * record and simply has no name to show. Losing the row would be worse than
+   * showing it without a name.
+   */
+  async function withNames(
+    organizationId: string,
+    records: AdminAccessRequestRecord[],
+  ): Promise<AdminAccessRequestView[]> {
+    const ids = records.flatMap((r) => [r.decidedById, r.revokedById].filter(Boolean) as string[])
+    const [names, org] = await Promise.all([
+      users.findNamesByIds(ids),
+      organizations.findById(organizationId),
+    ])
+    return records.map((record) => ({
+      ...record,
+      organizationName: org?.name ?? null,
+      decidedByName: record.decidedById ? (names.get(record.decidedById)?.name ?? null) : null,
+      revokedByName: record.revokedById ? (names.get(record.revokedById)?.name ?? null) : null,
+    }))
+  }
+
   return {
     /**
      * Submits a request for the signed-in user.
@@ -107,17 +161,44 @@ export function createAdminAccessRequestService({ repo, events }: AdminAccessReq
     async list(
       ctx: AdminAccessRequestCtx,
       query: ListAdminAccessRequestsQuery,
-    ): Promise<AdminAccessRequestListResult> {
+    ): Promise<AdminAccessRequestListView> {
       assertSuperAdmin(ctx.user.email)
       assertAbility(ctx, 'read', 'User')
-      return repo.list({
-        organizationId: ctx.organizationId,
-        limit: query.limit,
-        ...(query.cursor ? { cursor: query.cursor } : {}),
-        ...(query.status ? { status: query.status } : {}),
-        ...(query.q ? { q: query.q } : {}),
-        ...(query.sort ? { sort: query.sort } : {}),
-      })
+
+      // Counts come from the whole tenant, not the filtered page: the tiles
+      // report the state of admin access, not the state of the current search.
+      const [result, counts] = await Promise.all([
+        repo.list({
+          organizationId: ctx.organizationId,
+          limit: query.limit,
+          ...(query.cursor ? { cursor: query.cursor } : {}),
+          ...(query.status ? { status: query.status } : {}),
+          ...(query.q ? { q: query.q } : {}),
+          ...(query.from ? { from: query.from } : {}),
+          ...(query.to ? { to: query.to } : {}),
+          ...(query.sort ? { sort: query.sort } : {}),
+        }),
+        repo.counts(ctx.organizationId),
+      ])
+
+      return {
+        items: await withNames(ctx.organizationId, result.items),
+        nextCursor: result.nextCursor,
+        counts,
+      }
+    },
+
+    /**
+     * Every request, for export. Super Admin only, same gate as the queue.
+     *
+     * Unpaged on purpose - an export that stopped at a page boundary would
+     * carry nothing on its face saying it was incomplete.
+     */
+    async exportAll(ctx: AdminAccessRequestCtx): Promise<AdminAccessRequestView[]> {
+      assertSuperAdmin(ctx.user.email)
+      assertAbility(ctx, 'read', 'User')
+      const records = await repo.listAllForExport(ctx.organizationId)
+      return withNames(ctx.organizationId, records)
     },
 
     /**
@@ -192,6 +273,7 @@ export function createAdminAccessRequestService({ repo, events }: AdminAccessReq
             requestId: request.id,
             userId: request.userId,
             requesterEmail: request.requesterEmail,
+            reason: dto.reason,
           },
         }),
       )
@@ -242,10 +324,13 @@ export function createAdminAccessRequestService({ repo, events }: AdminAccessReq
           type: 'admin_access_request.revoked',
           organizationId: ctx.organizationId,
           actorId: ctx.user.id,
+          // The reason travels on the event so the activity log carries it too,
+          // not only the audit row and the email.
           data: {
             requestId: request.id,
             userId: request.userId,
             requesterEmail: request.requesterEmail,
+            reason: dto.reason,
           },
         }),
       )

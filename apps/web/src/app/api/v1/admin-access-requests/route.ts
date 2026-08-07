@@ -20,8 +20,16 @@ export function GET(req: Request) {
       requestId,
       meta: {
         pagination: { limit: query.limit, nextCursor: result.nextCursor },
-        filters: { status: query.status ?? null, q: query.q ?? null },
+        filters: {
+          status: query.status ?? null,
+          q: query.q ?? null,
+          from: query.from?.toISOString() ?? null,
+          to: query.to?.toISOString() ?? null,
+        },
         sort: query.sort ?? '-createdAt',
+        // Tenant-wide, not page-wide: the tiles report the state of admin
+        // access, not the state of the current search.
+        counts: result.counts,
       },
     })
   })

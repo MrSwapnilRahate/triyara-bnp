@@ -34,6 +34,7 @@ const adminAccessRequestService = {
   reject: vi.fn(),
   revoke: vi.fn(),
   myLatest: vi.fn(),
+  exportAll: vi.fn(),
 }
 vi.mock('@/lib/admin-access-request-service', () => ({ adminAccessRequestService }))
 
@@ -48,6 +49,7 @@ const { POST: approveRequest } = await import('./admin-access-requests/[id]/appr
 const { POST: rejectRequest } = await import('./admin-access-requests/[id]/reject/route')
 const { POST: revokeRequest } = await import('./admin-access-requests/[id]/revoke/route')
 const { GET: myRequest } = await import('./admin-access-requests/mine/route')
+const { GET: exportCsv } = await import('./admin-access-requests/export/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -155,7 +157,11 @@ describe('POST /api/v1/admin-access-requests', () => {
 
 describe('GET /api/v1/admin-access-requests', () => {
   it('returns the queue for the super administrator', async () => {
-    adminAccessRequestService.list.mockResolvedValue({ items: [record()], nextCursor: null })
+    adminAccessRequestService.list.mockResolvedValue({
+      items: [record()],
+      nextCursor: null,
+      counts: { pending: 1, approved: 0, rejected: 0, revoked: 0, total: 1 },
+    })
     const res = await listRequests(req('/api/v1/admin-access-requests?status=PENDING'))
     expect(res.status).toBe(200)
     expect((await body(res)).meta.filters).toMatchObject({ status: 'PENDING' })
@@ -320,5 +326,66 @@ describe('GET /api/v1/admin-access-requests/mine', () => {
     const res = await myRequest(req('/api/v1/admin-access-requests/mine'))
     expect(res.status).toBe(200)
     expect((await body(res)).data).toBeNull()
+  })
+})
+
+describe('GET /api/v1/admin-access-requests/export', () => {
+  const exported = (over: Record<string, unknown> = {}) => ({
+    ...record(over),
+    organizationName: 'Triyara Exports LLP',
+    decidedByName: 'Swapnil Rahate',
+    revokedByName: null,
+  })
+
+  it('returns a CSV attachment', async () => {
+    adminAccessRequestService.exportAll.mockResolvedValue([exported()])
+    const res = await exportCsv()
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/csv')
+    expect(res.headers.get('content-disposition')).toMatch(
+      /attachment; filename="admin-access-requests-\d{4}-\d{2}-\d{2}\.csv"/,
+    )
+  })
+
+  it('carries a header row and every lifecycle column', async () => {
+    adminAccessRequestService.exportAll.mockResolvedValue([
+      exported({ status: 'REVOKED', revocationReason: 'Left the team.' }),
+    ])
+    const text = await (await exportCsv()).text()
+    const [header] = text.split('\r\n')
+
+    for (const column of [
+      'Requested At',
+      'Approved At',
+      'Rejected At',
+      'Revoked At',
+      'Revocation Reason',
+    ]) {
+      expect(header).toContain(column)
+    }
+    expect(text).toContain('Left the team.')
+  })
+
+  it('escapes quotes and commas rather than breaking the row', async () => {
+    adminAccessRequestService.exportAll.mockResolvedValue([
+      exported({ reason: 'Because "urgent", and overdue' }),
+    ])
+    const text = await (await exportCsv()).text()
+    expect(text).toContain('"Because ""urgent"", and overdue"')
+  })
+
+  it('neutralises a reason that would execute as a spreadsheet formula', async () => {
+    // Reasons are written by users. A cell that runs on open is a real hazard.
+    adminAccessRequestService.exportAll.mockResolvedValue([exported({ reason: '=cmd|/c calc' })])
+    const text = await (await exportCsv()).text()
+    expect(text).toContain('"\'=cmd|/c calc"')
+  })
+
+  it('refuses a non-super-admin with 403 and no file', async () => {
+    adminAccessRequestService.exportAll.mockRejectedValue(new ForbiddenError('not super'))
+    const res = await exportCsv()
+    expect(res.status).toBe(403)
+    expect(res.headers.get('content-type')).not.toContain('text/csv')
   })
 })

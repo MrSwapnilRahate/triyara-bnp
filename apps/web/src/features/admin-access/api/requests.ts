@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, queryString } from '@/lib/api-client'
 import { STALE_TIME } from '@/lib/query-client'
 
-import type { AdminAccessRequest, AdminAccessRequestStatus } from '../types'
+import type { AdminAccessCounts, AdminAccessRequest, AdminAccessRequestStatus } from '../types'
 
 const BASE = '/api/v1/admin-access-requests'
 
@@ -18,9 +18,19 @@ export interface AccessRequestQuery {
   [key: string]: string | undefined
   status?: AdminAccessRequestStatus
   q?: string
+  from?: string
+  to?: string
   sort?: string
   limit?: string
   cursor?: string
+}
+
+const EMPTY_COUNTS: AdminAccessCounts = {
+  pending: 0,
+  approved: 0,
+  rejected: 0,
+  revoked: 0,
+  total: 0,
 }
 
 export function useAccessRequests(query: AccessRequestQuery) {
@@ -33,6 +43,7 @@ export function useAccessRequests(query: AccessRequestQuery) {
         nextCursor:
           (result.meta?.pagination as { nextCursor?: string | null } | undefined)?.nextCursor ??
           null,
+        counts: (result.meta?.counts as AdminAccessCounts | undefined) ?? EMPTY_COUNTS,
       }
     },
     staleTime: STALE_TIME.list,

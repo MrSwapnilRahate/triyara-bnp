@@ -47,6 +47,7 @@ const { GET: listRequests, POST: createRequest } = await import('./admin-access-
 const { POST: approveRequest } = await import('./admin-access-requests/[id]/approve/route')
 const { POST: rejectRequest } = await import('./admin-access-requests/[id]/reject/route')
 const { POST: revokeRequest } = await import('./admin-access-requests/[id]/revoke/route')
+const { GET: exportCsv } = await import('./admin-access-requests/export/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -437,6 +438,115 @@ describe.skipIf(!process.env.DATABASE_URL)('admin access requests (integration)'
       expect(res.status).toBe(200)
       const items = (await body(res)).data as unknown as { id: string }[]
       expect(items.some((i) => i.id === requestId)).toBe(true)
+    })
+  })
+
+  describe('control panel', () => {
+    it('reports tenant-wide counts, not the filtered page', async () => {
+      asSuper()
+      const res = await listRequests(req('/api/v1/admin-access-requests?status=PENDING'))
+      expect(res.status).toBe(200)
+
+      const meta = (await body(res)).meta as {
+        counts?: {
+          pending: number
+          approved: number
+          rejected: number
+          revoked: number
+          total: number
+        }
+      }
+      expect(meta.counts).toBeDefined()
+      // This file has created requests in several states by now; the totals
+      // must add up regardless of the status filter above.
+      const c = meta.counts!
+      expect(c.total).toBe(c.pending + c.approved + c.rejected + c.revoked)
+      expect(c.total).toBeGreaterThan(0)
+    })
+
+    it('resolves who decided into a name', async () => {
+      const user = await makeUser(`named-${uniq()}@triyara.test`, 'VERIFIER')
+      const created = (await body(await submitAs(user.id, user.email, ['VERIFIER'])))
+        .data as unknown as { id: string; version: number }
+
+      asSuper()
+      await approveRequest(
+        req(`/api/v1/admin-access-requests/${created.id}/approve`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${created.version}"` },
+        }),
+        params(created.id),
+      )
+
+      const res = await listRequests(req('/api/v1/admin-access-requests?status=APPROVED'))
+      const items = (await body(res)).data as unknown as {
+        id: string
+        decidedByName: string | null
+        organizationName: string | null
+      }[]
+      const row = items.find((i) => i.id === created.id)
+      expect(row?.decidedByName).toBeTruthy()
+      expect(row?.organizationName).toBe('Admin Access IT')
+    })
+
+    it('filters by date range', async () => {
+      asSuper()
+      const future = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+      const res = await listRequests(req(`/api/v1/admin-access-requests?from=${future}`))
+      expect(res.status).toBe(200)
+      // Nothing was created tomorrow.
+      expect((await body(res)).data as unknown as unknown[]).toHaveLength(0)
+    })
+
+    it('exports the whole history as CSV', async () => {
+      asSuper()
+      const res = await exportCsv()
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toContain('text/csv')
+
+      const text = await res.text()
+      const lines = text.trim().split('\r\n')
+      expect(lines[0]).toContain('Revocation Reason')
+      // Every request this file created, not one page of them.
+      const total = await prisma.adminAccessRequest.count({
+        where: { organizationId: authState.organizationId },
+      })
+      expect(lines.length - 1).toBe(total)
+    })
+
+    it('refuses the export to an ordinary ADMIN', async () => {
+      const other = await makeUser(`noexport-${uniq()}@triyara.test`, 'ADMIN')
+      authState.userId = other.id
+      authState.email = other.email
+      authState.roles = ['ADMIN']
+      expect((await exportCsv()).status).toBe(403)
+    })
+
+    it('never deletes history - a decided request stays readable forever', async () => {
+      const user = await makeUser(`hist-${uniq()}@triyara.test`, 'VERIFIER')
+      const created = (await body(await submitAs(user.id, user.email, ['VERIFIER'])))
+        .data as unknown as { id: string; version: number }
+
+      asSuper()
+      await rejectRequest(
+        req(`/api/v1/admin-access-requests/${created.id}/reject`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${created.version}"`, 'content-type': 'application/json' },
+          body: JSON.stringify({ reason: 'Not needed for this role right now.' }),
+        }),
+        params(created.id),
+      )
+
+      // Ask again, then confirm both records are still there.
+      await submitAs(user.id, user.email, ['VERIFIER'])
+      const rows = await prisma.adminAccessRequest.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'asc' },
+      })
+      expect(rows).toHaveLength(2)
+      expect(rows[0]!.status).toBe('REJECTED')
+      expect(rows[0]!.decisionReason).toBe('Not needed for this role right now.')
+      expect(rows[1]!.status).toBe('PENDING')
     })
   })
 })

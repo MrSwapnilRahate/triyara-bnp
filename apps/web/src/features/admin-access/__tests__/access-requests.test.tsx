@@ -27,6 +27,9 @@ const request = (over: Record<string, unknown> = {}) => ({
   revokedById: null,
   revokedAt: null,
   revocationReason: null,
+  organizationName: 'Triyara Exports LLP',
+  decidedByName: null,
+  revokedByName: null,
   version: 1,
   createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-01T00:00:00.000Z',
@@ -156,8 +159,11 @@ describe('RequestAccessCard - request states', () => {
 })
 
 describe('AccessRequestList', () => {
+  const COUNTS = { pending: 1, approved: 2, rejected: 3, revoked: 1, total: 7 }
   const listHandler = (items = [request()]) =>
-    http.get('/api/v1/admin-access-requests', () => HttpResponse.json(ok(items)))
+    http.get('/api/v1/admin-access-requests', () =>
+      HttpResponse.json(ok(items, { extra: { counts: COUNTS } })),
+    )
 
   it('shows pending requests with who asked and why', async () => {
     server.use(listHandler())
@@ -273,8 +279,11 @@ describe('AccessRequestList', () => {
 })
 
 describe('AccessRequestList - revocation', () => {
+  const COUNTS = { pending: 1, approved: 2, rejected: 3, revoked: 1, total: 7 }
   const listHandler = (items: unknown[]) =>
-    http.get('/api/v1/admin-access-requests', () => HttpResponse.json(ok(items)))
+    http.get('/api/v1/admin-access-requests', () =>
+      HttpResponse.json(ok(items, { extra: { counts: COUNTS } })),
+    )
 
   it('offers Revoke access on an approved request', async () => {
     server.use(listHandler([request({ status: 'APPROVED', version: 2 })]))
@@ -343,5 +352,114 @@ describe('AccessRequestList - revocation', () => {
     server.use(listHandler([request()]))
     renderWithProviders(<AccessRequestList />, { roles: ['ADMIN'] })
     expect(await screen.findByRole('tab', { name: /revoked/i })).toBeInTheDocument()
+  })
+})
+
+describe('AccessRequestList - control panel', () => {
+  const COUNTS = { pending: 4, approved: 6, rejected: 2, revoked: 1, total: 13 }
+  const listHandler = (items: unknown[] = [request()]) =>
+    http.get('/api/v1/admin-access-requests', () =>
+      HttpResponse.json(ok(items, { extra: { counts: COUNTS } })),
+    )
+
+  it('shows every dashboard metric', async () => {
+    server.use(listHandler())
+    renderWithProviders(<AccessRequestList />, { roles: ['ADMIN'] })
+
+    for (const label of [
+      /pending requests/i,
+      /approved admins/i,
+      /rejected requests/i,
+      /revoked admins/i,
+      /total requests/i,
+    ]) {
+      expect(await screen.findByText(label)).toBeInTheDocument()
+    }
+    expect(screen.getByText('13')).toBeInTheDocument()
+  })
+
+  it('shows the full lifecycle of an approved-then-revoked request', async () => {
+    // "Granted, then withdrawn" is a different fact from "never granted".
+    server.use(
+      listHandler([
+        request({
+          status: 'REVOKED',
+          decidedAt: '2026-08-02T10:00:00.000Z',
+          decidedByName: 'Swapnil Rahate',
+          revokedAt: '2026-08-09T10:00:00.000Z',
+          revokedByName: 'Swapnil Rahate',
+          revocationReason: 'Left the sourcing team.',
+        }),
+      ]),
+    )
+    renderWithProviders(<AccessRequestList />, { roles: ['ADMIN'] })
+
+    const table = await screen.findByRole('table', { name: /admin access requests/i })
+    // Scoped to the lifecycle list: the status badge in the actions column
+    // carries the same word.
+    const lifecycle = within(table).getByRole('list')
+    const stages = within(lifecycle)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent ?? '')
+    expect(stages).toHaveLength(3)
+    expect(stages[0]).toMatch(/Requested/)
+    expect(stages[1]).toMatch(/Approved/)
+    expect(stages[2]).toMatch(/Revoked/)
+    expect(stages[2]).toMatch(/left the sourcing team/i)
+    expect(within(lifecycle).getAllByText(/swapnil rahate/i).length).toBeGreaterThan(0)
+  })
+
+  it('shows a rejected request as requested then rejected, with no approval', async () => {
+    server.use(
+      listHandler([
+        request({
+          status: 'REJECTED',
+          decidedAt: '2026-08-02T10:00:00.000Z',
+          decidedByName: 'Swapnil Rahate',
+          decisionReason: 'Not needed for this role.',
+        }),
+      ]),
+    )
+    renderWithProviders(<AccessRequestList />, { roles: ['ADMIN'] })
+
+    const table = await screen.findByRole('table', { name: /admin access requests/i })
+    const lifecycle = within(table).getByRole('list')
+    const stages = within(lifecycle)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent ?? '')
+    // Two stages only: a rejection never passed through approval.
+    expect(stages).toHaveLength(2)
+    expect(stages[0]).toMatch(/Requested/)
+    expect(stages[1]).toMatch(/Rejected/)
+    expect(stages.join(' ')).not.toMatch(/Approved/)
+    expect(stages[1]).toMatch(/not needed for this role/i)
+  })
+
+  it('offers a date range and a CSV export', async () => {
+    server.use(listHandler())
+    renderWithProviders(<AccessRequestList />, { roles: ['ADMIN'] })
+
+    expect(await screen.findByLabelText(/^from$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^to$/i)).toBeInTheDocument()
+    // A plain link, so the browser streams the file and honours the filename.
+    const exportLink = screen.getByRole('link', { name: /export csv/i })
+    expect(exportLink).toHaveAttribute('href', '/api/v1/admin-access-requests/export')
+    expect(exportLink).toHaveAttribute('download')
+  })
+
+  it('has no accessibility violations with the full panel rendered', async () => {
+    server.use(
+      listHandler([
+        request({
+          status: 'REVOKED',
+          decidedByName: 'Swapnil Rahate',
+          revokedByName: 'Swapnil Rahate',
+          revocationReason: 'Left the team.',
+        }),
+      ]),
+    )
+    const { container } = renderWithProviders(<AccessRequestList />, { roles: ['ADMIN'] })
+    await screen.findByRole('table', { name: /admin access requests/i })
+    await expectNoAxeViolations(container)
   })
 })

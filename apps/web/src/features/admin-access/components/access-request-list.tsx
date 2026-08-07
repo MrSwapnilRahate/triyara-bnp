@@ -25,7 +25,7 @@ import {
   TabsTrigger,
   useToast,
 } from '@triyara/ui'
-import { Inbox, ShieldAlert } from 'lucide-react'
+import { Download, Inbox, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 
 import { DebouncedSearch } from '@/components/data/debounced-search'
@@ -40,7 +40,8 @@ import {
   useRejectRequest,
   useRevokeRequest,
 } from '../api/requests'
-import type { AdminAccessRequest, AdminAccessRequestStatus } from '../types'
+import type { AdminAccessCounts, AdminAccessRequest, AdminAccessRequestStatus } from '../types'
+import { Lifecycle } from './lifecycle'
 
 const TABS: { value: AdminAccessRequestStatus; label: string }[] = [
   { value: 'PENDING', label: 'Pending' },
@@ -54,6 +55,31 @@ const TONE: Record<AdminAccessRequestStatus, 'warning' | 'success' | 'danger' | 
   APPROVED: 'success',
   REJECTED: 'danger',
   REVOKED: 'neutral',
+}
+
+/** Tenant-wide totals, so the tiles report admin access and not the search. */
+function Metrics({ counts }: { counts: AdminAccessCounts }) {
+  const tiles: { label: string; value: number }[] = [
+    { label: 'Pending requests', value: counts.pending },
+    { label: 'Approved admins', value: counts.approved },
+    { label: 'Rejected requests', value: counts.rejected },
+    { label: 'Revoked admins', value: counts.revoked },
+    { label: 'Total requests', value: counts.total },
+  ]
+  return (
+    <dl className="grid gap-gutter sm:grid-cols-3 lg:grid-cols-5">
+      {tiles.map((tile) => (
+        <div key={tile.label} className="rounded-md border border-line bg-surface p-gutter">
+          <dt className="text-2xs font-semibold uppercase tracking-[0.12em] text-content-subtle">
+            {tile.label}
+          </dt>
+          <dd className="mt-gap-xs text-lg font-semibold tabular-nums text-content">
+            {tile.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
 /**
@@ -132,17 +158,53 @@ export function AccessRequestList() {
   }
 
   const items = requests.data?.items ?? []
+  const counts = requests.data?.counts
 
   // The panel contents, shared by every tab. Only the active TabsContent
   // mounts, so this renders once.
   const body = (
     <>
-      <DebouncedSearch
-        value={params.q ?? ''}
-        onChange={(next) => setFilter('q', next)}
-        placeholder="Search name, email or reason"
-        aria-label="Search admin access requests"
-      />
+      <div className="flex flex-wrap items-end gap-gutter">
+        <DebouncedSearch
+          value={params.q ?? ''}
+          onChange={(next) => setFilter('q', next)}
+          placeholder="Search name, email or reason"
+          aria-label="Search admin access requests"
+        />
+
+        <div>
+          <Label htmlFor="from" className="text-2xs">
+            From
+          </Label>
+          <Input
+            id="from"
+            type="date"
+            value={params.from ?? ''}
+            onChange={(event) => setFilter('from', event.target.value)}
+            className="mt-gap-xs"
+          />
+        </div>
+        <div>
+          <Label htmlFor="to" className="text-2xs">
+            To
+          </Label>
+          <Input
+            id="to"
+            type="date"
+            value={params.to ?? ''}
+            onChange={(event) => setFilter('to', event.target.value)}
+            className="mt-gap-xs"
+          />
+        </div>
+
+        <Button asChild variant="secondary" leadingIcon={<Download />}>
+          {/* A plain link, not fetch-then-blob: the browser streams the file
+              and the Content-Disposition filename is honoured. */}
+          <a href="/api/v1/admin-access-requests/export" download>
+            Export CSV
+          </a>
+        </Button>
+      </div>
 
       {requests.isPending ? (
         <SkeletonTable rows={5} columns={5} />
@@ -182,16 +244,11 @@ export function AccessRequestList() {
                         {request.currentRole}
                       </Badge>
                     </DataTableCell>
-                    <DataTableCell className="max-w-md text-content-muted">
-                      {request.reason}
-                      {request.decisionReason ? (
-                        <span className="mt-gap-xs block text-2xs text-content-subtle">
-                          Decision: {request.decisionReason}
-                        </span>
-                      ) : null}
-                    </DataTableCell>
-                    <DataTableCell className="text-content-muted">
-                      {new Date(request.createdAt).toLocaleDateString()}
+                    <DataTableCell className="max-w-lg">
+                      {/* The whole lifecycle, not just the latest state: an
+                          audit that cannot show "granted, then withdrawn" is
+                          not an audit. */}
+                      <Lifecycle request={request} />
                     </DataTableCell>
                     <DataTableCell className="text-right">
                       {request.status === 'PENDING' ? (
@@ -244,6 +301,8 @@ export function AccessRequestList() {
       />
 
       <div className="space-y-gutter p-gutter">
+        {counts ? <Metrics counts={counts} /> : null}
+
         {/* Every trigger needs a panel: Radix points aria-controls at one, and
             a tab list with no TabsContent produces a critical accessibility
             violation. Only the active panel mounts, so the body renders once. */}

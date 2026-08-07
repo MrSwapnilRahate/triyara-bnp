@@ -18,4 +18,16 @@ export interface AdminAccessRequest {
   version: number
   createdAt: string
   updatedAt: string
+  /** Resolved for display; the decision columns carry no foreign key. */
+  organizationName: string | null
+  decidedByName: string | null
+  revokedByName: string | null
+}
+
+export interface AdminAccessCounts {
+  pending: number
+  approved: number
+  rejected: number
+  revoked: number
+  total: number
 }

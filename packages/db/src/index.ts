@@ -19,6 +19,7 @@ export {
   type NewActivity,
 } from './repositories/activity.repository'
 export type {
+  AdminAccessRequestCounts,
   AdminAccessRequestListResult,
   AdminAccessRequestRecord,
   AdminAccessRequestRepository,

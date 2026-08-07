@@ -1,5 +1,5 @@
 import { createAdminAccessRequestService } from '@triyara/core'
-import { adminAccessRequestRepository } from '@triyara/db'
+import { adminAccessRequestRepository, organizationRepository, userRepository } from '@triyara/db'
 
 import { eventBus } from './event-bus'
 
@@ -9,4 +9,8 @@ import { eventBus } from './event-bus'
 export const adminAccessRequestService = createAdminAccessRequestService({
   repo: adminAccessRequestRepository,
   events: eventBus,
+  // The decision columns carry no foreign key, so who acted is looked up
+  // rather than joined.
+  users: userRepository,
+  organizations: organizationRepository,
 })

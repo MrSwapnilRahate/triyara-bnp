@@ -19,11 +19,15 @@ export {
   type ProfileRecord,
 } from './admin/admin.service'
 export {
+  type ActorNameLookup,
   type AdminAccessRequestCtx,
   type AdminAccessRequestDeps,
+  type AdminAccessRequestListView,
   type AdminAccessRequestService,
+  type AdminAccessRequestView,
   createAdminAccessRequestService,
   type DecisionResult,
+  type OrganizationNameLookup,
 } from './admin/admin-access-request.service'
 export {
   type AdminUserListItem,

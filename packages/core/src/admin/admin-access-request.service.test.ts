@@ -53,16 +53,34 @@ function repo(over: Partial<AdminAccessRequestRepository> = {}): AdminAccessRequ
     reject: async () => makeRequest({ status: 'REJECTED', version: 2 }),
     revoke: async () => makeRequest({ status: 'REVOKED', version: 3 }),
     findLatestForUser: async () => makeRequest(),
+    counts: async () => ({ pending: 2, approved: 3, rejected: 1, revoked: 1, total: 7 }),
+    listAllForExport: async () => [makeRequest()],
     ...over,
   } as AdminAccessRequestRepository
 }
 
 const DTO = { reason: 'I action the supplier review queue every day and need approvals.' }
 
+const users = {
+  findNamesByIds: async (ids: string[]) =>
+    new Map(ids.map((id) => [id, { name: `Name ${id}`, email: `${id}@triyara.test` }])),
+}
+const organizations = { findById: async () => ({ name: 'Triyara Exports LLP' }) }
+
+/** Every test builds the service the same way; only repo and events vary. */
+function svcWith(over: { repo?: AdminAccessRequestRepository; events?: EventBus } = {}) {
+  return createAdminAccessRequestService({
+    repo: over.repo ?? repo(),
+    events: over.events ?? events(),
+    users,
+    organizations,
+  })
+}
+
 describe('requesting access', () => {
   it('records a request for a non-admin', async () => {
     const sink: DomainEvent[] = []
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events(sink) })
+    const svc = svcWith({ repo: repo(), events: events(sink) })
     const result = await svc.request(ctxFor(['EXPORT_MANAGER']), DTO)
     expect(result.status).toBe('PENDING')
     expect(sink.find((e) => e.type === 'admin_access_request.submitted')).toBeDefined()
@@ -70,7 +88,7 @@ describe('requesting access', () => {
 
   it('takes the requester from the session, never from the body', async () => {
     let passed: unknown = null
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({
         create: async (_ctx, data) => {
           passed = data
@@ -88,7 +106,7 @@ describe('requesting access', () => {
   })
 
   it('refuses someone who is already an administrator', async () => {
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events() })
+    const svc = svcWith({ repo: repo(), events: events() })
     await expect(svc.request(ctxFor(['ADMIN']), DTO)).rejects.toThrow(
       /already have administrator access/i,
     )
@@ -96,13 +114,13 @@ describe('requesting access', () => {
 
   it('does not emit when the request is refused', async () => {
     const sink: DomainEvent[] = []
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events(sink) })
+    const svc = svcWith({ repo: repo(), events: events(sink) })
     await expect(svc.request(ctxFor(['ADMIN']), DTO)).rejects.toThrow()
     expect(sink).toHaveLength(0)
   })
 
   it('surfaces a duplicate pending request from the database', async () => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({
         create: async () => {
           throw new Error('You already have a pending admin access request.')
@@ -116,41 +134,41 @@ describe('requesting access', () => {
 
 describe('decision authorization', () => {
   it('lets the super administrator approve', async () => {
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events() })
+    const svc = svcWith({ repo: repo(), events: events() })
     const result = await svc.approve(ctxFor(['ADMIN'], SUPER, 'super1'), 'req1', 1)
     expect(result.request.status).toBe('APPROVED')
   })
 
   it('refuses an ordinary ADMIN', async () => {
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events() })
+    const svc = svcWith({ repo: repo(), events: events() })
     await expect(
       svc.approve(ctxFor(['ADMIN'], 'other-admin@triyara.test', 'u9'), 'req1', 1),
     ).rejects.toThrow(/super administrator/i)
   })
 
   it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']])('refuses a %s', async (role) => {
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events() })
+    const svc = svcWith({ repo: repo(), events: events() })
     await expect(svc.approve(ctxFor([role as Role]), 'req1', 1)).rejects.toThrow(
       /super administrator/i,
     )
   })
 
   it('refuses an ordinary ADMIN on reject too', async () => {
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events() })
+    const svc = svcWith({ repo: repo(), events: events() })
     await expect(
       svc.reject(ctxFor(['ADMIN'], 'other-admin@triyara.test'), 'req1', 1, { reason: 'no need' }),
     ).rejects.toThrow(/super administrator/i)
   })
 
   it('refuses the list to anyone but the super administrator', async () => {
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events() })
+    const svc = svcWith({ repo: repo(), events: events() })
     await expect(
       svc.list(ctxFor(['ADMIN'], 'other-admin@triyara.test'), { limit: 25 }),
     ).rejects.toThrow(/super administrator/i)
   })
 
   it('matches the super administrator regardless of case', async () => {
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events() })
+    const svc = svcWith({ repo: repo(), events: events() })
     const result = await svc.approve(ctxFor(['ADMIN'], SUPER.toUpperCase(), 'super1'), 'req1', 1)
     expect(result.request.status).toBe('APPROVED')
   })
@@ -158,7 +176,7 @@ describe('decision authorization', () => {
 
 describe('decision rules', () => {
   it('refuses approving your own request', async () => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest({ userId: 'super1' }) }),
       events: events(),
     })
@@ -168,7 +186,7 @@ describe('decision rules', () => {
   })
 
   it('refuses deciding your own request on reject too', async () => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest({ userId: 'super1' }) }),
       events: events(),
     })
@@ -178,7 +196,7 @@ describe('decision rules', () => {
   })
 
   it.each([['APPROVED'], ['REJECTED']])('refuses approving an already %s request', async (s) => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest({ status: s as 'APPROVED' }) }),
       events: events(),
     })
@@ -188,7 +206,7 @@ describe('decision rules', () => {
   })
 
   it.each([['APPROVED'], ['REJECTED']])('refuses rejecting an already %s request', async (s) => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest({ status: s as 'APPROVED' }) }),
       events: events(),
     })
@@ -198,10 +216,7 @@ describe('decision rules', () => {
   })
 
   it('refuses a request that does not exist', async () => {
-    const svc = createAdminAccessRequestService({
-      repo: repo({ findById: async () => null }),
-      events: events(),
-    })
+    const svc = svcWith({ repo: repo({ findById: async () => null }), events: events() })
     await expect(svc.approve(ctxFor(['ADMIN'], SUPER, 'super1'), 'gone', 1)).rejects.toThrow(
       /not found/i,
     )
@@ -209,7 +224,7 @@ describe('decision rules', () => {
 
   it('passes the caller version through for optimistic concurrency', async () => {
     let seen: number | undefined
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({
         approve: async (_ctx, _id, expectedVersion) => {
           seen = expectedVersion
@@ -223,7 +238,7 @@ describe('decision rules', () => {
   })
 
   it('propagates a version conflict', async () => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({
         approve: async () => {
           throw new PreconditionFailedError()
@@ -238,7 +253,7 @@ describe('decision rules', () => {
 
   it('emits an approval event carrying who it was for', async () => {
     const sink: DomainEvent[] = []
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events(sink) })
+    const svc = svcWith({ repo: repo(), events: events(sink) })
     await svc.approve(ctxFor(['ADMIN'], SUPER, 'super1'), 'req1', 1)
     const event = sink.find((e) => e.type === 'admin_access_request.approved')
     expect(event?.data).toMatchObject({ requestId: 'req1', userId: 'u1' })
@@ -246,7 +261,7 @@ describe('decision rules', () => {
 
   it('emits a rejection event and returns the requester for notifying', async () => {
     const sink: DomainEvent[] = []
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events(sink) })
+    const svc = svcWith({ repo: repo(), events: events(sink) })
     const result = await svc.reject(ctxFor(['ADMIN'], SUPER, 'super1'), 'req1', 1, {
       reason: 'This role does not need approval rights.',
     })
@@ -256,7 +271,7 @@ describe('decision rules', () => {
 
   it('emits nothing when a decision is refused', async () => {
     const sink: DomainEvent[] = []
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest({ status: 'APPROVED' }) }),
       events: events(sink),
     })
@@ -267,7 +282,7 @@ describe('decision rules', () => {
 
 describe('canDecide', () => {
   it('is true only for the super administrator', () => {
-    const svc = createAdminAccessRequestService({ repo: repo(), events: events() })
+    const svc = svcWith({ repo: repo(), events: events() })
     expect(svc.canDecide(ctxFor(['ADMIN'], SUPER))).toBe(true)
     expect(svc.canDecide(ctxFor(['ADMIN'], 'other@triyara.test'))).toBe(false)
     expect(svc.canDecide(ctxFor(['READ_ONLY']))).toBe(false)
@@ -294,7 +309,7 @@ describe('revoking access', () => {
   const REASON = { reason: 'Left the sourcing team last month.' }
 
   it('lets the super administrator revoke', async () => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest(APPROVED) }),
       events: events(),
     })
@@ -305,7 +320,7 @@ describe('revoking access', () => {
   it('refuses an ordinary ADMIN', async () => {
     // An ADMIN who could revoke another could remove everyone who disagreed
     // with them - the same escalation the grant path already refuses.
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest(APPROVED) }),
       events: events(),
     })
@@ -315,7 +330,7 @@ describe('revoking access', () => {
   })
 
   it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']])('refuses a %s', async (role) => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest(APPROVED) }),
       events: events(),
     })
@@ -325,7 +340,7 @@ describe('revoking access', () => {
   })
 
   it('refuses revoking your own access', async () => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest({ ...APPROVED, userId: 'super1' }) }),
       events: events(),
     })
@@ -337,7 +352,7 @@ describe('revoking access', () => {
   it('refuses revoking the super administrator', async () => {
     // Stage-1 has one. Removing their ADMIN leaves nobody able to decide any
     // future request.
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({
         findById: async () => makeRequest({ ...APPROVED, userId: 'u2', requesterEmail: SUPER }),
       }),
@@ -351,7 +366,7 @@ describe('revoking access', () => {
   it.each([['PENDING'], ['REJECTED'], ['REVOKED']])(
     'refuses revoking a %s request',
     async (status) => {
-      const svc = createAdminAccessRequestService({
+      const svc = svcWith({
         repo: repo({ findById: async () => makeRequest({ status: status as 'PENDING' }) }),
         events: events(),
       })
@@ -363,7 +378,7 @@ describe('revoking access', () => {
 
   it('passes the caller version through for optimistic concurrency', async () => {
     let seen: number | undefined
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({
         findById: async () => makeRequest(APPROVED),
         revoke: async (_ctx, _id, expectedVersion) => {
@@ -378,7 +393,7 @@ describe('revoking access', () => {
   })
 
   it('propagates a version conflict', async () => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({
         findById: async () => makeRequest(APPROVED),
         revoke: async () => {
@@ -394,7 +409,7 @@ describe('revoking access', () => {
 
   it('emits an event naming who lost access', async () => {
     const sink: DomainEvent[] = []
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest(APPROVED) }),
       events: events(sink),
     })
@@ -405,7 +420,7 @@ describe('revoking access', () => {
 
   it('emits nothing when the revocation is refused', async () => {
     const sink: DomainEvent[] = []
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findById: async () => makeRequest({ status: 'PENDING' }) }),
       events: events(sink),
     })
@@ -418,7 +433,7 @@ describe('revoking access', () => {
 
 describe('myLatest', () => {
   it('returns the caller own most recent request', async () => {
-    const svc = createAdminAccessRequestService({
+    const svc = svcWith({
       repo: repo({ findLatestForUser: async () => makeRequest({ status: 'REVOKED' }) }),
       events: events(),
     })
@@ -427,10 +442,120 @@ describe('myLatest', () => {
   })
 
   it('returns null when they have never asked', async () => {
-    const svc = createAdminAccessRequestService({
-      repo: repo({ findLatestForUser: async () => null }),
+    const svc = svcWith({ repo: repo({ findLatestForUser: async () => null }), events: events() })
+    expect(await svc.myLatest(ctxFor(['VERIFIER']))).toBeNull()
+  })
+})
+
+describe('the control panel', () => {
+  it('returns tenant-wide counts alongside the page', async () => {
+    // The tiles report the state of admin access, not the state of the
+    // current search - so they must not be derived from the filtered page.
+    const svc = svcWith({ repo: repo({ list: async () => ({ items: [], nextCursor: null }) }) })
+    const result = await svc.list(ctxFor(['ADMIN'], SUPER, 'super1'), { limit: 25 })
+    expect(result.counts).toEqual({ pending: 2, approved: 3, rejected: 1, revoked: 1, total: 7 })
+  })
+
+  it('resolves who decided and who revoked into names', async () => {
+    const svc = svcWith({
+      repo: repo({
+        list: async () => ({
+          items: [makeRequest({ status: 'REVOKED', decidedById: 'd1', revokedById: 'r1' })],
+          nextCursor: null,
+        }),
+      }),
+    })
+    const result = await svc.list(ctxFor(['ADMIN'], SUPER, 'super1'), { limit: 25 })
+    expect(result.items[0]).toMatchObject({
+      decidedByName: 'Name d1',
+      revokedByName: 'Name r1',
+      organizationName: 'Triyara Exports LLP',
+    })
+  })
+
+  it('keeps a row whose actor has since been removed', async () => {
+    // Losing the record would be worse than showing it without a name.
+    const svc = svcWith({
+      repo: repo({
+        list: async () => ({
+          items: [makeRequest({ status: 'APPROVED', decidedById: 'gone' })],
+          nextCursor: null,
+        }),
+      }),
       events: events(),
     })
-    expect(await svc.myLatest(ctxFor(['VERIFIER']))).toBeNull()
+    const withMissing = createAdminAccessRequestService({
+      repo: repo({
+        list: async () => ({
+          items: [makeRequest({ status: 'APPROVED', decidedById: 'gone' })],
+          nextCursor: null,
+        }),
+      }),
+      events: events(),
+      users: { findNamesByIds: async () => new Map() },
+      organizations,
+    })
+    const result = await withMissing.list(ctxFor(['ADMIN'], SUPER, 'super1'), { limit: 25 })
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]?.decidedByName).toBeNull()
+    expect(result.items[0]?.decidedById).toBe('gone')
+    expect(svc).toBeDefined()
+  })
+
+  it('passes the date range through to the repository', async () => {
+    let seen: { from?: Date; to?: Date } | null = null
+    const svc = svcWith({
+      repo: repo({
+        list: async (params) => {
+          seen = params
+          return { items: [], nextCursor: null }
+        },
+      } as Partial<AdminAccessRequestRepository>),
+    })
+    const from = new Date('2026-08-01T00:00:00.000Z')
+    const to = new Date('2026-08-31T23:59:59.000Z')
+    await svc.list(ctxFor(['ADMIN'], SUPER, 'super1'), { limit: 25, from, to })
+    expect(seen).toMatchObject({ from, to })
+  })
+
+  it('refuses the export to anyone but the super administrator', async () => {
+    const svc = svcWith()
+    await expect(svc.exportAll(ctxFor(['ADMIN'], 'other-admin@triyara.test'))).rejects.toThrow(
+      /super administrator/i,
+    )
+  })
+
+  it('exports every request, unpaged', async () => {
+    // An export that stopped at a page boundary carries nothing on its face
+    // saying it was incomplete.
+    const svc = svcWith()
+    const rows = await svc.exportAll(ctxFor(['ADMIN'], SUPER, 'super1'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.organizationName).toBe('Triyara Exports LLP')
+  })
+})
+
+describe('reasons reach the activity log', () => {
+  it('carries the rejection reason on the event', async () => {
+    const sink: DomainEvent[] = []
+    const svc = svcWith({ events: events(sink) })
+    await svc.reject(ctxFor(['ADMIN'], SUPER, 'super1'), 'req1', 1, {
+      reason: 'Not needed for this role.',
+    })
+    const event = sink.find((e) => e.type === 'admin_access_request.rejected')
+    expect(event?.data).toMatchObject({ reason: 'Not needed for this role.' })
+  })
+
+  it('carries the revocation reason on the event', async () => {
+    const sink: DomainEvent[] = []
+    const svc = svcWith({
+      repo: repo({ findById: async () => makeRequest({ status: 'APPROVED' }) }),
+      events: events(sink),
+    })
+    await svc.revoke(ctxFor(['ADMIN'], SUPER, 'super1'), 'req1', 2, {
+      reason: 'Left the sourcing team.',
+    })
+    const event = sink.find((e) => e.type === 'admin_access_request.revoked')
+    expect(event?.data).toMatchObject({ reason: 'Left the sourcing team.' })
   })
 })

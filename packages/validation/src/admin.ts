@@ -204,6 +204,9 @@ export const listAdminAccessRequestsQuerySchema = z.object({
   status: adminAccessRequestStatusSchema.optional(),
   /** Free text over requester name, email and reason. */
   q: z.string().trim().max(120).optional(),
+  /** Inclusive bounds on when the request was made. */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
   sort: z
     .enum(['createdAt', '-createdAt', 'requesterName', '-requesterName', 'status', '-status'])
     .optional(),
@@ -215,3 +218,9 @@ export const revokeAdminAccessSchema = z.object({
   reason: z.string().trim().min(10).max(2000),
 })
 export type RevokeAdminAccessDto = z.infer<typeof revokeAdminAccessSchema>
+
+/** Date-range bounds for the admin access queue. Both inclusive. */
+export const adminAccessDateRangeSchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+})

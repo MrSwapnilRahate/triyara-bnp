@@ -43,9 +43,22 @@ export interface ListAdminAccessRequestsParams {
   organizationId: string
   status?: AdminAccessRequestStatus
   q?: string
+  /** Inclusive lower bound on when the request was made. */
+  from?: Date
+  /** Inclusive upper bound. */
+  to?: Date
   sort?: string
   limit: number
   cursor?: string
+}
+
+/** How many requests sit in each state. Drives the dashboard tiles. */
+export interface AdminAccessRequestCounts {
+  pending: number
+  approved: number
+  rejected: number
+  revoked: number
+  total: number
 }
 
 export interface AdminAccessRequestListResult {
@@ -136,6 +149,16 @@ export const adminAccessRequestRepository = {
               { requesterEmail: { contains: params.q, mode: 'insensitive' } },
               { reason: { contains: params.q, mode: 'insensitive' } },
             ],
+          }
+        : {}),
+      // Both bounds are inclusive; `to` is pushed to the end of that day so a
+      // single-day range returns that day rather than nothing.
+      ...(params.from || params.to
+        ? {
+            createdAt: {
+              ...(params.from ? { gte: params.from } : {}),
+              ...(params.to ? { lte: params.to } : {}),
+            },
           }
         : {}),
     }
@@ -300,6 +323,41 @@ export const adminAccessRequestRepository = {
         after: { status: after.status, revokedFrom: before.requesterEmail, reason },
       })
       return after
+    })
+  },
+
+  /**
+   * How many requests sit in each state.
+   *
+   * One grouped query rather than five counts: the tiles are read together and
+   * five round trips would let them disagree with each other.
+   */
+  async counts(organizationId: string): Promise<AdminAccessRequestCounts> {
+    const rows = await prisma.adminAccessRequest.groupBy({
+      by: ['status'],
+      where: { organizationId },
+      _count: { _all: true },
+    })
+    const by = new Map(rows.map((row) => [row.status, row._count._all]))
+    const pending = by.get('PENDING') ?? 0
+    const approved = by.get('APPROVED') ?? 0
+    const rejected = by.get('REJECTED') ?? 0
+    const revoked = by.get('REVOKED') ?? 0
+    return { pending, approved, rejected, revoked, total: pending + approved + rejected + revoked }
+  },
+
+  /**
+   * Every request, oldest first, for export.
+   *
+   * Deliberately uncapped and unpaged - an export that silently stopped at a
+   * page boundary would be worse than none, because nothing on the file says
+   * it is partial.
+   */
+  listAllForExport(organizationId: string): Promise<AdminAccessRequestRecord[]> {
+    return prisma.adminAccessRequest.findMany({
+      where: { organizationId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: requestSelect,
     })
   },
 
