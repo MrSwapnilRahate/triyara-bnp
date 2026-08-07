@@ -3,15 +3,161 @@ name: Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
-# Preview deploys run per-PR via the Vercel Git integration.
-# Production deploys on merge to main. Configure secrets:
-#   VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+# A deploy must never be cancelled part-way. Between `migrate deploy` and the
+# Vercel deploy the database is ahead of the running code; cancelling there
+# leaves that state with nothing reporting it.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   production:
     name: Production deploy
     runs-on: ubuntu-latest
+    # Deliberate off switch. Every merge to main is a no-op until the
+    # DEPLOY_ENABLED repository variable is set to 'true', which is the
+    # go-live action once the secrets and Vercel variables below exist.
+    # See docs/07-deployment/README.md.
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - run: echo "Vercel production deploy runs here once secrets are configured."
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Pinned to a major: an unpinned CLI turns an upstream release into a
+      # failed production deploy on an unrelated day.
+      - name: Install Vercel CLI
+        run: npm install --global vercel@58
+
+      - name: Pull the production environment from Vercel
+        # Vercel holds the runtime configuration; this is the single source of
+        # truth for it. Nothing is duplicated into GitHub secrets except the
+        # three values needed to reach Vercel in the first place.
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Require every runtime variable before deploying
+        # Names only - no value is printed. Without this the build succeeds and
+        # the failure surfaces as a 500 on a supplier's first upload instead.
+        run: |
+          set -euo pipefail
+          # The CLI's output path has moved between major versions; resolve it
+          # rather than assume, so a CLI upgrade fails loudly here instead of
+          # skipping the checks below.
+          env_file=""
+          for candidate in .vercel/.env.production.local .env.production.local; do
+            if [ -f "$candidate" ]; then
+              env_file="$candidate"
+              break
+            fi
+          done
+          if [ -z "$env_file" ]; then
+            echo "::error::vercel pull produced no production environment file."
+            echo "Looked for .vercel/.env.production.local and .env.production.local."
+            exit 1
+          fi
+          if [ -n "${GITHUB_ENV:-}" ]; then
+            echo "PRODUCTION_ENV_FILE=$env_file" >> "$GITHUB_ENV"
+          fi
+
+          missing=""
+          for key in DATABASE_URL AUTH_SECRET PUBLIC_REGISTRATION_ORG_SLUG \
+                     STORAGE_PROVIDER STORAGE_BUCKET \
+                     STORAGE_ACCESS_KEY_ID STORAGE_SECRET_ACCESS_KEY; do
+            grep -q "^${key}=" "$env_file" || missing="$missing $key"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing from the Vercel production environment:$missing"
+            echo "Set them in the Vercel project (Settings, Environment Variables, Production)."
+            exit 1
+          fi
+
+          # The provider name is not a secret, and getting it wrong is the one
+          # storage mistake that loses documents silently.
+          provider=$(grep '^STORAGE_PROVIDER=' "$env_file" | head -1 | cut -d= -f2- | tr -d '"')
+          case "$provider" in
+            s3 | r2) echo "Storage provider: $provider" ;;
+            *)
+              echo "::error::STORAGE_PROVIDER is '$provider'. Production requires s3 or r2;"
+              echo "local storage is discarded between invocations and loses uploads."
+              exit 1
+              ;;
+          esac
+
+          if [ "$provider" = "r2" ] && ! grep -q '^STORAGE_ENDPOINT=' "$env_file"; then
+            echo "::error::STORAGE_PROVIDER=r2 requires STORAGE_ENDPOINT."
+            exit 1
+          fi
+
+      - name: Apply database migrations
+        # Before the deploy, never after: new code must not reach traffic ahead
+        # of the schema it expects. Migrations are additive by convention
+        # (expand/contract), so if the deploy then fails, the old code keeps
+        # running against a superset schema rather than a broken one.
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1090
+          . "./$PRODUCTION_ENV_FILE"
+          set +a
+          pnpm --filter @triyara/db db:deploy
+
+      - name: Build
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy
+        id: deploy
+        run: |
+          set -euo pipefail
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url"
+
+      - name: Smoke check the deployment
+        # Proves the deployment boots and serves. /api/health is static, so it
+        # does not exercise the database or storage - the post-deploy checks in
+        # docs/07-deployment/README.md cover those and are not automatable here
+        # without writing rows to production.
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          code=000
+          for _ in 1 2 3 4 5 6; do
+            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' "$DEPLOY_URL/api/health" || echo 000)
+            [ "$code" = "200" ] && break
+            sleep 5
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::Health check returned HTTP $code from $DEPLOY_URL/api/health"
+            cat /tmp/health.json 2>/dev/null || true
+            exit 1
+          fi
+          grep -q '"status":"ok"' /tmp/health.json || {
+            echo "::error::Health endpoint answered 200 with an unexpected payload."
+            cat /tmp/health.json
+            exit 1
+          }
+          echo "Health check passed: $DEPLOY_URL/api/health"
+
+      - name: Summary
+        if: always()
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          {
+            echo "### Production deploy"
+            echo
+            echo "- commit: \`${GITHUB_SHA}\`"
+            echo "- deployment: ${DEPLOY_URL:-not created}"
+          } >> "$GITHUB_STEP_SUMMARY"
