@@ -25,7 +25,7 @@ vi.mock('@/auth/context', () => ({
   })),
 }))
 
-const { GET: listUsers } = await import('./admin/users/route')
+const { GET: listUsers, POST: inviteUser } = await import('./admin/users/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const body = async (res: Response) =>
@@ -412,6 +412,96 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
       expect(admin.status).toBe(403)
 
       authState.roles = ['ADMIN']
+    })
+  })
+
+  describe('invite', () => {
+    const post = (payload: unknown) =>
+      inviteUser(
+        req('/api/v1/admin/users', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        }),
+      )
+
+    it('creates the user, the role and an invitation together', async () => {
+      const email = `invite-${uniq()}@triyara.test`
+      const res = await post({ name: 'Invited Person', email, role: 'VERIFIER' })
+      expect(res.status).toBe(201)
+
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email },
+        include: { roles: { include: { role: true } }, resetTokens: true },
+      })
+      expect(user.organizationId).toBe(authState.organizationId)
+      expect(user.roles.map((r) => r.role.name)).toEqual(['VERIFIER'])
+      // The invitation is the only way in, so it must exist and be unexpired.
+      expect(user.resetTokens).toHaveLength(1)
+      expect(user.resetTokens[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now())
+      expect(user.resetTokens[0]!.usedAt).toBeNull()
+    })
+
+    it('stores a password hash nobody can sign in with', async () => {
+      const email = `invite-${uniq()}@triyara.test`
+      await post({ name: 'Invited Person', email, role: 'READ_ONLY' })
+
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } })
+      // A bcrypt hash of 48 random bytes. Not empty, not a known string.
+      expect(user.passwordHash).toMatch(/^\$2[aby]\$/)
+      expect(user.passwordHash.length).toBeGreaterThan(50)
+    })
+
+    it('writes an audit row that carries no credential', async () => {
+      const email = `invite-${uniq()}@triyara.test`
+      const res = await post({ name: 'Invited Person', email, role: 'EXPORT_MANAGER' })
+      const created = (await body(res)).data as unknown as { id: string }
+
+      const audit = await prisma.auditLog.findFirst({
+        where: { entityType: 'User', entityId: created.id, action: 'user.invited' },
+      })
+      expect(audit).not.toBeNull()
+      const serialised = JSON.stringify(audit)
+      expect(serialised).toContain(email)
+      expect(serialised).not.toContain('$2b$')
+      expect(serialised).not.toMatch(/tokenHash|passwordHash/)
+    })
+
+    it('refuses a duplicate email and creates nothing', async () => {
+      const email = `invite-${uniq()}@triyara.test`
+      expect((await post({ name: 'First', email, role: 'VERIFIER' })).status).toBe(201)
+
+      const second = await post({ name: 'Second', email, role: 'ADMIN' })
+      expect(second.status).toBe(409)
+
+      // The first user keeps their role and gains no extra invitation.
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email },
+        include: { roles: { include: { role: true } }, resetTokens: true },
+      })
+      expect(user.name).toBe('First')
+      expect(user.roles.map((r) => r.role.name)).toEqual(['VERIFIER'])
+      expect(user.resetTokens).toHaveLength(1)
+    })
+
+    it('refuses a non-admin and creates nothing', async () => {
+      const email = `invite-${uniq()}@triyara.test`
+      authState.roles = ['EXPORT_MANAGER']
+      try {
+        const res = await post({ name: 'Nope', email, role: 'ADMIN' })
+        expect(res.status).toBe(403)
+      } finally {
+        authState.roles = ['ADMIN']
+      }
+      expect(await prisma.user.findUnique({ where: { email } })).toBeNull()
+    })
+
+    it('files the new user in the caller organization, not another', async () => {
+      const email = `invite-${uniq()}@triyara.test`
+      await post({ name: 'Scoped', email, role: 'VERIFIER' })
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } })
+      expect(user.organizationId).toBe(authState.organizationId)
+      expect(user.organizationId).not.toBe(otherOrgId)
     })
   })
 })

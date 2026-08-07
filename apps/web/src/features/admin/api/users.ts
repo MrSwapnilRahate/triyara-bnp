@@ -91,6 +91,43 @@ export function useUserRoles(id: string) {
   })
 }
 
+export interface InviteUserInput {
+  name: string
+  email: string
+  role: RoleName
+}
+
+export interface InvitedUser {
+  id: string
+  name: string
+  email: string
+  role: RoleName
+  expiresAt: string
+}
+
+/**
+ * Invites a colleague.
+ *
+ * The response carries no token: the invitation reaches the invitee by email
+ * and nowhere else, so an administrator never holds something that would let
+ * them set another person's password.
+ */
+export function useInviteUser() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: InviteUserInput) => {
+      const result = await api.post<InvitedUser>(`${BASE}/admin/users`, input)
+      return {
+        user: result.data,
+        invitationEmail: result.meta?.invitationEmail as string | undefined,
+      }
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: [...adminKeys.all, 'users'] })
+    },
+  })
+}
+
 export function useAssignRole(id: string) {
   const client = useQueryClient()
   return useMutation({
