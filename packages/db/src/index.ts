@@ -19,6 +19,15 @@ export {
   type NewActivity,
 } from './repositories/activity.repository'
 export type {
+  AdminAccessRequestCounts,
+  AdminAccessRequestListResult,
+  AdminAccessRequestRecord,
+  AdminAccessRequestRepository,
+  CreateAdminAccessRequestData,
+  ListAdminAccessRequestsParams,
+} from './repositories/admin-access-request.repository'
+export { adminAccessRequestRepository } from './repositories/admin-access-request.repository'
+export type {
   AnalyticsRepository,
   CountryPoint,
   DashboardTrends,

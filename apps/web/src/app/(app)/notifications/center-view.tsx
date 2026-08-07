@@ -112,7 +112,7 @@ export function NotificationCenter({
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-gold text-2xl font-bold">Notifications</h1>
+        <h1 className="text-2xl font-bold text-gold">Notifications</h1>
         <div className="flex gap-2">
           <button className={ghost} onClick={() => setShowPrefs((v) => !v)}>
             Preferences
@@ -180,7 +180,7 @@ export function NotificationCenter({
                     className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${unread ? 'border-gold/30 bg-gold/[0.04]' : 'border-white/10'}`}
                   >
                     {unread ? (
-                      <span className="bg-gold mt-1.5 h-2 w-2 flex-shrink-0 rounded-full" />
+                      <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-gold" />
                     ) : (
                       <span className="mt-1.5 h-2 w-2 flex-shrink-0" />
                     )}
@@ -294,7 +294,7 @@ function PreferencesPanel({
         ))}
       </ul>
       <button
-        className="bg-gold text-navy hover:bg-gold-light mt-4 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+        className="mt-4 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-navy hover:bg-gold-light disabled:opacity-50"
         disabled={saving}
         onClick={() => void save()}
       >

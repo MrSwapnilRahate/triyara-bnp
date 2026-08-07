@@ -46,7 +46,7 @@ export function NotificationBell() {
         <path d="M13.7 21a2 2 0 0 1-3.4 0" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       {count > 0 ? (
-        <span className="bg-gold text-navy absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold">
+        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-navy">
           {count > 99 ? '99+' : count}
         </span>
       ) : null}

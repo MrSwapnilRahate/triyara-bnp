@@ -137,13 +137,14 @@ indistinguishable — from their side — from never having registered.
 
 ### Configuration
 
-| Variable                    | Required           | Notes                                                                 |
-| --------------------------- | ------------------ | --------------------------------------------------------------------- |
-| `RESEND_API_KEY`            | yes, in production | Resend → API Keys                                                     |
-| `EMAIL_FROM`                | yes, in production | must be a **verified domain** in Resend                               |
-| `EMAIL_REPLY_TO`            | recommended        | rejection emails invite a reply; without it nobody reads it           |
-| `EMAIL_STAFF_NOTIFICATIONS` | recommended        | comma-separated; unset means nobody is told about new registrations   |
-| `APP_URL`                   | recommended        | absolute origin for links; falls back to `VERCEL_URL`, then localhost |
+| Variable                    | Required           | Notes                                                                                                |
+| --------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `RESEND_API_KEY`            | yes, in production | Resend → API Keys                                                                                    |
+| `EMAIL_FROM`                | yes, in production | must be a **verified domain** in Resend                                                              |
+| `EMAIL_REPLY_TO`            | recommended        | rejection emails invite a reply; without it nobody reads it                                          |
+| `EMAIL_STAFF_NOTIFICATIONS` | recommended        | comma-separated; unset means nobody is told about new registrations                                  |
+| `APP_URL`                   | recommended        | absolute origin for links; falls back to `VERCEL_URL`, then localhost                                |
+| `SUPER_ADMIN_EMAILS`        | recommended        | who may decide admin access requests; comma-separated, falls back to the Stage-1 super administrator |
 
 Without a key the app uses a **log transport**: messages are written to the log
 rather than sent. That is the default locally, which is why a password-reset

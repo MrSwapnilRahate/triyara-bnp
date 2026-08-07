@@ -19,6 +19,17 @@ export {
   type ProfileRecord,
 } from './admin/admin.service'
 export {
+  type ActorNameLookup,
+  type AdminAccessRequestCtx,
+  type AdminAccessRequestDeps,
+  type AdminAccessRequestListView,
+  type AdminAccessRequestService,
+  type AdminAccessRequestView,
+  createAdminAccessRequestService,
+  type DecisionResult,
+  type OrganizationNameLookup,
+} from './admin/admin-access-request.service'
+export {
   type AdminUserListItem,
   type AdminUserListResponse,
   type AdminUsersService,
@@ -158,6 +169,15 @@ export {
   type RfqSupplierDeps,
   type RfqSupplierService,
 } from './rfq/rfq-supplier.service'
+export {
+  ADMIN_MUST_BE_REQUESTED_MESSAGE,
+  assertSuperAdmin,
+  getSuperAdminEmails,
+  isLastSuperAdminHolder,
+  isSuperAdmin,
+  NOT_SUPER_ADMIN_MESSAGE,
+  parseSuperAdminEmails,
+} from './security/super-admin'
 export {
   createSupplierService,
   type SupplierService,

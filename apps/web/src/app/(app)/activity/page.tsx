@@ -24,7 +24,7 @@ export default async function ActivityPage({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-gold mb-6 text-2xl font-bold">Activity</h1>
+      <h1 className="mb-6 text-2xl font-bold text-gold">Activity</h1>
       <ActivityFeed
         initialItems={result.items}
         initialCursor={result.nextCursor}

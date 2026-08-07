@@ -99,8 +99,19 @@ describe('admin users - invite behaviour', () => {
 
   it('passes the chosen role through', async () => {
     const { service, createWithInvite } = deps()
-    await service.invite(ctxFor(['ADMIN']), { ...DTO, role: 'ADMIN' })
-    expect(createWithInvite.mock.calls[0]![1]).toMatchObject({ roleName: 'ADMIN' })
+    await service.invite(ctxFor(['ADMIN']), { ...DTO, role: 'EXPORT_MANAGER' })
+    expect(createWithInvite.mock.calls[0]![1]).toMatchObject({ roleName: 'EXPORT_MANAGER' })
+  })
+
+  it('refuses to invite anyone straight to ADMIN', async () => {
+    // Inviting writes the role row itself rather than going through
+    // UserRoleService, so it is a second way to create an administrator. Every
+    // new colleague starts on a non-admin role and asks if they need more.
+    const { service, createWithInvite } = deps()
+    await expect(service.invite(ctxFor(['ADMIN']), { ...DTO, role: 'ADMIN' })).rejects.toThrow(
+      /cannot be assigned directly/i,
+    )
+    expect(createWithInvite).not.toHaveBeenCalled()
   })
 
   it('emits user.invited without the token in the payload', async () => {

@@ -111,6 +111,24 @@ export const userRepository = {
     })
   },
 
+  /**
+   * Names and addresses for a set of ids, as a map.
+   *
+   * For rendering who did what on records whose actor columns carry no foreign
+   * key - AuditLog.actorId and the admin-access decision columns follow that
+   * convention so sentinel actors stay possible, which means the name has to be
+   * looked up rather than joined. One query for the whole page, not one per row.
+   */
+  async findNamesByIds(ids: string[]): Promise<Map<string, { name: string; email: string }>> {
+    const unique = [...new Set(ids.filter(Boolean))]
+    if (unique.length === 0) return new Map()
+    const rows = await prisma.user.findMany({
+      where: { id: { in: unique } },
+      select: { id: true, name: true, email: true },
+    })
+    return new Map(rows.map((row) => [row.id, { name: row.name, email: row.email }]))
+  },
+
   async updatePassword(id: string, passwordHash: string): Promise<void> {
     await prisma.user.update({ where: { id }, data: { passwordHash } })
   },

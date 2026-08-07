@@ -32,6 +32,7 @@ function fakeTransport(result?: SendResult) {
 const BASE = {
   appUrl: 'https://bnp.example.com/',
   staffRecipients: ['ops@example.com'],
+  superAdminRecipients: ['super@example.com'],
 }
 
 describe('isSendableAddress', () => {
@@ -139,6 +140,7 @@ describe('email service', () => {
       logger: log.logger,
       appUrl: BASE.appUrl,
       staffRecipients: [],
+      superAdminRecipients: BASE.superAdminRecipients,
     })
 
     const result = await email.staffNewRegistration({

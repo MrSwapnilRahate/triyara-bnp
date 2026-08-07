@@ -34,10 +34,10 @@ export default async function AccountActivityPage({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/accounts" className="hover:text-gold text-xs text-white/40">
+      <Link href="/accounts" className="text-xs text-white/40 hover:text-gold">
         &larr; Accounts
       </Link>
-      <h1 className="text-gold mb-1 mt-2 text-2xl font-bold">{account.legalName}</h1>
+      <h1 className="mb-1 mt-2 text-2xl font-bold text-gold">{account.legalName}</h1>
       <p className="mb-6 text-sm text-white/40">Account timeline</p>
       <ActivityFeed
         initialItems={result.items}

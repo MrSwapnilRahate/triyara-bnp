@@ -44,6 +44,25 @@ export const userRoleRepository = {
    * as roughly descending privilege, which is the useful order here, and every
    * caller gets the same one.
    */
+  /**
+   * Email addresses of every other ADMIN in the tenant.
+   *
+   * Used to decide whether removing one person's ADMIN role would leave the
+   * platform without a super administrator. Excludes the person being changed,
+   * because the question is who would remain.
+   */
+  async listAdminEmails(organizationId: string, excludeUserId: string): Promise<string[]> {
+    const rows = await prisma.user.findMany({
+      where: {
+        organizationId,
+        id: { not: excludeUserId },
+        roles: { some: { role: { name: 'ADMIN' } } },
+      },
+      select: { email: true },
+    })
+    return rows.map((row) => row.email)
+  },
+
   async listForUser(organizationId: string, userId: string): Promise<UserRoleRecord[]> {
     const rows = await prisma.userRole.findMany({
       where: { userId, user: { organizationId } },

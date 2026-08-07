@@ -30,6 +30,7 @@ import {
 import { useForm } from 'react-hook-form'
 
 import { InlineQueryError } from '@/components/data/query-boundary'
+import { RequestAccessCard } from '@/features/admin-access/components/request-access-card'
 import { useDirtyGuard } from '@/features/quotations/components/use-dirty-guard'
 import { ApiError } from '@/lib/api-client'
 import { describeApiError } from '@/lib/api-error'
@@ -70,7 +71,17 @@ export function Profile() {
       </div>
     )
 
-  return <ProfileForm me={profile.data} />
+  return (
+    <>
+      <ProfileForm me={profile.data} />
+      {/* Asking for administrator access belongs with the rest of "you":
+          it is about this person's own standing, not about administering
+          anyone else. Hidden entirely from those who already hold ADMIN. */}
+      <div className="px-gutter pb-gutter">
+        <RequestAccessCard />
+      </div>
+    </>
+  )
 }
 
 function ProfileForm({ me }: { me: ProfileRecord }) {

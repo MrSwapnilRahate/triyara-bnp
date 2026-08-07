@@ -173,3 +173,54 @@ export const trendsQuerySchema = z.object({
   window: z.enum(TREND_WINDOWS).default('6m'),
 })
 export type TrendsQuery = z.infer<typeof trendsQuerySchema>
+
+// ---- Admin access requests (TRY-BNP-SUPERADMIN-01) ----
+
+export const ADMIN_ACCESS_REQUEST_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'REVOKED'] as const
+export const adminAccessRequestStatusSchema = z.enum(ADMIN_ACCESS_REQUEST_STATUSES)
+export type AdminAccessRequestStatusName = z.infer<typeof adminAccessRequestStatusSchema>
+
+/**
+ * Asking for administrator access.
+ *
+ * A reason is required and has a floor: "please" tells the super administrator
+ * nothing, and the whole point of the record is that the decision can be
+ * justified later.
+ */
+export const createAdminAccessRequestSchema = z.object({
+  reason: z.string().trim().min(20).max(2000),
+})
+export type CreateAdminAccessRequestDto = z.infer<typeof createAdminAccessRequestSchema>
+
+/** Rejecting. The reason is mandatory - a refusal with no grounds is unusable. */
+export const rejectAdminAccessRequestSchema = z.object({
+  reason: z.string().trim().min(10).max(2000),
+})
+export type RejectAdminAccessRequestDto = z.infer<typeof rejectAdminAccessRequestSchema>
+
+export const listAdminAccessRequestsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  cursor: z.string().optional(),
+  status: adminAccessRequestStatusSchema.optional(),
+  /** Free text over requester name, email and reason. */
+  q: z.string().trim().max(120).optional(),
+  /** Inclusive bounds on when the request was made. */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  sort: z
+    .enum(['createdAt', '-createdAt', 'requesterName', '-requesterName', 'status', '-status'])
+    .optional(),
+})
+export type ListAdminAccessRequestsQuery = z.infer<typeof listAdminAccessRequestsQuerySchema>
+
+/** Revoking. A reason is mandatory - the person is told why they lost access. */
+export const revokeAdminAccessSchema = z.object({
+  reason: z.string().trim().min(10).max(2000),
+})
+export type RevokeAdminAccessDto = z.infer<typeof revokeAdminAccessSchema>
+
+/** Date-range bounds for the admin access queue. Both inclusive. */
+export const adminAccessDateRangeSchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+})
