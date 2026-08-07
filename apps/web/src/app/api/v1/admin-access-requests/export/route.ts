@@ -2,7 +2,8 @@ import type { AdminAccessRequestView } from '@triyara/core'
 
 import { requireAuth } from '@/auth/context'
 import { adminAccessRequestService } from '@/lib/admin-access-request-service'
-import { errorResponse } from '@/lib/api'
+import { errorResponse, getRequestId } from '@/lib/api'
+import { pathOf } from '@/lib/error-log'
 
 /**
  * One CSV cell.
@@ -68,8 +69,8 @@ function row(r: AdminAccessRequestView): string {
 //
 // Super Admin only, enforced in the service. Returns a file rather than the
 // usual envelope, so it is not wrapped in `ok()`.
-export async function GET(): Promise<Response> {
-  const requestId = crypto.randomUUID()
+export async function GET(req: Request): Promise<Response> {
+  const requestId = getRequestId(req)
   try {
     const auth = await requireAuth()
     const rows = await adminAccessRequestService.exportAll({ ...auth, requestId })
@@ -90,6 +91,6 @@ export async function GET(): Promise<Response> {
       },
     })
   } catch (error) {
-    return errorResponse(error, requestId)
+    return errorResponse(error, requestId, { method: req.method, path: pathOf(req.url) })
   }
 }

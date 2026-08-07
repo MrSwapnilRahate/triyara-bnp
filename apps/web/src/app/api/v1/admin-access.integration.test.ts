@@ -47,7 +47,9 @@ const { GET: listRequests, POST: createRequest } = await import('./admin-access-
 const { POST: approveRequest } = await import('./admin-access-requests/[id]/approve/route')
 const { POST: rejectRequest } = await import('./admin-access-requests/[id]/reject/route')
 const { POST: revokeRequest } = await import('./admin-access-requests/[id]/revoke/route')
-const { GET: exportCsv } = await import('./admin-access-requests/export/route')
+const { GET: exportRoute } = await import('./admin-access-requests/export/route')
+const exportCsv = () =>
+  exportRoute(new Request('http://localhost/api/v1/admin-access-requests/export'))
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
