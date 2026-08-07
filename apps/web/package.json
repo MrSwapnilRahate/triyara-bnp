@@ -19,6 +19,7 @@
     "@triyara/auth": "workspace:*",
     "@triyara/core": "workspace:*",
     "@triyara/db": "workspace:*",
+    "@triyara/email": "workspace:*",
     "@triyara/events": "workspace:*",
     "@triyara/lib": "workspace:*",
     "@triyara/storage": "workspace:*",

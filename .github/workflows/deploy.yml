@@ -71,9 +71,13 @@ jobs:
           fi
 
           missing=""
+          # RESEND_API_KEY and EMAIL_FROM are here for the same reason as the
+          # storage keys: the app refuses to serve production without them, so
+          # omitting them would pass preflight and then fail to boot.
           for key in DATABASE_URL AUTH_SECRET PUBLIC_REGISTRATION_ORG_SLUG \
                      STORAGE_PROVIDER STORAGE_BUCKET \
-                     STORAGE_ACCESS_KEY_ID STORAGE_SECRET_ACCESS_KEY; do
+                     STORAGE_ACCESS_KEY_ID STORAGE_SECRET_ACCESS_KEY \
+                     RESEND_API_KEY EMAIL_FROM; do
             grep -q "^${key}=" "$env_file" || missing="$missing $key"
           done
           if [ -n "$missing" ]; then
