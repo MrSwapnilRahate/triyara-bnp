@@ -150,6 +150,20 @@ export const listAdminUsersQuerySchema = z.object({
 })
 export type ListAdminUsersQuery = z.infer<typeof listAdminUsersQuerySchema>
 
+/**
+ * Inviting a colleague.
+ *
+ * No password field, deliberately: the invitee sets their own through the
+ * invitation link. An admin who could choose someone else's password would
+ * hold a credential they have no reason to hold.
+ */
+export const inviteUserSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  email: z.string().trim().toLowerCase().email().max(254),
+  role: z.enum(ASSIGNABLE_ROLES),
+})
+export type InviteUserDto = z.infer<typeof inviteUserSchema>
+
 // ---- Dashboard trends ----
 
 export const TREND_WINDOWS = ['3m', '6m', '12m'] as const

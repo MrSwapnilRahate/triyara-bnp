@@ -18,9 +18,9 @@ import {
   PaginationControls,
   SkeletonTable,
 } from '@triyara/ui'
-import { MoreHorizontal, SearchX, ShieldAlert, Users } from 'lucide-react'
+import { MoreHorizontal, SearchX, ShieldAlert, UserPlus, Users } from 'lucide-react'
 import Link from 'next/link'
-import { type ReactNode, useMemo } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 
 import { DebouncedSearch } from '@/components/data/debounced-search'
 import { FilterSelect } from '@/components/data/filter-select'
@@ -31,6 +31,7 @@ import { useListState } from '@/lib/list-state'
 
 import { type AdminUsersQuery, useAdminUsers } from '../api/users'
 import type { AdminUser, RoleName, UserStatus } from '../types'
+import { InviteUserDialog } from './invite-user-dialog'
 import { formatWhen, RoleBadges, StatusTone } from './user-presentation'
 
 const DEFAULTS: Partial<AdminUsersQuery> = { limit: '25' }
@@ -49,6 +50,7 @@ const ROLES: RoleName[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
 export function UserList() {
   const ability = useAbility()
   const canRead = ability.can('manage', 'User')
+  const [inviting, setInviting] = useState(false)
 
   const { params, setFilter, nextPage, previousPage, hasPrevious, isFiltered, reset } =
     useListState<AdminUsersQuery>(DEFAULTS)
@@ -112,7 +114,15 @@ export function UserList() {
         }
       />
     ) : (
-      <EmptyState icon={<Users />} title="No people in this organization yet" />
+      <EmptyState
+        icon={<Users />}
+        title="No people in this organization yet"
+        action={
+          <Button variant="primary" leadingIcon={<UserPlus />} onClick={() => setInviting(true)}>
+            Invite user
+          </Button>
+        }
+      />
     )
 
   return (
@@ -120,7 +130,13 @@ export function UserList() {
       <PageHeader
         title="Users"
         description="Everyone in this organization, what they may do, and when they last signed in."
+        actions={
+          <Button variant="primary" leadingIcon={<UserPlus />} onClick={() => setInviting(true)}>
+            Invite user
+          </Button>
+        }
       />
+      <InviteUserDialog open={inviting} onOpenChange={setInviting} />
 
       <div className="p-gutter">
         <DataTableLayout
