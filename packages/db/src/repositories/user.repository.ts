@@ -1,6 +1,8 @@
 import type { RoleName, User, UserStatus } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
+import { ConflictError, NotFoundError } from '@triyara/lib'
 
+import { writeAudit } from '../audit'
 import { prisma } from '../client'
 import { decodeCursor, encodeCursor } from './account.repository'
 
@@ -162,6 +164,73 @@ export const userRepository = {
     const items = rows.slice(0, params.limit)
     const nextCursor = rows.length > params.limit ? encodeCursor(items[items.length - 1]!.id) : null
     return { items, nextCursor }
+  },
+
+  /**
+   * Creates a colleague and the token that lets them set their own password.
+   *
+   * One transaction, because three things must be true together: the user
+   * exists, they hold a role, and an unexpired invitation exists for them. A
+   * user created without a role can sign in and see nothing; a user created
+   * without a token can never sign in at all, and nothing would say so.
+   *
+   * The password hash passed in is of a random secret the caller never
+   * discloses. It exists so the column is not null and so the account cannot
+   * be signed into until the invitation is accepted — the invitation is the
+   * only route in.
+   */
+  async createWithInvite(
+    ctx: { actorId: string; organizationId: string; requestId?: string },
+    data: {
+      email: string
+      name: string
+      passwordHash: string
+      roleName: RoleName
+      tokenHash: string
+      tokenExpiresAt: Date
+    },
+  ): Promise<{ id: string; email: string; name: string }> {
+    return prisma.$transaction(async (tx) => {
+      const role = await tx.role.findFirst({ where: { name: data.roleName }, select: { id: true } })
+      if (!role) throw new NotFoundError(`Role ${data.roleName} does not exist.`)
+
+      const existing = await tx.user.findUnique({
+        where: { email: data.email },
+        select: { id: true },
+      })
+      if (existing) {
+        throw new ConflictError('A user with that email already exists.')
+      }
+
+      const user = await tx.user.create({
+        data: {
+          organizationId: ctx.organizationId,
+          email: data.email,
+          name: data.name,
+          passwordHash: data.passwordHash,
+          roles: { create: { roleId: role.id } },
+        },
+        select: { id: true, email: true, name: true },
+      })
+
+      await tx.passwordResetToken.create({
+        data: { userId: user.id, tokenHash: data.tokenHash, expiresAt: data.tokenExpiresAt },
+      })
+
+      await writeAudit(tx, {
+        organizationId: ctx.organizationId,
+        actorId: ctx.actorId,
+        requestId: ctx.requestId,
+        entityType: 'User',
+        entityId: user.id,
+        action: 'user.invited',
+        // No hash, no token. An audit row that carries a credential is a
+        // credential store with a different name.
+        after: { email: user.email, name: user.name, role: data.roleName },
+      })
+
+      return user
+    })
   },
 }
 

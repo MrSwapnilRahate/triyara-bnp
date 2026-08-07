@@ -23,10 +23,13 @@ vi.mock('@/auth/context', () => ({
   })),
 }))
 
-const adminUsersService = { list: vi.fn() }
+const adminUsersService = { list: vi.fn(), invite: vi.fn() }
 vi.mock('@/lib/admin-users-service', () => ({ adminUsersService }))
 
-const { GET: listUsers } = await import('./admin/users/route')
+const emailService = { staffInvite: vi.fn() }
+vi.mock('@/lib/email', () => ({ emailService }))
+
+const { GET: listUsers, POST: inviteUser } = await import('./admin/users/route')
 
 const req = (url: string, init?: RequestInit) => new Request(`http://t.test${url}`, init)
 const body = async (res: Response) =>
@@ -198,5 +201,118 @@ describe('GET /api/v1/admin/users', () => {
     ]
     expect(ctx.organizationId).toBe('org1')
     expect(query).not.toHaveProperty('organizationId')
+  })
+})
+
+describe('POST /api/v1/admin/users', () => {
+  const invited = {
+    id: 'new1',
+    name: 'New Colleague',
+    email: 'colleague@triyara.test',
+    role: 'VERIFIER',
+    token: 'plaintext-token-never-returned',
+    expiresAt: new Date(Date.now() + 48 * 3600 * 1000),
+  }
+  const post = (payload: unknown) =>
+    inviteUser(
+      req('/api/v1/admin/users', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+    )
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    emailService.staffInvite.mockResolvedValue({ status: 'sent', id: 'e1', attempts: 1 })
+  })
+
+  it('creates the user and reports 201', async () => {
+    adminUsersService.invite.mockResolvedValue(invited)
+    const res = await post({
+      name: 'New Colleague',
+      email: 'colleague@triyara.test',
+      role: 'VERIFIER',
+    })
+    const b = await body(res)
+
+    expect(res.status).toBe(201)
+    expect(b.data).toMatchObject({ id: 'new1', email: 'colleague@triyara.test', role: 'VERIFIER' })
+    expect(adminUsersService.invite).toHaveBeenCalledWith(expect.anything(), {
+      name: 'New Colleague',
+      email: 'colleague@triyara.test',
+      role: 'VERIFIER',
+    })
+  })
+
+  it('never returns the invitation token to the browser', async () => {
+    // An admin who could read it could set a colleague's password.
+    adminUsersService.invite.mockResolvedValue(invited)
+    const res = await post({
+      name: 'New Colleague',
+      email: 'colleague@triyara.test',
+      role: 'VERIFIER',
+    })
+    expect(JSON.stringify(await body(res))).not.toContain('plaintext-token-never-returned')
+  })
+
+  it('emails the invitation with the token', async () => {
+    adminUsersService.invite.mockResolvedValue(invited)
+    await post({ name: 'New Colleague', email: 'colleague@triyara.test', role: 'VERIFIER' })
+    expect(emailService.staffInvite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'colleague@triyara.test',
+        token: 'plaintext-token-never-returned',
+      }),
+    )
+  })
+
+  it('still returns 201 when the invitation email fails, and says so', async () => {
+    // The account is already committed. Failing here would leave a colleague
+    // who exists with no way to tell them.
+    adminUsersService.invite.mockResolvedValue(invited)
+    emailService.staffInvite.mockResolvedValue({
+      status: 'failed',
+      error: 'no key',
+      attempts: 1,
+      retryable: false,
+    })
+    const res = await post({
+      name: 'New Colleague',
+      email: 'colleague@triyara.test',
+      role: 'VERIFIER',
+    })
+    const b = await body(res)
+    expect(res.status).toBe(201)
+    expect(b.meta.invitationEmail).toBe('failed')
+  })
+
+  it('lowercases the email before it reaches the service', async () => {
+    adminUsersService.invite.mockResolvedValue(invited)
+    await post({ name: 'New Colleague', email: 'Colleague@Triyara.Test', role: 'VERIFIER' })
+    expect(adminUsersService.invite).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ email: 'colleague@triyara.test' }),
+    )
+  })
+
+  it.each([
+    ['missing name', { email: 'a@b.com', role: 'VERIFIER' }],
+    ['missing email', { name: 'A', role: 'VERIFIER' }],
+    ['malformed email', { name: 'A', email: 'not-an-email', role: 'VERIFIER' }],
+    ['unknown role', { name: 'A', email: 'a@b.com', role: 'SUPERUSER' }],
+    ['blank name', { name: '   ', email: 'a@b.com', role: 'VERIFIER' }],
+  ])('rejects %s with 422', async (_label, payload) => {
+    const res = await post(payload)
+    expect(res.status).toBe(422)
+    expect(adminUsersService.invite).not.toHaveBeenCalled()
+    expect(emailService.staffInvite).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a non-admin refusal as 403', async () => {
+    adminUsersService.invite.mockRejectedValue(new ForbiddenError())
+    const res = await post({ name: 'A', email: 'a@b.com', role: 'VERIFIER' })
+    expect(res.status).toBe(403)
+    expect(emailService.staffInvite).not.toHaveBeenCalled()
   })
 })

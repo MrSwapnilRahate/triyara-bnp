@@ -446,3 +446,131 @@ describe('UserDetail', () => {
     await expectNoAxeViolations(container)
   })
 })
+
+describe('Inviting a colleague', () => {
+  const listHandler = http.get('/api/v1/admin/users', () => HttpResponse.json(ok([user()])))
+
+  it('offers Invite user to an admin', async () => {
+    server.use(listHandler)
+    renderWithProviders(<UserList />, { roles: ['ADMIN'] })
+    expect(await screen.findByRole('button', { name: /invite user/i })).toBeInTheDocument()
+  })
+
+  it('collects a name, an email and a role — and no password', async () => {
+    // An admin who could choose someone else's password would hold a
+    // credential they have no reason to hold.
+    const openUser = userEvent.setup()
+    server.use(listHandler)
+    renderWithProviders(<UserList />, { roles: ['ADMIN'] })
+
+    await openUser.click(await screen.findByRole('button', { name: /invite user/i }))
+    const dialog = await screen.findByRole('dialog')
+
+    expect(within(dialog).getByLabelText(/full name/i)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/work email/i)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/role/i)).toBeInTheDocument()
+    expect(within(dialog).queryByLabelText(/password/i)).not.toBeInTheDocument()
+  })
+
+  it('sends what the admin typed and confirms', async () => {
+    const openUser = userEvent.setup()
+    let sent: unknown = null
+    server.use(
+      listHandler,
+      http.post('/api/v1/admin/users', async ({ request }) => {
+        sent = await request.json()
+        return HttpResponse.json(
+          ok(
+            {
+              id: 'new1',
+              name: 'New Colleague',
+              email: 'colleague@triyara.test',
+              role: 'EXPORT_MANAGER',
+              expiresAt: '2026-08-09T00:00:00.000Z',
+            },
+            { extra: { invitationEmail: 'sent' } },
+          ),
+          { status: 201 },
+        )
+      }),
+    )
+    renderWithProviders(<UserList />, { roles: ['ADMIN'] })
+
+    await openUser.click(await screen.findByRole('button', { name: /invite user/i }))
+    const dialog = await screen.findByRole('dialog')
+    await openUser.type(within(dialog).getByLabelText(/full name/i), 'New Colleague')
+    await openUser.type(within(dialog).getByLabelText(/work email/i), 'colleague@triyara.test')
+    await openUser.click(within(dialog).getByRole('button', { name: /send invitation/i }))
+
+    await waitFor(() => expect(sent).not.toBeNull())
+    expect(sent).toEqual({
+      name: 'New Colleague',
+      email: 'colleague@triyara.test',
+      role: 'EXPORT_MANAGER',
+    })
+    expect(await screen.findByText(/invitation sent/i)).toBeInTheDocument()
+  })
+
+  it('says the account exists when the email fails, rather than claiming success', async () => {
+    const openUser = userEvent.setup()
+    server.use(
+      listHandler,
+      http.post('/api/v1/admin/users', () =>
+        HttpResponse.json(
+          ok(
+            {
+              id: 'new1',
+              name: 'New Colleague',
+              email: 'colleague@triyara.test',
+              role: 'EXPORT_MANAGER',
+              expiresAt: '2026-08-09T00:00:00.000Z',
+            },
+            { extra: { invitationEmail: 'failed' } },
+          ),
+          { status: 201 },
+        ),
+      ),
+    )
+    renderWithProviders(<UserList />, { roles: ['ADMIN'] })
+
+    await openUser.click(await screen.findByRole('button', { name: /invite user/i }))
+    const dialog = await screen.findByRole('dialog')
+    await openUser.type(within(dialog).getByLabelText(/full name/i), 'New Colleague')
+    await openUser.type(within(dialog).getByLabelText(/work email/i), 'colleague@triyara.test')
+    await openUser.click(within(dialog).getByRole('button', { name: /send invitation/i }))
+
+    expect(await screen.findByText(/could not be sent/i)).toBeInTheDocument()
+  })
+
+  it('surfaces a duplicate email instead of closing quietly', async () => {
+    const openUser = userEvent.setup()
+    server.use(
+      listHandler,
+      http.post('/api/v1/admin/users', () =>
+        HttpResponse.json(
+          fail([{ code: 'CONFLICT', message: 'A user with that email already exists.' }]),
+          { status: 409 },
+        ),
+      ),
+    )
+    renderWithProviders(<UserList />, { roles: ['ADMIN'] })
+
+    await openUser.click(await screen.findByRole('button', { name: /invite user/i }))
+    const dialog = await screen.findByRole('dialog')
+    await openUser.type(within(dialog).getByLabelText(/full name/i), 'Dup')
+    await openUser.type(within(dialog).getByLabelText(/work email/i), 'ada@triyara.test')
+    await openUser.click(within(dialog).getByRole('button', { name: /send invitation/i }))
+
+    expect(await screen.findByText(/already exists/i)).toBeInTheDocument()
+  })
+
+  it('has no accessibility violations with the invite dialog open', async () => {
+    const openUser = userEvent.setup()
+    server.use(listHandler)
+    const { container } = renderWithProviders(<UserList />, { roles: ['ADMIN'] })
+
+    await openUser.click(await screen.findByRole('button', { name: /invite user/i }))
+    await screen.findByRole('dialog')
+    await expectNoAxeViolations(container)
+  })
+})
