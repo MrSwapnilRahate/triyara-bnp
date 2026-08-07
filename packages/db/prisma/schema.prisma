@@ -1401,6 +1401,7 @@ model Supplier {
   tags                   SupplierTag[]
   notes                  SupplierNote[]
   rfqParticipations      RFQSupplier[]
+  awardedRfqs            RFQ[]                   @relation("RFQAwardedSupplier")
   quotationSourceOptions QuotationSourceOption[]
 
   @@unique([organizationId, supplierCode])
@@ -1867,6 +1868,9 @@ enum RFQSupplierStatus {
   SUBMITTED
   NO_RESPONSE
   WITHDRAWN
+  /// The winning bid. Losing bids stay SUBMITTED — "quoted" and "won" are
+  /// different facts, and overloading SUBMITTED would erase the distinction.
+  AWARDED
 }
 
 enum RFQAttachmentType {
@@ -1935,9 +1939,18 @@ model RFQ {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  buyer        Account?        @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  items        RFQItem[]
+  /// The winning supplier. Null until the round is awarded, which is true of
+  /// every RFQ that has not concluded. `status = AWARDED` records that a round
+  /// was decided; this records to whom.
+  awardedSupplierId String?
+  awardedAt         DateTime?
+  /// No foreign key, matching AuditLog.actorId: sentinel actors are permitted.
+  awardedById       String?
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  buyer           Account?     @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  awardedSupplier Supplier?    @relation("RFQAwardedSupplier", fields: [awardedSupplierId], references: [id], onDelete: Restrict)
+  items           RFQItem[]
   suppliers    RFQSupplier[]
   attachments  RFQAttachment[]
   comments     RFQComment[]
@@ -1953,6 +1966,8 @@ model RFQ {
   @@index([organizationId, priority, status])
   @@index([organizationId, createdAt])
   @@index([buyerId])
+  /// "Which RFQs did this supplier win?" - the query supplier scoring will need.
+  @@index([organizationId, awardedSupplierId])
   /// Fuzzy matching on the identifier users actually type. Declared in the
   /// datamodel rather than raw SQL so `migrate diff` owns it and does not emit
   /// DROP INDEX on every run. pg_trgm is created in 0001_catalog_extensions.

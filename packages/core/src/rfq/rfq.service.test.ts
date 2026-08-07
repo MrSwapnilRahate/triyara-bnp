@@ -1,6 +1,7 @@
 import { buildAbilityFor, type Role } from '@triyara/auth'
 import type { RfqRecord, RfqRepository, RfqSupplierRepository } from '@triyara/db'
 import type { DomainEvent, EventBus } from '@triyara/events'
+import { PreconditionFailedError } from '@triyara/lib'
 import { describe, expect, it } from 'vitest'
 
 import { createRfqService, type RfqServiceCtx } from './rfq.service'
@@ -360,5 +361,141 @@ describe('rfq supplier service', () => {
     await expect(
       svc.setParticipation(ctxFor(['ADMIN']), 'rs1', 1, { status: 'SUBMITTED' }),
     ).rejects.toThrow(/submit a response instead/i)
+  })
+})
+
+describe('rfq service - award', () => {
+  const EVALUATING = {
+    status: 'EVALUATING' as const,
+    suppliers: [
+      { id: 'rs1', supplierId: 's1', submittedAt: new Date() },
+      { id: 'rs2', supplierId: 's2', submittedAt: null },
+    ],
+  } as Partial<RfqRecord>
+
+  function awardRepo(over: Partial<RfqRepository> = {}) {
+    return repo({
+      findById: async () => makeRfq(EVALUATING),
+      award: async () =>
+        makeRfq({ ...EVALUATING, status: 'AWARDED', awardedSupplierId: 's1', version: 2 }),
+      ...over,
+    } as Partial<RfqRepository>)
+  }
+
+  it('awards to a supplier who submitted, and emits the event', async () => {
+    const sink: DomainEvent[] = []
+    const svc = createRfqService({ repo: awardRepo(), events: events(sink) })
+
+    const r = await svc.award(ctxFor(['ADMIN']), 'rfq1', 1, 'rs1')
+
+    expect(r.status).toBe('AWARDED')
+    expect(r.awardedSupplierId).toBe('s1')
+    const event = sink.find((e) => e.type === 'rfq.awarded')
+    expect(event).toBeDefined()
+    expect(event?.data).toMatchObject({ supplierId: 's1', participationId: 'rs1' })
+  })
+
+  it('refuses an EXPORT_MANAGER - awarding needs `manage Account`', async () => {
+    // Committing the business to a supplier is a different authority from
+    // editing the RFQ's shipping port.
+    const svc = createRfqService({ repo: awardRepo(), events: events() })
+    await expect(svc.award(ctxFor(['EXPORT_MANAGER']), 'rfq1', 1, 'rs1')).rejects.toThrow()
+  })
+
+  it('refuses a READ_ONLY user', async () => {
+    const svc = createRfqService({ repo: awardRepo(), events: events() })
+    await expect(svc.award(ctxFor(['READ_ONLY']), 'rfq1', 1, 'rs1')).rejects.toThrow()
+  })
+
+  it('refuses when the RFQ is not EVALUATING', async () => {
+    const svc = createRfqService({
+      repo: awardRepo({ findById: async () => makeRfq({ ...EVALUATING, status: 'IN_PROGRESS' }) }),
+      events: events(),
+    })
+    await expect(svc.award(ctxFor(['ADMIN']), 'rfq1', 1, 'rs1')).rejects.toThrow(
+      /cannot be awarded/i,
+    )
+  })
+
+  it('refuses a CLOSED round', async () => {
+    const svc = createRfqService({
+      repo: awardRepo({ findById: async () => makeRfq({ ...EVALUATING, status: 'CLOSED' }) }),
+      events: events(),
+    })
+    await expect(svc.award(ctxFor(['ADMIN']), 'rfq1', 1, 'rs1')).rejects.toThrow(
+      /cannot be awarded/i,
+    )
+  })
+
+  it('refuses a second award - the winner is decided once', async () => {
+    const svc = createRfqService({
+      repo: awardRepo({
+        findById: async () => makeRfq({ ...EVALUATING, awardedSupplierId: 's9' }),
+      }),
+      events: events(),
+    })
+    await expect(svc.award(ctxFor(['ADMIN']), 'rfq1', 1, 'rs1')).rejects.toThrow(
+      /already been awarded/i,
+    )
+  })
+
+  it('refuses a supplier who is not on this RFQ', async () => {
+    const svc = createRfqService({ repo: awardRepo(), events: events() })
+    await expect(svc.award(ctxFor(['ADMIN']), 'rfq1', 1, 'not-invited')).rejects.toThrow(
+      /not found on this RFQ/i,
+    )
+  })
+
+  it('refuses a supplier who never submitted a quotation', async () => {
+    // rs2 was invited and never quoted. Awarding to them would record a
+    // commitment against a price nobody offered.
+    const svc = createRfqService({ repo: awardRepo(), events: events() })
+    await expect(svc.award(ctxFor(['ADMIN']), 'rfq1', 1, 'rs2')).rejects.toThrow(
+      /has not submitted a quotation/i,
+    )
+  })
+
+  it('emits nothing when the award is refused', async () => {
+    const sink: DomainEvent[] = []
+    const svc = createRfqService({ repo: awardRepo(), events: events(sink) })
+    await expect(svc.award(ctxFor(['ADMIN']), 'rfq1', 1, 'rs2')).rejects.toThrow()
+    expect(sink.filter((e) => e.type === 'rfq.awarded')).toHaveLength(0)
+  })
+
+  it('passes the caller version through for optimistic concurrency', async () => {
+    let seen: number | undefined
+    const svc = createRfqService({
+      repo: awardRepo({
+        award: async (_ctx, _id, expectedVersion) => {
+          seen = expectedVersion
+          return makeRfq({ ...EVALUATING, status: 'AWARDED', awardedSupplierId: 's1', version: 8 })
+        },
+      } as Partial<RfqRepository>),
+      events: events(),
+    })
+    await svc.award(ctxFor(['ADMIN']), 'rfq1', 7, 'rs1')
+    expect(seen).toBe(7)
+  })
+
+  it('propagates a version conflict from the repository', async () => {
+    const svc = createRfqService({
+      repo: awardRepo({
+        award: async () => {
+          throw new PreconditionFailedError()
+        },
+      } as Partial<RfqRepository>),
+      events: events(),
+    })
+    await expect(svc.award(ctxFor(['ADMIN']), 'rfq1', 1, 'rs1')).rejects.toThrow(
+      PreconditionFailedError,
+    )
+  })
+
+  it('refuses when the RFQ does not exist', async () => {
+    const svc = createRfqService({
+      repo: awardRepo({ findById: async () => null } as Partial<RfqRepository>),
+      events: events(),
+    })
+    await expect(svc.award(ctxFor(['ADMIN']), 'missing', 1, 'rs1')).rejects.toThrow(/not found/i)
   })
 })

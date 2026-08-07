@@ -24,6 +24,9 @@ const listSelect = {
   status: true,
   priority: true,
   currentRevision: true,
+  awardedSupplierId: true,
+  awardedAt: true,
+  awardedById: true,
   version: true,
   createdAt: true,
   updatedAt: true,
@@ -480,6 +483,109 @@ export const rfqRepository = {
         action: `rfq.${String(decision).toLowerCase()}`,
         before: { status: before.status },
         after: { status: after.status },
+      })
+      return after
+    })
+  },
+
+  /**
+   * Awards the round to one supplier.
+   *
+   * One transaction, because four facts must become true together: the RFQ is
+   * AWARDED, it points at the winner, the winning participation is AWARDED, and
+   * the audit row exists. A partial result here is a sourcing round whose
+   * recorded outcome disagrees with itself.
+   *
+   * The version is checked in the WHERE clause, never compared after a read, so
+   * two reviewers awarding at once cannot both win. The second gets a 412.
+   *
+   * `participationId` is re-checked against the RFQ inside the transaction even
+   * though the service already validated it: between those two moments the
+   * participation could have been withdrawn.
+   */
+  async award(
+    ctx: MutationCtx,
+    id: string,
+    expectedVersion: number,
+    participationId: string,
+  ): Promise<RfqRecord> {
+    return prisma.$transaction(async (tx) => {
+      const before = await tx.rFQ.findFirst({
+        where: { id, organizationId: ctx.organizationId, deletedAt: null },
+        select: { status: true, awardedSupplierId: true },
+      })
+      if (!before) throw new NotFoundError('RFQ not found.')
+      if (before.awardedSupplierId) {
+        throw new ConflictError('This RFQ has already been awarded.')
+      }
+
+      const participation = await tx.rFQSupplier.findFirst({
+        where: {
+          id: participationId,
+          rfqId: id,
+          organizationId: ctx.organizationId,
+          deletedAt: null,
+        },
+        select: { id: true, supplierId: true, status: true, submittedAt: true },
+      })
+      if (!participation) throw new NotFoundError('Supplier participation not found on this RFQ.')
+      if (!participation.submittedAt) {
+        throw new ConflictError('That supplier has not submitted a quotation.')
+      }
+
+      const updated = await tx.rFQ.updateMany({
+        where: {
+          id,
+          organizationId: ctx.organizationId,
+          deletedAt: null,
+          version: expectedVersion,
+        },
+        data: {
+          status: 'AWARDED',
+          awardedSupplierId: participation.supplierId,
+          awardedAt: new Date(),
+          awardedById: ctx.actorId,
+          updatedById: ctx.actorId,
+          version: { increment: 1 },
+        },
+      })
+      if (updated.count === 0) throw new PreconditionFailedError()
+
+      await tx.rFQSupplier.update({
+        where: { id: participation.id },
+        data: { status: 'AWARDED', version: { increment: 1 } },
+      })
+
+      // The approval trail records APPROVED: awarding concluded the round
+      // normally. RFQApprovalStatus has no AWARDED member, and CANCELLED would
+      // misrepresent it - the same reasoning `close` uses.
+      const last = await tx.rFQApproval.findFirst({
+        where: { rfqId: id },
+        orderBy: { sequence: 'desc' },
+        select: { sequence: true, toStatus: true },
+      })
+      await tx.rFQApproval.create({
+        data: {
+          rfqId: id,
+          organizationId: ctx.organizationId,
+          fromStatus: last?.toStatus ?? null,
+          toStatus: 'APPROVED',
+          sequence: (last?.sequence ?? 0) + 1,
+          approverId: ctx.actorId,
+          comments: 'Sourcing round awarded.',
+        },
+      })
+
+      const after = await tx.rFQ.findUniqueOrThrow({ where: { id }, select: detailSelect })
+      await writeAudit(tx, {
+        organizationId: ctx.organizationId,
+        actorId: ctx.actorId,
+        requestId: ctx.requestId,
+        entityType: 'RFQ',
+        entityId: id,
+        action: 'rfq.awarded',
+        before: { status: before.status, awardedSupplierId: null },
+        after: { status: after.status, awardedSupplierId: after.awardedSupplierId },
       })
       return after
     })

@@ -334,6 +334,63 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
     },
 
     /**
+     * Awards the round to one supplier.
+     *
+     * `manage Account` rather than `update`: deciding who wins commits the
+     * business to a supplier, which is not the same authority as editing an
+     * RFQ's shipping port. The buyer review workflow draws the line in the
+     * same place.
+     *
+     * Award is deliberately irreversible in Stage-1. There is no un-award, so
+     * the checks below are the only thing standing between a mistake and a
+     * database edit - each one is enforced here, and the two that can change
+     * between this check and the write are re-checked inside the transaction.
+     */
+    async award(
+      ctx: RfqServiceCtx,
+      id: string,
+      expectedVersion: number,
+      participationId: string,
+    ): Promise<RfqRecord> {
+      assertAbility(ctx, 'manage', 'Account')
+
+      const current = await repo.findById(ctx.organizationId, id)
+      if (!current) throw new NotFoundError('RFQ not found.')
+
+      if (current.awardedSupplierId) {
+        throw new ConflictError('This RFQ has already been awarded.')
+      }
+
+      const allowed = TRANSITIONS[current.status] ?? []
+      if (!allowed.includes('AWARDED')) {
+        throw new ConflictError(
+          `A ${current.status} RFQ cannot be awarded. Allowed from here: ${allowed.join(', ') || 'none'}.`,
+        )
+      }
+
+      const participation = current.suppliers?.find((s) => s.id === participationId)
+      if (!participation) {
+        throw new NotFoundError('Supplier participation not found on this RFQ.')
+      }
+      if (!participation.submittedAt) {
+        throw new ValidationError(
+          'That supplier has not submitted a quotation, so the round cannot be awarded to them.',
+        )
+      }
+
+      const rfq = await repo.award(mutationCtx(ctx), id, expectedVersion, participationId)
+
+      await emit(ctx, 'rfq.awarded', {
+        rfqId: rfq.id,
+        rfqNumber: rfq.rfqNumber,
+        supplierId: rfq.awardedSupplierId,
+        participationId,
+        fromStatus: current.status,
+      })
+      return rfq
+    },
+
+    /**
      * Closes a sourcing round. Separate from `decide` because no approval
      * decision maps to CLOSED - DECISION_TARGET stops at CANCELLED, so a
      * finished round could otherwise never be retired. The legal predecessors
