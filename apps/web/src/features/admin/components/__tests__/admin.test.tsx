@@ -308,6 +308,9 @@ describe('Profile', () => {
   const handlers = () => [
     http.get('/api/v1/me', () => HttpResponse.json(ok(profile))),
     http.patch('/api/v1/me', () => HttpResponse.json(ok(profile))),
+    // The profile screen now carries the admin-access card, which reads the
+    // caller's latest request. Null: this person has never asked.
+    http.get('/api/v1/admin-access-requests/mine', () => HttpResponse.json(ok(null))),
   ]
 
   it('shows email and roles as read-only, and says why', async () => {

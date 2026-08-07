@@ -19,14 +19,15 @@ import { useMyAccessRequest, useRequestAdminAccess } from '../api/requests'
 export function RequestAccessCard() {
   const toast = useToast()
   const ability = useAbility()
-  const latest = useMyAccessRequest()
+  // `manage all` is what ADMIN resolves to. Anyone holding it has nothing to
+  // ask for — and after a revocation they no longer hold it, so the card
+  // returns on its own.
+  const holdsAdmin = ability.can('manage', 'all')
+  const latest = useMyAccessRequest(!holdsAdmin)
   const request = useRequestAdminAccess()
   const [reason, setReason] = useState('')
 
-  // `manage all` is what ADMIN resolves to. Anyone holding it has nothing to
-  // ask for — and after a revocation they no longer hold it, so the form
-  // returns on its own.
-  if (ability.can('manage', 'all')) return null
+  if (holdsAdmin) return null
 
   if (latest.isPending) {
     return (

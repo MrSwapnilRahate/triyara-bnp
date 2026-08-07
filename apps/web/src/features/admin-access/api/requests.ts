@@ -64,10 +64,17 @@ export function useRequestAdminAccess() {
   })
 }
 
-/** The caller's own latest request, whatever its state. Drives their UI. */
-export function useMyAccessRequest() {
+/**
+ * The caller's own latest request, whatever its state. Drives their UI.
+ *
+ * `enabled` because hooks cannot be called conditionally: someone who already
+ * holds ADMIN has nothing to ask for, and firing this on every one of their
+ * profile views would be a request whose answer is never read.
+ */
+export function useMyAccessRequest(enabled = true) {
   return useQuery({
     queryKey: accessRequestKeys.mine(),
+    enabled,
     queryFn: async ({ signal }) => {
       const result = await api.get<AdminAccessRequest | null>(`${BASE}/mine`, { signal })
       return result.data
