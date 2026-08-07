@@ -31,7 +31,10 @@ export async function notifyAdminAccessDecision(
         organizationId: request.organizationId,
         type: 'SYSTEM',
         priority: approved ? 'HIGH' : 'NORMAL',
-        actorId: request.decidedById,
+        // `decidedById` is whoever approved. On a revocation that is the wrong
+        // person - the notification would attribute withdrawing access to the
+        // administrator who granted it.
+        actorId: revoked ? request.revokedById : request.decidedById,
         entityType: 'User',
         entityId: requesterUserId,
         accountId: null,
