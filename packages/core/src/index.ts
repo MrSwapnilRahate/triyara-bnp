@@ -78,6 +78,14 @@ export {
   createBuyerService,
 } from './buyer/buyer.service'
 export {
+  BUYER_SYSTEM_ACTOR_ID,
+  type BuyerRegistrationCtx,
+  type BuyerRegistrationDeps,
+  type BuyerRegistrationService,
+  type BuyerReviewCtx,
+  createBuyerRegistrationService,
+} from './buyer/buyer-registration.service'
+export {
   type CatalogReferenceCtx,
   type CatalogReferenceDeps,
   type CatalogReferenceService,
@@ -117,6 +125,11 @@ export {
   createNotificationPreferenceService,
   type NotificationPreferenceService,
 } from './notification/preference.service'
+export {
+  resolveTransition,
+  REVIEW_DECISION_TARGET,
+  REVIEW_TRANSITIONS,
+} from './onboarding/review-workflow'
 export {
   createQuotationService,
   type QuotationService,

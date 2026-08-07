@@ -7,6 +7,11 @@ import { useRouter } from 'next/navigation'
 import { useActionState, useEffect, useState } from 'react'
 
 import {
+  BuyerReviewPanel,
+  type BuyerReviewSubject,
+} from '@/features/buyer-registration/components/buyer-review-panel'
+
+import {
   type ActionState,
   addBuyerProductAction,
   createBuyerAction,
@@ -38,21 +43,30 @@ export function BuyerProfileView({
   accountName,
   profile,
   canWrite,
+  review,
 }: {
   accountId: string
   accountName: string
   profile: BuyerProfileRecord | null
   canWrite: boolean
+  /** Onboarding review state; the panel renders itself away unless pending. */
+  review: BuyerReviewSubject
 }) {
   const [tab, setTab] = useState<Tab>('overview')
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/accounts" className="hover:text-gold text-xs text-white/40">
+      <Link href="/accounts" className="text-xs text-white/40 hover:text-gold">
         &larr; Accounts
       </Link>
-      <h1 className="text-gold mt-2 text-2xl font-bold">{accountName}</h1>
+      <h1 className="mt-2 text-2xl font-bold text-gold">{accountName}</h1>
       <p className="text-sm text-white/40">Buyer profile</p>
+
+      {/* Review sits above everything: on a self-registered account it is the
+          only thing anyone should be doing here until a decision is taken. */}
+      <div className="mt-6">
+        <BuyerReviewPanel account={review} />
+      </div>
 
       {!profile ? (
         <CreatePanel accountId={accountId} canWrite={canWrite} />
@@ -68,7 +82,7 @@ export function BuyerProfileView({
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`px-3 py-2 text-sm capitalize ${tab === t ? 'border-gold text-gold border-b-2' : 'text-white/50 hover:text-white'}`}
+                className={`px-3 py-2 text-sm capitalize ${tab === t ? 'border-b-2 border-gold text-gold' : 'text-white/50 hover:text-white'}`}
               >
                 {t}
               </button>
