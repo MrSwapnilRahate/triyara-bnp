@@ -62,6 +62,7 @@ model Organization {
 
   users    User[]
   accounts Account[]
+  adminAccessRequests AdminAccessRequest[]
 
   // Product Catalog (TRY-BNP-CATALOG-S1) back-relations. ORM-side only:
   // these add NO columns to the Organization table.
@@ -96,6 +97,7 @@ model User {
   organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   roles         UserRole[]
   resetTokens   PasswordResetToken[]
+  adminAccessRequests AdminAccessRequest[]
   ownedAccounts Account[]            @relation("AccountOwner")
 
   // Auth extension (TRY-BNP-AUTH-02) back-relations. ORM-side only: these add
@@ -2962,4 +2964,49 @@ model QuotationComment {
   @@index([quotationId, createdAt])
   @@index([parentId])
   @@index([organizationId, authorId])
+}
+
+/// Admin access requests (TRY-BNP-SUPERADMIN-01).
+///
+/// ADMIN is never granted directly. Someone asks, the Super Admin decides, and
+/// this table is the record of that decision — who asked, why, who ruled and on
+/// what grounds. Its own model rather than a reuse of SupplierApproval or
+/// BuyerApproval: those are bound to their aggregates and to onboarding status
+/// enums, and a request for platform access is neither.
+model AdminAccessRequest {
+  id             String @id @default(cuid())
+  organizationId String
+  userId         String
+
+  /// Denormalised at submission. A request must still read correctly months
+  /// later even if the person has since been renamed or changed role.
+  requesterName  String
+  requesterEmail String
+  currentRole    String
+  reason         String @db.Text
+
+  status AdminAccessRequestStatus @default(PENDING)
+
+  /// Who decided, when, and why. `decidedById` carries no foreign key, matching
+  /// AuditLog.actorId, so sentinel actors remain possible.
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionReason String?   @db.Text
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status, createdAt])
+  @@index([userId, createdAt])
+  @@index([organizationId, requesterEmail])
+}
+
+enum AdminAccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

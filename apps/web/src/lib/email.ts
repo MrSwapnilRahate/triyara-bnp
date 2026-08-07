@@ -1,3 +1,4 @@
+import { getSuperAdminEmails } from '@triyara/core'
 import { createEmailService, createEmailTransportFromEnv } from '@triyara/email'
 import { logger } from '@triyara/lib'
 
@@ -29,5 +30,8 @@ export const emailService = createEmailService({
   logger,
   appUrl: resolveAppUrl(),
   staffRecipients: staffRecipients(),
+  // The same list the backend authorizes decisions against, so the person
+  // emailed and the person permitted to act cannot drift apart.
+  superAdminRecipients: getSuperAdminEmails(),
   ...(process.env.EMAIL_REPLY_TO ? { replyTo: process.env.EMAIL_REPLY_TO } : {}),
 })

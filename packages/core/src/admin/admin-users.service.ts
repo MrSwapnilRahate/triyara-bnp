@@ -3,7 +3,10 @@ import { createHash, randomBytes } from 'node:crypto'
 import { assertAbility, type AuthContext } from '@triyara/auth'
 import type { AdminUserRecord, UserRepository } from '@triyara/db'
 import { type EventBus, makeEvent } from '@triyara/events'
+import { ForbiddenError } from '@triyara/lib'
 import type { InviteUserDto, ListAdminUsersQuery } from '@triyara/validation'
+
+import { ADMIN_MUST_BE_REQUESTED_MESSAGE } from '../security/super-admin'
 
 /**
  * User administration (TRY-BNP-ADMIN-02).
@@ -128,6 +131,12 @@ export function createAdminUsersService({
      */
     async invite(ctx: AdminUsersServiceCtx, dto: InviteUserDto): Promise<InvitedUser> {
       assertAbility(ctx, 'manage', 'User')
+      // Inviting writes the role row itself rather than going through
+      // UserRoleService, so it is a second way to create an administrator and
+      // needs the same refusal. Everyone starts on a non-admin role.
+      if (dto.role === 'ADMIN') {
+        throw new ForbiddenError(ADMIN_MUST_BE_REQUESTED_MESSAGE)
+      }
 
       // 48 random bytes: this is never typed by a human and never displayed,
       // so it is sized to be unguessable rather than memorable.

@@ -9,6 +9,12 @@ export interface EmailServiceDeps {
   appUrl: string
   /** Where "new registration" alerts go. Empty disables those, loudly. */
   staffRecipients: string[]
+  /**
+   * Who decides admin access requests. Comes from the same centralized Super
+   * Admin configuration the backend authorizes against, so the person emailed
+   * and the person permitted to act can never drift apart.
+   */
+  superAdminRecipients: string[]
   /** Address a supplier or buyer replying to a decision should reach. */
   replyTo?: string
 }
@@ -42,7 +48,7 @@ export function isSendableAddress(value: string | null | undefined): value is st
  *    failed.
  */
 export function createEmailService(deps: EmailServiceDeps) {
-  const { transport, logger, appUrl, staffRecipients, replyTo } = deps
+  const { transport, logger, appUrl, staffRecipients, superAdminRecipients, replyTo } = deps
 
   async function deliver(flow: string, to: string[], rendered: Rendered): Promise<SendResult> {
     if (to.length === 0) {
@@ -186,6 +192,77 @@ export function createEmailService(deps: EmailServiceDeps) {
             `/reset-password?token=${encodeURIComponent(input.token)}`,
           ),
           expiresInMinutes: input.expiresInMinutes,
+        }),
+      )
+    },
+
+    /**
+     * Tells the super administrator that someone wants admin access.
+     *
+     * Goes only to the configured Super Admins - never to the wider staff
+     * list. Who may approve and who is told are the same set by construction.
+     */
+    async adminAccessRequested(input: {
+      requesterName: string
+      requesterEmail: string
+      organizationName: string
+      currentRole: string
+      reason: string
+      requestedAt: Date
+      requestId: string
+    }): Promise<SendResult> {
+      if (superAdminRecipients.length === 0) {
+        logger.warn({ flow: 'admin_access_requested' }, 'email.no_super_admin_configured')
+        return { status: 'skipped', reason: 'no super administrator configured' }
+      }
+      const base = templates.joinUrl(appUrl, `/admin/access-requests?request=${input.requestId}`)
+      return deliver(
+        'admin_access_requested',
+        superAdminRecipients,
+        templates.adminAccessRequested({
+          requesterName: input.requesterName,
+          requesterEmail: input.requesterEmail,
+          organizationName: input.organizationName,
+          currentRole: input.currentRole,
+          reason: input.reason,
+          requestedAt: input.requestedAt,
+          // Both buttons open the dashboard rather than acting from the inbox.
+          // A link that approved on click would grant platform control to
+          // anyone who ever saw the message.
+          approveUrl: `${base}&action=approve`,
+          rejectUrl: `${base}&action=reject`,
+        }),
+      )
+    },
+
+    async adminAccessApproved(input: {
+      requesterName: string
+      requesterEmail: string
+    }): Promise<SendResult> {
+      const to = addressesFor('admin_access_approved', [
+        { name: input.requesterName, email: input.requesterEmail },
+      ])
+      return deliver(
+        'admin_access_approved',
+        to,
+        templates.adminAccessApproved({ requesterName: input.requesterName }),
+      )
+    },
+
+    async adminAccessRejected(input: {
+      requesterName: string
+      requesterEmail: string
+      reason: string
+    }): Promise<SendResult> {
+      const to = addressesFor('admin_access_rejected', [
+        { name: input.requesterName, email: input.requesterEmail },
+      ])
+      return deliver(
+        'admin_access_rejected',
+        to,
+        templates.adminAccessRejected({
+          requesterName: input.requesterName,
+          reason: input.reason,
         }),
       )
     },

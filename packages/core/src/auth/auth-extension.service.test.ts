@@ -92,7 +92,13 @@ function fakeSessionRepo(over: Partial<SessionRepository> = {}): SessionReposito
 }
 
 const roles = { findByName: async (name: 'VERIFIER' | never) => ({ id: 'role-verifier', name }) }
-const users = { findById: async (id: string) => ({ id, organizationId: 'org1' }) }
+const users = {
+  findById: async (id: string) => ({
+    id,
+    organizationId: 'org1',
+    email: `${id}@triyara.test`,
+  }),
+}
 
 describe('scoped role service', () => {
   it('lets an ADMIN grant a scoped role', async () => {

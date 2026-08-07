@@ -9,6 +9,7 @@ import {
   FileText,
   FolderTree,
   Gauge,
+  KeyRound,
   Layers,
   Package,
   Quote,
@@ -101,6 +102,15 @@ export const NAVIGATION: GuardedGroup[] = [
       // Roles is deliberately absent until /admin/roles exists. The matrix it
       // would show is already reachable on a person's Permissions tab, and a
       // sidebar entry that 404s is worse than one that is missing.
+      {
+        // Gated on `manage User` rather than on being the super administrator:
+        // that is an email check, not a CASL ability, and the client must not
+        // hold the list. The page itself refuses anyone else and says why.
+        label: 'Admin access',
+        href: '/admin/access-requests',
+        icon: <KeyRound />,
+        requires: { action: 'manage', subject: 'User' },
+      },
       {
         label: 'Organization',
         href: '/admin/organization',

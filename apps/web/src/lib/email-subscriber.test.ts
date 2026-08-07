@@ -31,6 +31,9 @@ function emailSpy() {
     registrationDecided: vi.fn(async () => ({ status: 'sent' as const, id: 'x', attempts: 1 })),
     passwordReset: vi.fn(async () => ({ status: 'sent' as const, id: 'x', attempts: 1 })),
     staffInvite: vi.fn(async () => ({ status: 'sent' as const, id: 'x', attempts: 1 })),
+    adminAccessRequested: vi.fn(async () => ({ status: 'sent' as const, id: 'x', attempts: 1 })),
+    adminAccessApproved: vi.fn(async () => ({ status: 'sent' as const, id: 'x', attempts: 1 })),
+    adminAccessRejected: vi.fn(async () => ({ status: 'sent' as const, id: 'x', attempts: 1 })),
   }
 }
 

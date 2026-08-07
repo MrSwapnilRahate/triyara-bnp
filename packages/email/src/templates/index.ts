@@ -247,3 +247,102 @@ export function staffInvite(input: {
     ]),
   }
 }
+
+// ---------------------------------------------------------------------------
+// Admin access requests (TRY-BNP-SUPERADMIN-01)
+// ---------------------------------------------------------------------------
+
+export function adminAccessRequested(input: {
+  requesterName: string
+  requesterEmail: string
+  organizationName: string
+  currentRole: string
+  reason: string
+  requestedAt: Date
+  approveUrl: string
+  rejectUrl: string
+}): Rendered {
+  const details = [
+    `Name: ${esc(input.requesterName)}`,
+    `Email: ${esc(input.requesterEmail)}`,
+    `Organization: ${esc(input.organizationName)}`,
+    `Current role: ${esc(input.currentRole)}`,
+    `Requested: ${esc(input.requestedAt.toISOString().replace('T', ' ').slice(0, 16))} UTC`,
+  ].join('<br>')
+
+  const html = renderLayout({
+    heading: 'Someone is asking for administrator access',
+    bodyHtml: paras(
+      details,
+      `<strong>Their reason</strong><br>${esc(input.reason)}`,
+      'Administrator access grants control of the whole platform. Both buttons open the request in the dashboard, where the decision is recorded.',
+    ),
+    cta: { label: 'Review and approve', url: input.approveUrl },
+    footnote: `To decline instead, open <a href="${esc(input.rejectUrl)}">${esc(input.rejectUrl)}</a> — a reason is required.`,
+  })
+  return {
+    subject: `Admin access requested — ${input.requesterName}`,
+    html,
+    text: renderText([
+      'Someone is asking for administrator access.',
+      '',
+      `Name: ${input.requesterName}`,
+      `Email: ${input.requesterEmail}`,
+      `Organization: ${input.organizationName}`,
+      `Current role: ${input.currentRole}`,
+      `Requested: ${input.requestedAt.toISOString().replace('T', ' ').slice(0, 16)} UTC`,
+      '',
+      'Their reason:',
+      input.reason,
+      '',
+      `Approve: ${input.approveUrl}`,
+      `Decline: ${input.rejectUrl}`,
+    ]),
+  }
+}
+
+export function adminAccessApproved(input: { requesterName: string }): Rendered {
+  const html = renderLayout({
+    heading: 'You now have administrator access',
+    bodyHtml: paras(
+      `Hello ${esc(input.requesterName)},`,
+      'Your request for administrator access has been approved.',
+      'Sign out and back in to pick up your new permissions.',
+    ),
+  })
+  return {
+    subject: 'Administrator access granted',
+    html,
+    text: renderText([
+      `Hello ${input.requesterName},`,
+      '',
+      'Your request for administrator access has been approved.',
+      'Sign out and back in to pick up your new permissions.',
+    ]),
+  }
+}
+
+export function adminAccessRejected(input: { requesterName: string; reason: string }): Rendered {
+  const html = renderLayout({
+    heading: 'Your administrator access request was declined',
+    bodyHtml: paras(
+      `Hello ${esc(input.requesterName)},`,
+      'Your request for administrator access has not been approved.',
+      `<strong>Reason</strong><br>${esc(input.reason)}`,
+      'If circumstances change, you can ask again.',
+    ),
+  })
+  return {
+    subject: 'Administrator access request declined',
+    html,
+    text: renderText([
+      `Hello ${input.requesterName},`,
+      '',
+      'Your request for administrator access has not been approved.',
+      '',
+      `Reason: ${input.reason}`,
+      '',
+      'If circumstances change, you can ask again.',
+    ]),
+  }
+}

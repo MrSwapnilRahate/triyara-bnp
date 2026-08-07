@@ -2,7 +2,13 @@ import { assertAbility, type AuthContext, type Role } from '@triyara/auth'
 import type { MutationCtx, RoleName, UserRoleRecord, UserRoleRepository } from '@triyara/db'
 import { isUniqueViolation } from '@triyara/db'
 import { type EventBus, makeEvent } from '@triyara/events'
-import { ConflictError, NotFoundError } from '@triyara/lib'
+import { ConflictError, ForbiddenError, NotFoundError } from '@triyara/lib'
+
+import {
+  ADMIN_MUST_BE_REQUESTED_MESSAGE,
+  isLastSuperAdminHolder,
+  isSuperAdmin,
+} from '../security/super-admin'
 
 /**
  * Base role membership (TRY-BNP-AUTH-03).
@@ -25,7 +31,9 @@ import { ConflictError, NotFoundError } from '@triyara/lib'
 export type UserRoleCtx = AuthContext & { requestId?: string }
 
 export interface UserLookup {
-  findById(id: string): Promise<{ id: string; organizationId: string } | null>
+  // `email` is needed to recognise the Super Admin. The injected repository
+  // already returns it; this only stops the interface from hiding it.
+  findById(id: string): Promise<{ id: string; organizationId: string; email: string } | null>
 }
 
 export interface RoleCatalogue {
@@ -70,9 +78,20 @@ export function createUserRoleService({ repo, roles, users, events }: UserRoleDe
       return repo.listForUser(ctx.organizationId, userId)
     },
 
-    /** Grants a base role. Re-granting one the user already holds is a 409. */
+    /**
+     * Grants a base role. Re-granting one the user already holds is a 409.
+     *
+     * ADMIN cannot be granted here at all. `manage User` is what lets someone
+     * assign roles, so without this refusal any administrator could appoint
+     * another - or themselves under a second address - and the access-request
+     * workflow would be a formality anyone could walk around. The workflow is
+     * the only route to ADMIN; this endpoint keeps serving every other role.
+     */
     async assign(ctx: UserRoleCtx, userId: string, roleName: RoleName): Promise<UserRoleRecord[]> {
       assertAbility(ctx, 'manage', 'User')
+      if (roleName === 'ADMIN') {
+        throw new ForbiddenError(ADMIN_MUST_BE_REQUESTED_MESSAGE)
+      }
       await requireUserInOrg(ctx, userId)
       const role = await requireRole(roleName)
 
@@ -112,8 +131,25 @@ export function createUserRoleService({ repo, roles, users, events }: UserRoleDe
      */
     async revoke(ctx: UserRoleCtx, userId: string, roleName: RoleName): Promise<UserRoleRecord[]> {
       assertAbility(ctx, 'manage', 'User')
-      await requireUserInOrg(ctx, userId)
+      const target = await requireUserInOrg(ctx, userId)
       const role = await requireRole(roleName)
+
+      // The Super Admin is the only authority that can approve an admin access
+      // request. Strip their ADMIN role and nobody can ever be made an admin
+      // again - the workflow would have an approver who cannot reach it. The
+      // existing last-admin guard does not cover this: a tenant can hold
+      // several admins and still lose its only Super Admin.
+      //
+      // Reads as a list on purpose. In Stage-2, with more Super Admins
+      // configured, this same call starts permitting the removal.
+      if (roleName === 'ADMIN' && isSuperAdmin(target.email)) {
+        const others = await repo.listAdminEmails(ctx.organizationId, userId)
+        if (isLastSuperAdminHolder(target.email, others)) {
+          throw new ConflictError(
+            'This is the only super administrator. Removing their administrator role would leave nobody able to approve admin access requests.',
+          )
+        }
+      }
 
       // A user holds a role at most once, so revoking your own ADMIN is always
       // removing your last one. Refused outright: locking yourself out of the

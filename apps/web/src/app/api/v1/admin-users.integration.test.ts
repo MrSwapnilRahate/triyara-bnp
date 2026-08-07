@@ -471,7 +471,9 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
       const email = `invite-${uniq()}@triyara.test`
       expect((await post({ name: 'First', email, role: 'VERIFIER' })).status).toBe(201)
 
-      const second = await post({ name: 'Second', email, role: 'ADMIN' })
+      // A non-admin role on purpose: ADMIN is refused outright now, and this
+      // test is about the duplicate email, not about who may be an admin.
+      const second = await post({ name: 'Second', email, role: 'READ_ONLY' })
       expect(second.status).toBe(409)
 
       // The first user keeps their role and gains no extra invitation.
@@ -482,6 +484,14 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
       expect(user.name).toBe('First')
       expect(user.roles.map((r) => r.role.name)).toEqual(['VERIFIER'])
       expect(user.resetTokens).toHaveLength(1)
+    })
+
+    it('refuses inviting anyone straight to ADMIN, and creates nothing', async () => {
+      // ADMIN is only ever reached through the access-request workflow.
+      const email = `noadmin-${uniq()}@triyara.test`
+      const res = await post({ name: 'Would-be admin', email, role: 'ADMIN' })
+      expect(res.status).toBe(403)
+      expect(await prisma.user.findUnique({ where: { email } })).toBeNull()
     })
 
     it('refuses a non-admin and creates nothing', async () => {
