@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 
 import { requireAuth } from '@/auth/context'
-import { getRequestId } from '@/lib/api'
+import { errorResponse, getRequestId } from '@/lib/api'
+import { isUnexpected, pathOf } from '@/lib/error-log'
 import { supplierDocumentService } from '@/lib/supplier-master-service'
 
 type Ctx = { params: Promise<{ id: string; documentId: string }> }
@@ -25,7 +26,18 @@ export async function GET(req: Request, { params }: Ctx) {
       disposition,
     )
     return NextResponse.redirect(new URL(url, req.url), 302)
-  } catch {
+  } catch (error) {
+    // See the Document module's download route: a bare `catch` reported every
+    // failure, including ours, as a missing document.
+    if (isUnexpected(error)) {
+      return errorResponse(error, requestId, {
+        method: req.method,
+        path: pathOf(req.url),
+        source: 'storage',
+      })
+    }
+    // 4xx stays flattened so the response cannot distinguish another tenant's
+    // document from one that does not exist.
     return NextResponse.json(
       {
         success: false,

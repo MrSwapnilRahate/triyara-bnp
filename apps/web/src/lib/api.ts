@@ -3,6 +3,8 @@ import { AppError, PreconditionRequiredError } from '@triyara/lib'
 import { NextResponse } from 'next/server'
 import { type z, ZodError, type ZodTypeAny } from 'zod'
 
+import { type ErrorLogContext, isUnexpected, logServerError, pathOf } from './error-log'
+
 interface ApiError {
   code: string
   message: string
@@ -31,7 +33,24 @@ export function fail(errors: ApiError[], status: number, requestId: string): Nex
   return NextResponse.json({ success: false, data: null, meta: { requestId }, errors }, { status })
 }
 
-export function errorResponse(error: unknown, requestId: string): NextResponse {
+/**
+ * Turns an error into the response, and writes the one log line it deserves.
+ *
+ * The logging lives here rather than in `route()` because this is where the
+ * error is classified into 4xx or 5xx, and that classification is exactly what
+ * decides whether a line is written. Keeping the two together means the log
+ * level cannot drift from the status the caller actually receives.
+ *
+ * `context` is optional and additive: existing callers keep working unchanged
+ * and simply log less about themselves.
+ */
+export function errorResponse(
+  error: unknown,
+  requestId: string,
+  context?: Omit<ErrorLogContext, 'requestId'>,
+): NextResponse {
+  logServerError(error, { ...context, requestId })
+
   if (error instanceof ZodError) {
     return fail(
       error.issues.map((i) => ({
@@ -49,6 +68,27 @@ export function errorResponse(error: unknown, requestId: string): NextResponse {
   return fail([{ code: 'INTERNAL', message: 'Internal server error' }], 500, requestId)
 }
 
+/**
+ * Who was making the request, resolved only once it has already failed.
+ *
+ * Reading the session costs a JWT decode, so it happens in the catch path and
+ * nowhere near the happy path. It is imported lazily for the same reason: the
+ * auth module pulls in the Node adapter, and every route in the app imports
+ * this file.
+ *
+ * Failing to identify the caller must never replace the error we were trying to
+ * report - an expired session is a perfectly ordinary reason to end up here.
+ */
+async function actorOf(): Promise<{ userId?: string; organizationId?: string }> {
+  try {
+    const { currentUser } = await import('@/auth/context')
+    const user = await currentUser()
+    return user ? { userId: user.id, organizationId: user.organizationId } : {}
+  } catch {
+    return {}
+  }
+}
+
 export async function route(
   req: Request,
   fn: (requestId: string) => Promise<NextResponse>,
@@ -57,7 +97,15 @@ export async function route(
   try {
     return await fn(requestId)
   } catch (error) {
-    return errorResponse(error, requestId)
+    const base = { method: req.method, path: pathOf(req.url) }
+    // Identity is only worth resolving for an error that will be written; the
+    // 404s and 412s that dominate this path get the free fields and no session
+    // read at all.
+    return errorResponse(
+      error,
+      requestId,
+      isUnexpected(error) ? { ...base, ...(await actorOf()) } : base,
+    )
   }
 }
 
