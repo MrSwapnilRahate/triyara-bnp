@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 
 import { buildAbilityFor, type Role } from '@triyara/auth'
 import { prisma } from '@triyara/db'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 // Full-stack API integration: route handler -> service -> repository -> real
 // PostgreSQL. Only the auth context is mocked; nothing else is stubbed, so this
@@ -36,6 +36,7 @@ const { GET: listResponses, POST: submitResponse } = await import('./[id]/respon
 const { POST: publishRfq } = await import('./[id]/publish/route')
 const { POST: closeRfq } = await import('./[id]/close/route')
 const { POST: reopenRfq } = await import('./[id]/reopen/route')
+const { POST: awardRfq } = await import('./[id]/award/route')
 const { GET: listSuppliers, POST: inviteSuppliers } = await import('./[id]/suppliers/route')
 const { PATCH: setParticipation } = await import('./[id]/suppliers/[participationId]/route')
 const { GET: listApprovals, POST: decideRfq } = await import('./[id]/approvals/route')
@@ -1118,6 +1119,145 @@ describe.skipIf(!process.env.DATABASE_URL)('RFQ API (integration, real PostgreSQ
       const rfq = await issued()
       const b = await body(await listRfqs(req(`/api/rfqs?supplierId=${supplierId}&limit=100`)))
       expect((b.data as unknown as Array<{ id: string }>).some((r) => r.id === rfq.id)).toBe(true)
+    })
+  })
+
+  describe('award', () => {
+    // The authenticated write limiter is keyed on user id and this file is
+    // already close to its 120/min budget by the time these run. A dedicated
+    // actor gives this block its own bucket; actor ids carry no foreign key,
+    // which is why a synthetic one is safe here.
+    let previousUser = ''
+    beforeAll(() => {
+      previousUser = authState.userId
+      authState.userId = `u-award-${uniq()}`
+    })
+    afterAll(() => {
+      authState.userId = previousUser
+    })
+
+    /** An issued RFQ with one real submitted bid, moved to EVALUATING. */
+    async function evaluating() {
+      const rfq = await issued()
+      const now = new Date()
+      await prisma.rFQSupplier.update({
+        where: { id: rfq.participationId },
+        data: { status: 'SUBMITTED', submittedAt: now, quotationTotal: '1000' },
+      })
+      const moved = await prisma.rFQ.update({
+        where: { id: rfq.id },
+        data: { status: 'EVALUATING', version: { increment: 1 } },
+      })
+      return { ...rfq, version: moved.version }
+    }
+
+    const post = (id: string, version: number, participationId: string) =>
+      awardRfq(
+        req(`/api/rfqs/${id}/award`, {
+          method: 'POST',
+          headers: { 'if-match': `W/"v${version}"`, 'content-type': 'application/json' },
+          body: JSON.stringify({ participationId }),
+        }),
+        params(id),
+      )
+
+    it('awards the round and records the winner', async () => {
+      const rfq = await evaluating()
+      const res = await post(rfq.id, rfq.version, rfq.participationId)
+      expect(res.status).toBe(200)
+
+      const row = await prisma.rFQ.findUniqueOrThrow({ where: { id: rfq.id } })
+      expect(row.status).toBe('AWARDED')
+      expect(row.awardedSupplierId).toBe(supplierId)
+      expect(row.awardedAt).not.toBeNull()
+      expect(row.awardedById).toBe(authState.userId)
+
+      // The winning participation is marked in the same transaction.
+      const participation = await prisma.rFQSupplier.findUniqueOrThrow({
+        where: { id: rfq.participationId },
+      })
+      expect(participation.status).toBe('AWARDED')
+    })
+
+    it('writes an audit row naming the winner', async () => {
+      const rfq = await evaluating()
+      await post(rfq.id, rfq.version, rfq.participationId)
+
+      const audit = await prisma.auditLog.findFirst({
+        where: { entityType: 'RFQ', entityId: rfq.id, action: 'rfq.awarded' },
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(audit).not.toBeNull()
+      expect(JSON.stringify(audit?.after)).toContain(supplierId)
+    })
+
+    it('refuses a second award - the round is decided once', async () => {
+      const rfq = await evaluating()
+      const first = await post(rfq.id, rfq.version, rfq.participationId)
+      expect(first.status).toBe(200)
+      const version = ((await body(first)).data as unknown as { version: number }).version
+
+      const second = await post(rfq.id, version, rfq.participationId)
+      expect(second.status).toBe(409)
+    })
+
+    it('rejects a stale version with 412 and changes nothing', async () => {
+      const rfq = await evaluating()
+      const res = await post(rfq.id, rfq.version - 1, rfq.participationId)
+      expect(res.status).toBe(412)
+
+      const row = await prisma.rFQ.findUniqueOrThrow({ where: { id: rfq.id } })
+      expect(row.status).toBe('EVALUATING')
+      expect(row.awardedSupplierId).toBeNull()
+    })
+
+    it('refuses a supplier who never submitted', async () => {
+      const rfq = await evaluating()
+      const other = await prisma.rFQSupplier.create({
+        data: {
+          rfqId: rfq.id,
+          organizationId: authState.organizationId,
+          supplierId: supplierId2,
+          status: 'INVITED',
+          invitedById: authState.userId,
+        },
+      })
+      const res = await post(rfq.id, rfq.version, other.id)
+      expect(res.status).toBe(422)
+
+      const row = await prisma.rFQ.findUniqueOrThrow({ where: { id: rfq.id } })
+      expect(row.awardedSupplierId).toBeNull()
+    })
+
+    it('refuses a participation from another RFQ', async () => {
+      const rfq = await evaluating()
+      const foreign = await evaluating()
+      const res = await post(rfq.id, rfq.version, foreign.participationId)
+      expect(res.status).toBe(404)
+    })
+
+    it('refuses while the RFQ is still ISSUED', async () => {
+      const rfq = await issued()
+      await prisma.rFQSupplier.update({
+        where: { id: rfq.participationId },
+        data: { status: 'SUBMITTED', submittedAt: new Date() },
+      })
+      const res = await post(rfq.id, rfq.version, rfq.participationId)
+      expect(res.status).toBe(409)
+    })
+
+    it('refuses an EXPORT_MANAGER with 403', async () => {
+      const rfq = await evaluating()
+      authState.roles = ['EXPORT_MANAGER']
+      try {
+        const res = await post(rfq.id, rfq.version, rfq.participationId)
+        expect(res.status).toBe(403)
+      } finally {
+        authState.roles = ['ADMIN']
+      }
+
+      const row = await prisma.rFQ.findUniqueOrThrow({ where: { id: rfq.id } })
+      expect(row.awardedSupplierId).toBeNull()
     })
   })
 })

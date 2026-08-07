@@ -224,8 +224,8 @@ describe('email service', () => {
   })
 
   it('renders a staff invite even though nothing calls it yet', async () => {
-    // Kept honest: the invite flow does not exist in the product, so this is
-    // covered here rather than claimed as wired up.
+    // The invitation link points at /reset-password, the page that actually
+    // consumes a PasswordResetToken - which is what an invitation carries.
     const { transport, sent } = fakeTransport()
     const email = createEmailService({ transport, logger: log.logger, ...BASE })
 
@@ -236,7 +236,7 @@ describe('email service', () => {
       expiresInHours: 48,
     })
 
-    expect(sent[0]?.text).toContain('https://bnp.example.com/accept-invite?token=tok123')
+    expect(sent[0]?.text).toContain('https://bnp.example.com/reset-password?token=tok123')
     expect(sent[0]?.text).toContain('48 hours')
   })
 })

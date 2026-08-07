@@ -1,6 +1,9 @@
+import { createHash, randomBytes } from 'node:crypto'
+
 import { assertAbility, type AuthContext } from '@triyara/auth'
 import type { AdminUserRecord, UserRepository } from '@triyara/db'
-import type { ListAdminUsersQuery } from '@triyara/validation'
+import { type EventBus, makeEvent } from '@triyara/events'
+import type { InviteUserDto, ListAdminUsersQuery } from '@triyara/validation'
 
 /**
  * User administration (TRY-BNP-ADMIN-02).
@@ -23,7 +26,25 @@ export type AdminUsersServiceCtx = AuthContext & { requestId?: string }
 
 export interface AdminUsersServiceDeps {
   users: UserRepository
+  events: EventBus
+  /** Injected so the service never imports bcrypt directly. */
+  hashPassword: (plain: string) => Promise<string>
+  /** Invitation lifetime. Defaults to 48 hours. */
+  inviteTtlMs?: number
 }
+
+/** What the caller needs to deliver the invitation, returned exactly once. */
+export interface InvitedUser {
+  id: string
+  name: string
+  email: string
+  role: string
+  /** Plaintext invitation token. Never stored, never retrievable again. */
+  token: string
+  expiresAt: Date
+}
+
+const DEFAULT_INVITE_TTL_MS = 48 * 60 * 60 * 1000
 
 export interface AdminUserListItem {
   id: string
@@ -60,7 +81,12 @@ function toListItem(row: AdminUserRecord): AdminUserListItem {
   }
 }
 
-export function createAdminUsersService({ users }: AdminUsersServiceDeps) {
+export function createAdminUsersService({
+  users,
+  events,
+  hashPassword,
+  inviteTtlMs = DEFAULT_INVITE_TTL_MS,
+}: AdminUsersServiceDeps) {
   return {
     /**
      * The tenant's people, newest first by default.
@@ -85,6 +111,54 @@ export function createAdminUsersService({ users }: AdminUsersServiceDeps) {
       })
 
       return { items: result.items.map(toListItem), nextCursor: result.nextCursor }
+    },
+
+    /**
+     * Invites a colleague.
+     *
+     * The account is created with a random secret nobody ever sees, so it
+     * cannot be signed into. The only way in is the invitation link, which
+     * means the invitee chooses their own password before their first sign-in
+     * rather than being handed one and asked to change it later. There is no
+     * window in which a working password exists that someone else has seen.
+     *
+     * The plaintext token is returned once, to the caller, so it can be
+     * emailed. Only its SHA-256 hash is persisted - the same shape the
+     * password-reset flow already uses, and the same page consumes it.
+     */
+    async invite(ctx: AdminUsersServiceCtx, dto: InviteUserDto): Promise<InvitedUser> {
+      assertAbility(ctx, 'manage', 'User')
+
+      // 48 random bytes: this is never typed by a human and never displayed,
+      // so it is sized to be unguessable rather than memorable.
+      const unusableSecret = randomBytes(48).toString('hex')
+      const token = randomBytes(32).toString('hex')
+      const expiresAt = new Date(Date.now() + inviteTtlMs)
+
+      const user = await users.createWithInvite(
+        { actorId: ctx.user.id, organizationId: ctx.organizationId, requestId: ctx.requestId },
+        {
+          email: dto.email,
+          name: dto.name,
+          passwordHash: await hashPassword(unusableSecret),
+          roleName: dto.role,
+          tokenHash: createHash('sha256').update(token).digest('hex'),
+          tokenExpiresAt: expiresAt,
+        },
+      )
+
+      await events.emit(
+        makeEvent({
+          type: 'user.invited',
+          organizationId: ctx.organizationId,
+          actorId: ctx.user.id,
+          // No token and no hash: this payload reaches the activity feed, the
+          // notification generator and the logs.
+          data: { userId: user.id, email: user.email, name: user.name, role: dto.role },
+        }),
+      )
+
+      return { ...user, role: dto.role, token, expiresAt }
     },
   }
 }

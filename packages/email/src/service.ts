@@ -210,7 +210,10 @@ export function createEmailService(deps: EmailServiceDeps) {
           inviterName: input.inviterName,
           inviteUrl: templates.joinUrl(
             appUrl,
-            `/accept-invite?token=${encodeURIComponent(input.token)}`,
+            // The invitation carries a PasswordResetToken, and /reset-password
+            // is the page that consumes one. A separate /accept-invite page
+            // would be a second screen doing the same job.
+            `/reset-password?token=${encodeURIComponent(input.token)}`,
           ),
           expiresInHours: input.expiresInHours,
         }),

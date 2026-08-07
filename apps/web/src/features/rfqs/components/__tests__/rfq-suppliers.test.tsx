@@ -194,3 +194,119 @@ describe('RfqSuppliers', () => {
     await expectNoAxeViolations(container)
   })
 })
+
+describe('RfqSuppliers - award', () => {
+  const bidder = () =>
+    participation({
+      status: 'SUBMITTED',
+      submittedAt: '2026-02-01T00:00:00.000Z',
+      quotationTotal: '12500.00',
+    })
+
+  const evaluating = (over = {}) =>
+    makeRfq({ status: 'EVALUATING', suppliers: [bidder()], version: 3, ...over })
+
+  it('offers Award only to a supplier who submitted a bid', async () => {
+    server.use(
+      ...handlers({ participants: [bidder(), participation({ id: 'p2', supplierId: 's2' })] }),
+    )
+    renderWithProviders(<RfqSuppliers rfq={evaluating()} />)
+
+    const table = await screen.findByRole('table', { name: /invited suppliers/i })
+    await waitFor(() =>
+      expect(within(table).getAllByRole('button', { name: /award supplier/i })).toHaveLength(1),
+    )
+  })
+
+  it('does not offer Award before the round is being evaluated', async () => {
+    server.use(...handlers({ participants: [bidder()] }))
+    renderWithProviders(<RfqSuppliers rfq={makeRfq({ status: 'IN_PROGRESS' })} />)
+
+    await screen.findByRole('table', { name: /invited suppliers/i })
+    expect(screen.queryByRole('button', { name: /award supplier/i })).not.toBeInTheDocument()
+  })
+
+  it('names the supplier and warns the decision is final before confirming', async () => {
+    const user = userEvent.setup()
+    server.use(...handlers({ participants: [bidder()] }))
+    renderWithProviders(<RfqSuppliers rfq={evaluating()} />)
+
+    await user.click(await screen.findByRole('button', { name: /award supplier/i }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/You are about to award this RFQ to/)).toBeInTheDocument()
+    expect(within(dialog).getAllByText(/Acme Spices/).length).toBeGreaterThan(0)
+    expect(
+      within(dialog).getByText(/cannot be reversed without administrator intervention/i),
+    ).toBeInTheDocument()
+  })
+
+  it('sends the participation id and the RFQ version, then confirms', async () => {
+    const user = userEvent.setup()
+    let sent: { body: unknown; ifMatch: string | null } | null = null
+    server.use(
+      ...handlers({ participants: [bidder()] }),
+      http.post('/api/rfqs/r1/award', async ({ request }) => {
+        sent = { body: await request.json(), ifMatch: request.headers.get('if-match') }
+        return HttpResponse.json(
+          ok({ ...evaluating(), status: 'AWARDED', awardedSupplierId: 's1', version: 4 }),
+        )
+      }),
+    )
+    renderWithProviders(<RfqSuppliers rfq={evaluating()} />)
+
+    await user.click(await screen.findByRole('button', { name: /award supplier/i }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /^award acme spices$/i }))
+
+    await waitFor(() => expect(sent).not.toBeNull())
+    expect(sent!.body).toEqual({ participationId: 'p1' })
+    // Optimistic concurrency reaches the wire, not just the service.
+    expect(sent!.ifMatch).toBe('W/"v3"')
+  })
+
+  it('shows the winner and withdraws the Award button once awarded', async () => {
+    server.use(...handlers({ participants: [participation({ status: 'AWARDED' })] }))
+    renderWithProviders(
+      <RfqSuppliers rfq={makeRfq({ status: 'AWARDED', awardedSupplierId: 's1' })} />,
+    )
+
+    const table = await screen.findByRole('table', { name: /invited suppliers/i })
+    // The status column is the single place the outcome is stated.
+    expect(within(table).getByText('Awarded')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /award supplier/i })).not.toBeInTheDocument()
+    // The winning row is marked so the eye lands on it without re-reading statuses.
+    const winner = within(table).getByText('Acme Spices').closest('tr')
+    expect(winner?.className).toMatch(/success/)
+  })
+
+  it('surfaces a rejected award without claiming success', async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...handlers({ participants: [bidder()] }),
+      http.post('/api/rfqs/r1/award', () =>
+        HttpResponse.json(
+          fail([{ code: 'CONFLICT', message: 'This RFQ has already been awarded.' }]),
+          { status: 409 },
+        ),
+      ),
+    )
+    renderWithProviders(<RfqSuppliers rfq={evaluating()} />)
+
+    await user.click(await screen.findByRole('button', { name: /award supplier/i }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /^award acme spices$/i }))
+
+    expect(await screen.findByText(/already been awarded/i)).toBeInTheDocument()
+  })
+
+  it('has no accessibility violations with the award dialog open', async () => {
+    const user = userEvent.setup()
+    server.use(...handlers({ participants: [bidder()] }))
+    const { container } = renderWithProviders(<RfqSuppliers rfq={evaluating()} />)
+
+    await user.click(await screen.findByRole('button', { name: /award supplier/i }))
+    await screen.findByRole('dialog')
+    await expectNoAxeViolations(container)
+  })
+})
