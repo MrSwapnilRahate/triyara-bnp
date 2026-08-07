@@ -44,6 +44,17 @@ const listSelect = {
   leadTimeDays: true,
   productionCapacity: true,
 
+  // The ONE owned collection the list carries, and only its type and status.
+  // A shortlist card has to say WHICH certifications a supplier holds — that is
+  // often the deciding fact — and fetching them per card would be one request
+  // per row. Deliberately not the full certification projection: no numbers,
+  // no dates, no scope. Those live on the detail read.
+  certifications: {
+    where: { deletedAt: null },
+    orderBy: { type: 'asc' },
+    select: { id: true, type: true, status: true },
+  },
+
   version: true,
   createdAt: true,
   updatedAt: true,

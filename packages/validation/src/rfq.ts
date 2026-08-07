@@ -137,6 +137,15 @@ export const listRfqsQuerySchema = z.object({
   q: z.string().trim().optional(),
   type: rfqTypeSchema.optional(),
   status: rfqStatusSchema.optional(),
+  /**
+   * Only RFQs a supplier can still be added to.
+   *
+   * A separate flag rather than a repeated `status` parameter because "open"
+   * spans several states, and asking the caller to list them means every caller
+   * has to know which ones — and they will drift apart the first time a state
+   * is added.
+   */
+  openOnly: z.enum(['true', 'false']).optional(),
   priority: rfqPrioritySchema.optional(),
   buyerId: z.string().optional(),
   /** RFQs a given supplier was invited to. */

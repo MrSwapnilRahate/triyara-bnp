@@ -12,6 +12,7 @@ import {
   Layers,
   Package,
   Quote,
+  Radar,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -52,6 +53,7 @@ export const NAVIGATION: GuardedGroup[] = [
       { label: 'RFQs', href: '/rfqs', icon: <FileSearch /> },
       { label: 'Quotations', href: '/quotations', icon: <Quote /> },
       { label: 'Suppliers', href: '/suppliers', icon: <Truck /> },
+      { label: 'Find suppliers', href: '/suppliers/find', icon: <Radar /> },
     ],
   },
   {
