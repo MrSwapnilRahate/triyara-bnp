@@ -23,7 +23,7 @@ import {
   StatusBadge,
   useToast,
 } from '@triyara/ui'
-import { Ban, Plus, Users } from 'lucide-react'
+import { Ban, Plus, Trophy, Users } from 'lucide-react'
 import { useState } from 'react'
 
 import { InlineQueryError } from '@/components/data/query-boundary'
@@ -31,7 +31,7 @@ import { useSupplierSearch } from '@/features/suppliers/api/suppliers'
 import { Can } from '@/lib/ability-context'
 import { describeApiError } from '@/lib/api-error'
 
-import { useInviteSuppliers, useRfqSuppliers, useSetParticipation } from '../api/rfqs'
+import { useAwardRfq, useInviteSuppliers, useRfqSuppliers, useSetParticipation } from '../api/rfqs'
 import type { Rfq } from '../types'
 
 /**
@@ -66,6 +66,14 @@ export function RfqSuppliers({ rfq }: { rfq: Rfq }) {
 
   const items = participants.data?.items ?? []
   const submitted = items.filter((p) => p.status === 'SUBMITTED').length
+
+  // Awarding is offered only while the round is being evaluated, and only to a
+  // supplier who actually quoted. The service enforces both again; this just
+  // avoids showing a button that would be refused.
+  const canAward = rfq.status === 'EVALUATING' && !rfq.awardedSupplierId
+  const awardedParticipationId = rfq.awardedSupplierId
+    ? (items.find((p) => p.supplierId === rfq.awardedSupplierId)?.id ?? null)
+    : null
 
   return (
     <div className="space-y-gap-lg">
@@ -120,7 +128,17 @@ export function RfqSuppliers({ rfq }: { rfq: Rfq }) {
               </DataTableHead>
               <tbody>
                 {items.map((participation) => (
-                  <DataTableRow key={participation.id}>
+                  <DataTableRow
+                    key={participation.id}
+                    // The winner is marked on the row rather than with a second
+                    // badge: the status column already reads "Awarded", and
+                    // saying it twice in one row is noise, not emphasis.
+                    className={
+                      participation.id === awardedParticipationId
+                        ? 'bg-success-subtle/40'
+                        : undefined
+                    }
+                  >
                     <DataTableCell className="font-medium">
                       {participation.supplier?.companyName ?? '—'}
                       <span className="ml-gap font-mono text-2xs text-content-subtle">
@@ -149,8 +167,15 @@ export function RfqSuppliers({ rfq }: { rfq: Rfq }) {
                       {participation.quotationTotal ?? '—'}
                     </DataTableCell>
                     <DataTableCell className="text-right">
-                      {roundOpen &&
-                      !['SUBMITTED', 'DECLINED', 'WITHDRAWN'].includes(participation.status) ? (
+                      {participation.id === awardedParticipationId ? null : canAward &&
+                        participation.submittedAt ? (
+                        // `manage Account`, not `update`: committing to a
+                        // supplier is a different authority from editing the RFQ.
+                        <Can action="manage" subject="Account">
+                          <AwardButton rfq={rfq} participation={participation} />
+                        </Can>
+                      ) : roundOpen &&
+                        !['SUBMITTED', 'DECLINED', 'WITHDRAWN'].includes(participation.status) ? (
                         <Can action="update" subject="Account">
                           <DeclineButton rfqId={rfq.id} participation={participation} />
                         </Can>
@@ -397,5 +422,70 @@ function InviteDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Awards the round to one supplier.
+ *
+ * The confirmation is deliberate rather than decorative: Stage-1 has no
+ * un-award, so this dialog is the last point at which a mistake is cheap. It
+ * names the supplier rather than saying "this supplier", because the row a
+ * person meant to click and the row they did click are not always the same.
+ */
+function AwardButton({
+  rfq,
+  participation,
+}: {
+  rfq: Rfq
+  participation: { id: string; supplier?: { companyName?: string } | null }
+}) {
+  const toast = useToast()
+  const award = useAwardRfq(rfq.id)
+  const [open, setOpen] = useState(false)
+  const supplierName = participation.supplier?.companyName ?? 'this supplier'
+
+  async function submit() {
+    try {
+      await award.mutateAsync({ participationId: participation.id, version: rfq.version })
+      toast.success('RFQ awarded', `${supplierName} has won this sourcing round.`)
+      setOpen(false)
+    } catch (error) {
+      const described = describeApiError(error)
+      toast.error(described.title, {
+        ...(described.description ? { description: described.description } : {}),
+      })
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="secondary" leadingIcon={<Trophy />} onClick={() => setOpen(true)}>
+        Award supplier
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Award this RFQ</DialogTitle>
+          </DialogHeader>
+          <div className="px-gutter py-gap-lg">
+            <p className="text-sm">
+              You are about to award this RFQ to <strong>{supplierName}</strong>.
+            </p>
+            <p className="mt-gap-xs text-sm text-content-muted">
+              This action cannot be reversed without administrator intervention.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" loading={award.isPending} onClick={() => void submit()}>
+              Award {supplierName}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
