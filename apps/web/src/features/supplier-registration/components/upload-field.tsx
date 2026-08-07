@@ -4,7 +4,9 @@ import { Button, Progress } from '@triyara/ui'
 import { Paperclip, X } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 
-import { uploadRegistrationFile, type UploadResult } from '../api/registration'
+import type { UploadResult } from '@/lib/registration-upload'
+
+import { uploadRegistrationFile } from '../api/registration'
 
 /**
  * One file, uploaded as soon as it is chosen.
@@ -21,12 +23,18 @@ export function UploadField({
   value,
   onUploaded,
   onCleared,
+  upload = uploadRegistrationFile,
 }: {
   label: string
   hint?: string
   value?: { fileName?: string; storageKey?: string }
   onUploaded: (result: UploadResult) => void
   onCleared: () => void
+  /**
+   * Which presign endpoint to upload through. Defaults to the supplier one so
+   * every existing call site is unchanged; the buyer form passes its own.
+   */
+  upload?: (file: File, onProgress?: (percent: number) => void) => Promise<UploadResult>
 }) {
   const inputId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -38,7 +46,7 @@ export function UploadField({
     setError(null)
     setPercent(0)
     try {
-      const result = await uploadRegistrationFile(file, setPercent)
+      const result = await upload(file, setPercent)
       onUploaded(result)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Upload failed. Please try again.')

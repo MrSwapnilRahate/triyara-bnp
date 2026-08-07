@@ -1,26 +1,24 @@
 'use client'
 
 import { useMutation } from '@tanstack/react-query'
-import type { SupplierRegistrationInput } from '@triyara/validation'
+import type { BuyerRegistrationInput } from '@triyara/validation'
 
 import { api } from '@/lib/api-client'
 import { type UploadResult, uploadViaPresign } from '@/lib/registration-upload'
 
-const BASE = '/api/public/supplier-registration'
+const BASE = '/api/public/buyer-registration'
 
-export type { UploadResult }
-
-/** The supplier form's upload, on the shared two-step pipeline. */
-export function uploadRegistrationFile(
+/** The buyer form's upload, on the shared two-step pipeline. */
+export function uploadBuyerFile(
   file: File,
   onProgress?: (percent: number) => void,
 ): Promise<UploadResult> {
   return uploadViaPresign(`${BASE}/presign`, file, onProgress)
 }
 
-export function useSubmitRegistration() {
+export function useSubmitBuyerRegistration() {
   return useMutation({
-    mutationFn: async (payload: SupplierRegistrationInput) => {
+    mutationFn: async (payload: BuyerRegistrationInput) => {
       const result = await api.post<{ submitted: boolean; companyName: string }>(BASE, payload)
       return result.data
     },
