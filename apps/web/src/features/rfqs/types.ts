@@ -10,7 +10,14 @@ import type { RFQStatusName } from '@triyara/validation'
 export type RfqStatus = RFQStatusName
 
 export type RfqSupplierStatus =
-  'INVITED' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'SUBMITTED' | 'NO_RESPONSE' | 'WITHDRAWN'
+  | 'INVITED'
+  | 'VIEWED'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'SUBMITTED'
+  | 'NO_RESPONSE'
+  | 'WITHDRAWN'
+  | 'AWARDED'
 
 export interface RfqListItem {
   id: string
@@ -27,6 +34,10 @@ export interface RfqListItem {
   status: RfqStatus
   priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'
   currentRevision: number
+  /** The winning supplier. Null until the round is awarded. */
+  awardedSupplierId: string | null
+  awardedAt: string | null
+  awardedById: string | null
   version: number
   createdAt: string
   updatedAt: string

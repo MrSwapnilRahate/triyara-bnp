@@ -249,6 +249,16 @@ export const rfqApprovalSchema = z.object({
 })
 export type RfqApprovalDto = z.infer<typeof rfqApprovalSchema>
 
+/**
+ * Awarding a round. The body names the participation, not the supplier: a
+ * supplier can only win a round they were actually invited to, and the
+ * participation id makes that impossible to get wrong.
+ */
+export const rfqAwardSchema = z.object({
+  participationId: z.string().min(1),
+})
+export type RfqAwardDto = z.infer<typeof rfqAwardSchema>
+
 export const listResponsesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().optional(),

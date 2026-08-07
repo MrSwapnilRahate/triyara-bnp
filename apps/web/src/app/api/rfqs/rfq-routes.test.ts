@@ -35,6 +35,7 @@ const rfqService = {
   reviseItems: vi.fn(),
   issue: vi.fn(),
   close: vi.fn(),
+  award: vi.fn(),
   reopen: vi.fn(),
   decide: vi.fn(),
   approvalHistory: vi.fn(),
@@ -57,6 +58,7 @@ const { GET: listResponses, POST: submitResponse } = await import('./[id]/respon
 const { POST: publishRfq } = await import('./[id]/publish/route')
 const { POST: closeRfq } = await import('./[id]/close/route')
 const { POST: reopenRfq } = await import('./[id]/reopen/route')
+const { POST: awardRfq } = await import('./[id]/award/route')
 const { GET: listSuppliers, POST: inviteSuppliers } = await import('./[id]/suppliers/route')
 const { PATCH: setParticipation } = await import('./[id]/suppliers/[participationId]/route')
 const { GET: listApprovals, POST: decideRfq } = await import('./[id]/approvals/route')
@@ -761,5 +763,104 @@ describe('GET /api/rfqs/openapi.json', () => {
       '/{id}/suppliers',
       '/{id}/suppliers/{participationId}',
     ])
+  })
+})
+
+describe('POST /api/rfqs/:id/award', () => {
+  const AWARDED = { status: 'AWARDED' as const, awardedSupplierId: 's1', version: 4 }
+
+  it('requires If-Match - two reviewers awarding at once must not both win', async () => {
+    const res = await awardRfq(
+      req('/api/rfqs/r1/award', {
+        method: 'POST',
+        body: JSON.stringify({ participationId: 'rs1' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(428)
+    expect(rfqService.award).not.toHaveBeenCalled()
+  })
+
+  it('delegates to award() and reports the winner', async () => {
+    rfqService.award.mockResolvedValue(rfq(AWARDED))
+    const res = await awardRfq(
+      req('/api/rfqs/r1/award', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v3"', 'content-type': 'application/json' },
+        body: JSON.stringify({ participationId: 'rs1' }),
+      }),
+      params('r1'),
+    )
+    const b = await body(res)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('ETag')).toBe('W/"v4"')
+    expect(b.meta.status).toBe('AWARDED')
+    expect(b.meta.awardedSupplierId).toBe('s1')
+    expect(rfqService.award).toHaveBeenCalledWith(expect.anything(), 'r1', 3, 'rs1')
+  })
+
+  it('rejects a body with no participationId', async () => {
+    const res = await awardRfq(
+      req('/api/rfqs/r1/award', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v3"', 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(422)
+    expect(rfqService.award).not.toHaveBeenCalled()
+  })
+
+  it('maps a stale version to 412', async () => {
+    rfqService.award.mockRejectedValue(new PreconditionFailedError())
+    const res = await awardRfq(
+      req('/api/rfqs/r1/award', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v3"', 'content-type': 'application/json' },
+        body: JSON.stringify({ participationId: 'rs1' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(412)
+  })
+
+  it('maps an illegal state or a second award to 409', async () => {
+    rfqService.award.mockRejectedValue(new ConflictError('already awarded'))
+    const res = await awardRfq(
+      req('/api/rfqs/r1/award', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v3"', 'content-type': 'application/json' },
+        body: JSON.stringify({ participationId: 'rs1' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(409)
+  })
+
+  it('maps an unknown participation to 404', async () => {
+    rfqService.award.mockRejectedValue(new NotFoundError('nope'))
+    const res = await awardRfq(
+      req('/api/rfqs/r1/award', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v3"', 'content-type': 'application/json' },
+        body: JSON.stringify({ participationId: 'gone' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(404)
+  })
+
+  it('surfaces a non-admin refusal as 403', async () => {
+    rfqService.award.mockRejectedValue(new ForbiddenError())
+    const res = await awardRfq(
+      req('/api/rfqs/r1/award', {
+        method: 'POST',
+        headers: { 'if-match': 'W/"v3"', 'content-type': 'application/json' },
+        body: JSON.stringify({ participationId: 'rs1' }),
+      }),
+      params('r1'),
+    )
+    expect(res.status).toBe(403)
   })
 })

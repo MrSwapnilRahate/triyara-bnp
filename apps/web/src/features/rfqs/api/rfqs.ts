@@ -241,6 +241,32 @@ export const usePublishRfq = (id: string) => useWorkflowMove(id, 'publish')
 export const useCloseRfq = (id: string) => useWorkflowMove(id, 'close')
 export const useReopenRfq = (id: string) => useWorkflowMove(id, 'reopen')
 
+/**
+ * Awards the round. Separate from useWorkflowMove because it carries a body -
+ * which participation won - and because it also invalidates the participant
+ * list, whose winning row changes status in the same transaction.
+ */
+export function useAwardRfq(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      participationId,
+      version,
+    }: {
+      participationId: string
+      version: number
+    }) => {
+      const result = await api.post<Rfq>(`${BASE}/${id}/award`, { participationId }, { version })
+      return { rfq: result.data, version: result.version ?? result.data.version }
+    },
+    onSuccess: (next) => {
+      queryClient.setQueryData(rfqKeys.detail(id), next)
+      void queryClient.invalidateQueries({ queryKey: rfqKeys.suppliers(id) })
+      void queryClient.invalidateQueries({ queryKey: rfqKeys.all })
+    },
+  })
+}
+
 export function useRfqApprovals(id: string | undefined) {
   return useQuery({
     queryKey: rfqKeys.approvals(id ?? ''),
