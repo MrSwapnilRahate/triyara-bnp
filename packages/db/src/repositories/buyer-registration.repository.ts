@@ -334,6 +334,21 @@ export const buyerRegistrationRepository = {
     })
   },
 
+  /**
+   * Contacts for an account, primary first.
+   *
+   * `register` writes these rows and nothing read them back, so a buyer could
+   * be approved with no way to tell them. Ordering matches the supplier side:
+   * primary, then explicit sort order, then oldest.
+   */
+  contacts(organizationId: string, accountId: string) {
+    return prisma.buyerContact.findMany({
+      where: { accountId, organizationId, deletedAt: null },
+      orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, name: true, email: true, phone: true, isPrimary: true },
+    })
+  },
+
   approvalHistory(organizationId: string, accountId: string) {
     return prisma.buyerApproval.findMany({
       where: { accountId, organizationId },

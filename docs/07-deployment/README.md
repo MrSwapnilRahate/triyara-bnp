@@ -2,6 +2,102 @@
 
 Index for the `07-deployment` documentation folder (see TRY-BNP-DOCS-01 for scope, audience and update rules).
 
+## Email delivery
+
+Suppliers and buyers have no account and no inbox inside the product. Email is
+the only channel that reaches them at all, so a message that is not sent is
+indistinguishable — from their side — from never having registered.
+
+### Configuration
+
+| Variable                    | Required           | Notes                                                                 |
+| --------------------------- | ------------------ | --------------------------------------------------------------------- |
+| `RESEND_API_KEY`            | yes, in production | Resend → API Keys                                                     |
+| `EMAIL_FROM`                | yes, in production | must be a **verified domain** in Resend                               |
+| `EMAIL_REPLY_TO`            | recommended        | rejection emails invite a reply; without it nobody reads it           |
+| `EMAIL_STAFF_NOTIFICATIONS` | recommended        | comma-separated; unset means nobody is told about new registrations   |
+| `APP_URL`                   | recommended        | absolute origin for links; falls back to `VERCEL_URL`, then localhost |
+
+Without a key the app uses a **log transport**: messages are written to the log
+rather than sent. That is the default locally, which is why a password-reset
+link is still usable in development. It is refused when serving production —
+the same guard shape storage uses, and exempt during `next build` via
+`NEXT_PHASE`.
+
+Verify the sending domain in Resend before go-live. An unverified domain does
+not fail at startup; it fails per message, and the first person to notice is a
+supplier who never got a reply.
+
+### What is sent, and when
+
+Email hangs off the existing domain-event bus as one more best-effort
+subscriber, alongside activity ingestion and in-app notifications. Those are
+unchanged: every event is still emitted, every in-app notification is still
+generated. Nothing is replaced.
+
+| Flow                  | Trigger                             | Recipient                   |
+| --------------------- | ----------------------------------- | --------------------------- |
+| Supplier confirmation | `supplier.self_registered`          | primary contact             |
+| Buyer confirmation    | `buyer.self_registered`             | primary contact             |
+| Staff alert           | either registration event           | `EMAIL_STAFF_NOTIFICATIONS` |
+| Supplier approved     | `supplier.approved`                 | primary contact             |
+| Supplier rejected     | `supplier.rejected`                 | primary contact             |
+| Buyer approved        | `buyer.approved`                    | primary contact             |
+| Buyer rejected        | `buyer.rejected`                    | primary contact             |
+| Password reset        | forgot-password form                | the account address         |
+| Staff invite          | _not wired — no invite flow exists_ | invitee                     |
+
+Approval and rejection messages carry the reviewer's most recent comment, so a
+rejection says why rather than only no.
+
+### Two behaviours to know about
+
+**A failed email never fails the request.** By the time any of this runs the
+registration is already saved. Delivery failures are caught, logged and
+dropped: trading a recoverable problem (a missed email, resendable by hand) for
+an unrecoverable one (a lost registration) would be the wrong bargain. The same
+applies to password reset, where surfacing a delivery error would also reveal
+which addresses are registered — the one thing the uniform reply exists to hide.
+
+**Not every supplier can be emailed.** The registration wizards deliberately
+accept a contact reachable only by phone or WhatsApp, so `SupplierContact.email`
+and `BuyerContact.email` are nullable. Those contacts are skipped and logged as
+`email.contact_has_no_address`; the staff alert still fires, so the
+registration never disappears from the review queue.
+
+### Delivery log
+
+One structured line per delivery attempt, whatever the outcome:
+
+| Line                                   | Meaning                                      |
+| -------------------------------------- | -------------------------------------------- |
+| `email.sent`                           | accepted by Resend; includes id and attempts |
+| `email.failed`                         | gave up; includes error, attempts, retryable |
+| `email.skipped`                        | nothing to send to                           |
+| `email.contact_has_no_address`         | contact has no email address                 |
+| `email.no_staff_recipients_configured` | `EMAIL_STAFF_NOTIFICATIONS` is unset         |
+| `email.not_sent_development`           | log transport; the message was not sent      |
+
+Transient failures (5xx, 429, network) are retried up to three times with
+exponential backoff inside an 8-second budget. Permanent ones (a rejected
+address, a malformed payload) are not retried — they fail identically every
+time, and on 4xx repeated attempts look like abuse. The budget is small on
+purpose: the bus awaits its subscribers, so this time is added to the request
+that triggered it.
+
+### Verifying after deploy
+
+1. Register a test supplier with a real address you control; the confirmation
+   should arrive, and the staff alert should reach `EMAIL_STAFF_NOTIFICATIONS`.
+2. Approve it, then reject another; check both messages and that the rejection
+   carries the reviewer's comment.
+3. Request a password reset and follow the link end to end.
+4. Check the logs for `email.sent` lines with the Resend message ids, and
+   cross-check those ids in the Resend dashboard for bounces.
+
+Step 4 matters: `email.sent` means Resend _accepted_ the message, not that it
+landed in an inbox. Bounces and spam placement are only visible in Resend.
+
 ## Production storage
 
 Supplier and buyer documents — certificates, company profiles, factory photos —
