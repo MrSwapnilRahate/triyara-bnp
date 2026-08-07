@@ -1,6 +1,7 @@
-import { Card } from '@triyara/ui'
-import { CheckCircle2 } from 'lucide-react'
+import { Button, Card } from '@triyara/ui'
+import { ArrowRight, CheckCircle2 } from 'lucide-react'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Enquiry received · Triyara Exports',
@@ -24,6 +25,15 @@ export default function BuyerThankYouPage() {
           <p>Our team will review your requirement.</p>
           <p>We will contact you with what we can source.</p>
         </div>
+        {/* The next thing a buyer wants to do is describe what they need.
+            Offering it here rather than making them wait for an email is the
+            difference between an enquiry and a live requirement. */}
+        <Button asChild variant="primary" size="lg" className="mt-gutter">
+          <Link href="/register/buyer/requirement">
+            Submit Your First Requirement
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        </Button>
       </Card>
       <p className="mt-gutter text-2xs text-content-subtle">Triyara Exports LLP</p>
     </div>

@@ -13,6 +13,12 @@ const PUBLIC_PATHS = [
   '/register/supplier/thank-you',
   '/register/buyer',
   '/register/buyer/thank-you',
+  // Where a newly registered buyer is sent to describe their first
+  // requirement. They have no account, so this must not ask for one.
+  '/register/buyer/requirement',
+  // Linked from the public footer. A policy page behind a login is useless.
+  '/privacy',
+  '/terms',
 ]
 
 // Edge-safe base config (no Node-only deps). Used by middleware and extended by the
