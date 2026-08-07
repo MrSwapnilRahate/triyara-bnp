@@ -23,10 +23,40 @@ const PUBLIC_PATHS = [
 
 // Edge-safe base config (no Node-only deps). Used by middleware and extended by the
 // Node instance in ./index.ts which adds the Credentials provider.
+/**
+ * Whether cookies may carry the Secure attribute.
+ *
+ * `__Host-` and `Secure` require HTTPS. Setting them in local development over
+ * http would mean the browser silently discards the session cookie and nobody
+ * can sign in, so the prefix follows the protocol rather than being hardcoded.
+ */
+const useSecureCookies = process.env.NODE_ENV === 'production'
+const sessionCookieName = useSecureCookies
+  ? // `__Host-` is the strongest prefix: the browser refuses the cookie unless
+    // it is Secure, path=/ and carries no Domain, which makes it impossible for
+    // a subdomain to overwrite the session.
+    '__Host-authjs.session-token'
+  : 'authjs.session-token'
+
 export const authConfig = {
   pages: { signIn: '/login' },
   session: { strategy: 'jwt', maxAge: 60 * 60 * 8 }, // 8 hours
   trustHost: true,
+  useSecureCookies,
+  cookies: {
+    sessionToken: {
+      name: sessionCookieName,
+      options: {
+        httpOnly: true,
+        // `lax` rather than `strict`: the sign-in redirect is a cross-site
+        // top-level navigation, and `strict` would drop the cookie on it and
+        // bounce the user straight back to the login page.
+        sameSite: 'lax',
+        path: '/',
+        secure: useSecureCookies,
+      },
+    },
+  },
   callbacks: {
     /**
      * Maps the JWT onto the session. This lives in the EDGE config, not just in
