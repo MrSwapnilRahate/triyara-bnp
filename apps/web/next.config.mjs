@@ -29,6 +29,35 @@ function storageOrigin() {
 }
 
 /**
+ * Refuses to produce a policy that would block uploads.
+ *
+ * `headers()` is evaluated during `next build` and baked into
+ * routes-manifest.json — it is NOT re-read when the server starts. So the
+ * storage variables have to be present in the BUILD environment, not merely at
+ * runtime, and on a platform where the two are configured separately that is
+ * easy to get wrong.
+ *
+ * Getting it wrong is silent: connect-src quietly falls back to 'self', the
+ * build succeeds, the app boots, every page works, and then the first supplier
+ * to upload a document has the browser refuse the request. Failing the build is
+ * the only point where that is still cheap to fix.
+ */
+function assertStoragePolicyIsUsable(origin) {
+  const provider = process.env.STORAGE_PROVIDER
+  // `local` writes to the filesystem and uploads never leave the origin, so
+  // there is nothing extra to allow.
+  if (provider !== 's3' && provider !== 'r2') return
+  if (origin) return
+
+  throw new Error(
+    `STORAGE_PROVIDER is "${provider}" but no storage origin could be derived at build time.\n` +
+      'The Content-Security-Policy is baked into the build, so without it connect-src\n' +
+      "falls back to 'self' and the browser will refuse every document upload.\n" +
+      'Expose STORAGE_ENDPOINT (R2), or STORAGE_BUCKET and STORAGE_REGION (S3), to the build.',
+  )
+}
+
+/**
  * Content Security Policy.
  *
  * `script-src` carries 'unsafe-inline' because the App Router injects inline
@@ -44,6 +73,7 @@ function storageOrigin() {
  */
 function contentSecurityPolicy() {
   const storage = storageOrigin()
+  assertStoragePolicyIsUsable(storage)
   const connect = ["'self'", storage, process.env.NODE_ENV === 'development' ? 'ws:' : null]
     .filter(Boolean)
     .join(' ')

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // The headers are computed at module load from the environment, so each case
 // sets the environment and imports a fresh copy.
 
-const KEYS = ['STORAGE_ENDPOINT', 'STORAGE_BUCKET', 'STORAGE_REGION'] as const
+const KEYS = ['STORAGE_ENDPOINT', 'STORAGE_BUCKET', 'STORAGE_REGION', 'STORAGE_PROVIDER'] as const
 const original = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]))
 
 function env(values: Partial<Record<(typeof KEYS)[number], string | undefined>>) {
@@ -83,36 +83,60 @@ describe('connect-src must not break document uploads', () => {
     // Uploads are a presigned PUT from the browser straight to storage - a
     // different origin. `connect-src 'self'` would block every upload, and
     // only on a real upload, which is the worst place to find out.
-    env({ STORAGE_ENDPOINT: 'https://acct123.r2.cloudflarestorage.com' })
+    env({ STORAGE_PROVIDER: 'r2', STORAGE_ENDPOINT: 'https://acct123.r2.cloudflarestorage.com' })
     expect(directive(await csp(), 'connect-src')).toContain(
       'https://acct123.r2.cloudflarestorage.com',
     )
   })
 
   it('derives the S3 host from bucket and region when there is no endpoint', async () => {
-    env({ STORAGE_BUCKET: 'triyara-docs', STORAGE_REGION: 'ap-south-1' })
+    env({ STORAGE_PROVIDER: 's3', STORAGE_BUCKET: 'triyara-docs', STORAGE_REGION: 'ap-south-1' })
     expect(directive(await csp(), 'connect-src')).toContain(
       'https://triyara-docs.s3.ap-south-1.amazonaws.com',
     )
   })
 
   it('carries only the endpoint origin, never a path', async () => {
-    env({ STORAGE_ENDPOINT: 'https://acct123.r2.cloudflarestorage.com/bucket/key' })
+    env({
+      STORAGE_PROVIDER: 'r2',
+      STORAGE_ENDPOINT: 'https://acct123.r2.cloudflarestorage.com/bucket/key',
+    })
     const connect = directive(await csp(), 'connect-src')
     expect(connect).toContain('https://acct123.r2.cloudflarestorage.com')
     expect(connect).not.toContain('/bucket/key')
   })
 
-  it('does not take the build down on a malformed endpoint', async () => {
-    // The storage factory already refuses to serve production without valid
-    // configuration; the build should not fail first with a worse message.
-    env({ STORAGE_ENDPOINT: 'not a url' })
-    await expect(csp()).resolves.toContain("connect-src 'self'")
+  it('allows self alone when uploads never leave the origin', async () => {
+    // `local` writes to the filesystem, so there is no third origin to permit.
+    env({ STORAGE_PROVIDER: 'local' })
+    expect(directive(await csp(), 'connect-src')).toBe("connect-src 'self'")
+  })
+})
+
+describe('a policy that would block uploads must fail the build', () => {
+  // headers() is evaluated during `next build` and baked into the manifest, so
+  // the storage variables have to reach the BUILD environment. If they do not,
+  // the fallback is silent: everything works until the first real upload.
+  it('refuses to build remote storage without an origin', async () => {
+    env({ STORAGE_PROVIDER: 'r2' })
+    await expect(csp()).rejects.toThrow(/no storage origin could be derived at build time/)
   })
 
-  it('falls back to self alone when storage is unconfigured', async () => {
-    env({})
-    expect(directive(await csp(), 'connect-src')).toBe("connect-src 'self'")
+  it('refuses to build on a malformed endpoint rather than degrading', async () => {
+    env({ STORAGE_PROVIDER: 's3', STORAGE_ENDPOINT: 'not a url' })
+    await expect(csp()).rejects.toThrow(/STORAGE_ENDPOINT/)
+  })
+
+  it('says which variables to set', async () => {
+    // The message is the whole value of the guard: it fires in a build log,
+    // far from anyone who remembers how the policy is assembled.
+    env({ STORAGE_PROVIDER: 'r2' })
+    await expect(csp()).rejects.toThrow(/STORAGE_BUCKET and STORAGE_REGION/)
+  })
+
+  it('leaves local development alone', async () => {
+    env({ STORAGE_PROVIDER: 'local' })
+    await expect(csp()).resolves.toContain("connect-src 'self'")
   })
 })
 
