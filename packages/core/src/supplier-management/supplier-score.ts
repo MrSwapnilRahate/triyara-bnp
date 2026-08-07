@@ -34,6 +34,16 @@ export interface SupplierScore {
   score: number
   band: 'ready' | 'usable' | 'incomplete'
   components: ScoreComponent[]
+  /**
+   * When we last wrote a note against this supplier.
+   *
+   * Carried alongside the score rather than folded into it. Recency says
+   * something about the relationship, but not about readiness — a supplier
+   * spoken to yesterday is not thereby better prepared than one spoken to last
+   * quarter, and scoring it would quietly punish suppliers who simply have not
+   * come up recently.
+   */
+  lastContactedAt: Date | null
 }
 
 const WEIGHTS = {
@@ -185,6 +195,7 @@ export function scoreSupplier(signals: SupplierScoreSignals): SupplierScore {
     score,
     band: score >= 75 ? 'ready' : score >= 45 ? 'usable' : 'incomplete',
     components,
+    lastContactedAt: signals.lastContactedAt,
   }
 }
 

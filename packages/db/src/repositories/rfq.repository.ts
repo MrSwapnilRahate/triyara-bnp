@@ -112,11 +112,21 @@ export interface RfqItemData {
   remarks?: string
 }
 
+/** States an RFQ can still take a new supplier in. */
+export const OPEN_RFQ_STATUSES: RFQStatus[] = [
+  'DRAFT',
+  'PENDING_APPROVAL',
+  'APPROVED',
+  'ISSUED',
+  'IN_PROGRESS',
+]
+
 export interface ListRfqsParams {
   organizationId: string
   q?: string
   type?: RFQType
   status?: RFQStatus
+  openOnly?: boolean
   priority?: RFQPriority
   buyerId?: string
   supplierId?: string
@@ -234,7 +244,17 @@ export const rfqRepository = {
       organizationId: params.organizationId,
       ...(params.includeDeleted ? {} : { deletedAt: null }),
       ...(params.type ? { type: params.type } : {}),
-      ...(params.status ? { status: params.status } : {}),
+      // One `status` clause, not two. An explicit status wins over `openOnly`:
+      // asking for CLOSED means CLOSED, and silently widening it to the open
+      // set would answer a question nobody asked.
+      //
+      // Inviting a supplier only makes sense before the RFQ has been settled,
+      // so `openOnly` excludes AWARDED, CLOSED, CANCELLED and EXPIRED.
+      ...(params.status
+        ? { status: params.status }
+        : params.openOnly
+          ? { status: { in: [...OPEN_RFQ_STATUSES] } }
+          : {}),
       ...(params.priority ? { priority: params.priority } : {}),
       ...(params.buyerId ? { buyerId: params.buyerId } : {}),
       ...(params.destinationCountry ? { destinationCountry: params.destinationCountry } : {}),

@@ -157,6 +157,7 @@ export { type ReviewerOption, reviewerRepository } from './repositories/reviewer
 export {
   type CreateRfqData,
   type ListRfqsParams,
+  OPEN_RFQ_STATUSES,
   type RfqItemData,
   type RfqListItem,
   type RfqListResult,
