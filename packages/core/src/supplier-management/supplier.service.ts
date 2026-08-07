@@ -16,6 +16,8 @@ import type {
   UpdateSupplierDto,
 } from '@triyara/validation'
 
+import { resolveTransition } from '../onboarding/review-workflow'
+
 // Supplier master service (TRY-BNP-SUPPLIER-02).
 //
 // Named SupplierMaster* because the FROZEN supplier module already exports
@@ -36,27 +38,9 @@ export interface SupplierMasterDeps {
   events: EventBus
 }
 
-/**
- * Legal onboarding transitions. Anything not listed is rejected, so the
- * workflow cannot be walked into an inconsistent state by a malformed request.
- */
-const TRANSITIONS: Record<string, readonly string[]> = {
-  DRAFT: ['PENDING_REVIEW', 'INACTIVE'],
-  PENDING_REVIEW: ['APPROVED', 'REJECTED', 'DRAFT'],
-  APPROVED: ['BLOCKED', 'INACTIVE'],
-  REJECTED: ['DRAFT', 'PENDING_REVIEW'],
-  BLOCKED: ['APPROVED', 'INACTIVE'],
-  INACTIVE: ['DRAFT'],
-}
-
-const DECISION_TARGET: Record<string, string> = {
-  SUBMITTED: 'PENDING_REVIEW',
-  APPROVED: 'APPROVED',
-  REJECTED: 'REJECTED',
-  BLOCKED: 'BLOCKED',
-  UNBLOCKED: 'APPROVED',
-  REOPENED: 'DRAFT',
-}
+// The onboarding transition rules moved to ../onboarding/review-workflow, so
+// suppliers and buyers share one state machine rather than two copies that
+// drift. The rules themselves are unchanged.
 
 function mutationCtx(ctx: SupplierMasterCtx): MutationCtx {
   return { actorId: ctx.user.id, organizationId: ctx.organizationId, requestId: ctx.requestId }
@@ -152,15 +136,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Supplier not found.')
 
-      const target = DECISION_TARGET[dto.decision]
-      if (!target) throw new ValidationError(`Unsupported decision: ${dto.decision}`)
-
-      const allowed = TRANSITIONS[current.status] ?? []
-      if (!allowed.includes(target)) {
-        throw new ConflictError(
-          `Cannot move a ${current.status} supplier to ${target}. Allowed: ${allowed.join(', ') || 'none'}.`,
-        )
-      }
+      const target = resolveTransition(current.status, dto.decision, 'supplier')
 
       const supplier = await repo.transition(
         mutationCtx(ctx),

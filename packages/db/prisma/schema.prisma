@@ -152,6 +152,29 @@ model Account {
   relationshipStatus RelationshipStatus @default(PROSPECT)
   source             String?
   ownerId            String?
+
+  /// Onboarding review, distinct from `relationshipStatus`.
+  ///
+  /// The two answer different questions and must not be conflated:
+  /// relationshipStatus is a commercial ladder (PROSPECT → ACTIVE → PREFERRED)
+  /// that sales moves an account along, while this records whether anyone has
+  /// checked the company is real. An account can be an ACTIVE customer of long
+  /// standing and still be APPROVED here; a self-registered one is
+  /// PENDING_REVIEW while remaining a PROSPECT.
+  ///
+  /// Defaults to APPROVED, NOT to pending. Every account that exists today was
+  /// keyed in by the team, so a pending default would drop the entire existing
+  /// customer base into a review queue the moment this deploys. Only the public
+  /// form sets PENDING_REVIEW, and it does so explicitly.
+  registrationStatus BuyerRegistrationStatus @default(APPROVED)
+  isVerified         Boolean                 @default(false)
+  verifiedAt         DateTime?
+
+  /// Whether this account arrived through the public buyer form rather than
+  /// being keyed in by the team. Nothing on a self-registered record has been
+  /// checked by us, and the review queue treats it accordingly.
+  isSelfRegistered Boolean   @default(false)
+  submittedAt      DateTime?
   createdById        String
   updatedById        String
   deletedById        String?
@@ -166,9 +189,12 @@ model Account {
   buyerProfile    BuyerProfile?
   rfqs            RFQ[]
   quotations      Quotation[]
+  approvals       BuyerApproval[]
+  contacts        BuyerContact[]
 
   @@index([organizationId, deletedAt])
   @@index([organizationId, relationshipStatus])
+  @@index([organizationId, registrationStatus])
   @@index([organizationId, legalName])
   @@index([organizationId, ownerId])
   @@index([organizationId, createdAt])
@@ -592,6 +618,21 @@ model NotificationPreference {
   @@index([organizationId, userId])
 }
 
+/// Onboarding review states for an Account (TRY-BNP-BUYER-REG).
+///
+/// Deliberately its own enum rather than reusing SupplierStatus: an Account is
+/// not a Supplier, and a shared enum named for one of them would read as a
+/// mistake at every call site. The VALUES match so the two workflows can share
+/// one transition guard instead of two — see `assertTransition` in core.
+enum BuyerRegistrationStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  BLOCKED
+  INACTIVE
+}
+
 enum BuyerType {
   IMPORTER
   DISTRIBUTOR
@@ -629,6 +670,11 @@ model BuyerProfile {
   certificationsRequired String[]
   languages              String[]
 
+  /// How the buyer needs goods packed. SupplierProfile already carries this on
+  /// the other side of the trade; without it here a buyer can state what they
+  /// want shipped but not how it must arrive, which is half the requirement.
+  packaging String?
+
   website     String?
   socialLinks Json?
   description String?
@@ -661,6 +707,61 @@ model BuyerProduct {
 
   @@unique([buyerProfileId, product])
   @@index([buyerProfileId])
+}
+
+/// A named person at a buyer. Mirrors SupplierContact, which had no equivalent
+/// on the account side: nothing hanging off an Account could hold a person with
+/// an email and a phone number, so a buyer enquiry arrived with no way back to
+/// whoever sent it.
+model BuyerContact {
+  id             String @id @default(cuid())
+  accountId      String
+  organizationId String
+
+  name        String
+  designation String?
+  email       String?
+  phone       String?
+  whatsapp    String?
+
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+  notes     String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, isPrimary])
+  @@index([organizationId, email])
+  @@index([accountId, deletedAt])
+}
+
+/// A single transition in an account's onboarding review. Mirrors
+/// SupplierApproval so "what happened to this buyer, and who decided it" is one
+/// query, and so a decision cannot be taken without leaving a record.
+model BuyerApproval {
+  id             String @id @default(cuid())
+  accountId      String
+  organizationId String
+
+  fromStatus BuyerRegistrationStatus?
+  toStatus   BuyerRegistrationStatus
+  decision   ApprovalDecision
+
+  reviewerId String
+  comments   String?
+  reviewedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, reviewedAt])
+  @@index([organizationId, toStatus])
+  @@index([organizationId, reviewerId])
 }
 
 // ===========================================================================

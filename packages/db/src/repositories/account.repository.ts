@@ -11,6 +11,14 @@ const accountSelect = {
   displayName: true,
   country: true,
   relationshipStatus: true,
+  // Onboarding review (TRY-BNP-BUYER-REG). Distinct from relationshipStatus:
+  // one is the commercial ladder, the other records whether anyone has checked
+  // the company is real. A reviewer needs both in front of them.
+  registrationStatus: true,
+  isVerified: true,
+  verifiedAt: true,
+  isSelfRegistered: true,
+  submittedAt: true,
   source: true,
   ownerId: true,
   createdById: true,

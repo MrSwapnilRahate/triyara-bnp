@@ -11,6 +11,8 @@ const PUBLIC_PATHS = [
   // sending them to /login would defeat the entire point of the form.
   '/register/supplier',
   '/register/supplier/thank-you',
+  '/register/buyer',
+  '/register/buyer/thank-you',
 ]
 
 // Edge-safe base config (no Node-only deps). Used by middleware and extended by the

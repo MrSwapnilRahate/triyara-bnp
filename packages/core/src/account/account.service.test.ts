@@ -18,6 +18,14 @@ function makeAccount(over: Partial<AccountRecord> = {}): AccountRecord {
     displayName: null,
     country: 'IN',
     relationshipStatus: 'PROSPECT',
+    // Onboarding review, separate from the commercial ladder above. Defaults
+    // to APPROVED here because a keyed-in account is one the team already
+    // trusts; only the public form produces a pending one.
+    registrationStatus: 'APPROVED',
+    isVerified: false,
+    verifiedAt: null,
+    isSelfRegistered: false,
+    submittedAt: null,
     source: null,
     ownerId: null,
     createdById: 'u1',

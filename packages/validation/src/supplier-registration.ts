@@ -2,6 +2,13 @@ import { z } from 'zod'
 
 import { MAX_FILE_SIZE, mimeTypeSchema } from './document'
 import {
+  iso2,
+  optionalEmail,
+  optionalText,
+  optionalUrl,
+  shortList,
+} from './registration-primitives'
+import {
   CERTIFICATION_TYPES,
   SUPPLIER_BUSINESS_TYPES,
   SUPPLIER_DOCUMENT_TYPES,
@@ -19,29 +26,6 @@ import {
 //   2. Every ceiling is explicit. This endpoint is unauthenticated, so the
 //     schema is the first thing standing between the internet and the database.
 
-/** Trims, then treats an empty field as absent rather than as a bad value. */
-const optionalText = (max: number) =>
-  z.preprocess(
-    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-    z.string().trim().max(max).optional(),
-  )
-
-const iso2 = z
-  .string()
-  .trim()
-  .length(2)
-  .regex(/^[A-Z]{2}$/, 'Must be an ISO 3166-1 alpha-2 code.')
-
-/**
- * Bounded list of short free-text entries.
- *
- * Registrants paste comma-separated lists into these, so the cap is on both the
- * number of entries and the length of each: one without the other still lets a
- * single request carry an unbounded payload.
- */
-const shortList = (maxItems: number, maxLen = 120) =>
-  z.array(z.string().trim().min(1).max(maxLen)).max(maxItems).default([])
-
 // ---- Step 1: company ----
 
 export const registrationCompanySchema = z.object({
@@ -53,10 +37,7 @@ export const registrationCompanySchema = z.object({
   city: optionalText(120),
   gstNumber: optionalText(20),
   iecNumber: optionalText(20),
-  website: z.preprocess(
-    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-    z.string().trim().url('Must be a full URL, including https://').max(300).optional(),
-  ),
+  website: optionalUrl(),
   establishedYear: z.coerce.number().int().min(1800).max(2200).optional(),
   employeeCount: z.coerce.number().int().min(1).max(10_000_000).optional(),
 })
@@ -73,10 +54,7 @@ export const registrationContactSchema = z
   .object({
     name: z.string().trim().min(1, 'Contact name is required.').max(200),
     designation: optionalText(200),
-    email: z.preprocess(
-      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-      z.string().trim().email('Must be a valid email address.').max(320).optional(),
-    ),
+    email: optionalEmail(),
     mobile: optionalText(32),
     whatsapp: optionalText(32),
   })
