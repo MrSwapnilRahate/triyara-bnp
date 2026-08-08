@@ -1,18 +1,62 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
-  "globalEnv": ["NODE_ENV", "LOG_LEVEL", "AUTH_SECRET", "AUTH_TRUST_HOST", "DATABASE_URL"],
+  "globalEnv": [
+    "NODE_ENV",
+    "LOG_LEVEL",
+    "CI",
+    "NEXT_PHASE",
+    "NEXT_RUNTIME",
+    "AUTH_SECRET",
+    "AUTH_TRUST_HOST",
+    "SUPER_ADMIN_EMAILS",
+    "DATABASE_URL",
+    "APP_URL",
+    "VERCEL_ENV",
+    "VERCEL_URL",
+    "VERCEL_GIT_COMMIT_SHA",
+    "PUBLIC_REGISTRATION_ORG_SLUG",
+    "STORAGE_PROVIDER",
+    "STORAGE_BUCKET",
+    "STORAGE_REGION",
+    "STORAGE_ENDPOINT",
+    "STORAGE_ACCESS_KEY_ID",
+    "STORAGE_SECRET_ACCESS_KEY",
+    "STORAGE_LOCAL_DIR",
+    "STORAGE_SECRET",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+    "EMAIL_REPLY_TO",
+    "EMAIL_STAFF_NOTIFICATIONS",
+    "NEXT_PUBLIC_SENTRY_DSN",
+    "SENTRY_AUTH_TOKEN",
+    "SENTRY_ORG",
+    "SENTRY_PROJECT"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
-    "@triyara/db#build": { "cache": false },
-    "dev": { "cache": false, "persistent": true },
-    "start": { "dependsOn": ["build"], "cache": false, "persistent": true },
+    "@triyara/db#build": {
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "start": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "persistent": true
+    },
     "lint": {},
-    "typecheck": { "dependsOn": ["^build"] },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
     "test": {},
-    "clean": { "cache": false }
+    "clean": {
+      "cache": false
+    }
   }
 }
