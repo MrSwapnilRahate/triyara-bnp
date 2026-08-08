@@ -61,6 +61,23 @@ function sanitize(fileName: string): string {
   return fileName.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120)
 }
 
+/**
+ * The prefix every key this endpoint may reference has to sit under.
+ *
+ * `presign` issues keys here and nowhere else, but `submit` receives the key
+ * back from the browser, and until this existed it accepted any key at all -
+ * checking only that the object exists. This endpoint is unauthenticated, so
+ * "the caller told us" is the weakest possible provenance for a path.
+ *
+ * Separate from the supplier form's prefix on purpose: a buyer enquiry has no
+ * business referencing a supplier registration's upload either.
+ */
+function assertBuyerRegistrationKey(organizationId: string, storageKey: string): void {
+  if (!storageKey.startsWith(`${organizationId}/buyer-registrations/`)) {
+    throw new ValidationError('That upload does not belong to this enquiry.')
+  }
+}
+
 export function createBuyerRegistrationService({
   repo,
   storage,
@@ -123,6 +140,10 @@ export function createBuyerRegistrationService({
 
       const documents: BuyerUpload[] = []
       for (const doc of dto.documents) {
+        // Before `stat`, not after: otherwise this endpoint answers whether an
+        // arbitrary key exists in the bucket, which is a question an anonymous
+        // caller has no business asking.
+        assertBuyerRegistrationKey(organizationId, doc.storageKey)
         const stat = await storage.stat(doc.storageKey)
         if (!stat) {
           throw new ValidationError(
