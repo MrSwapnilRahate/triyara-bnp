@@ -1,3 +1,5 @@
+import { withSentryConfig } from '@sentry/nextjs'
+
 /**
  * Origin the browser uploads documents to.
  *
@@ -144,4 +146,39 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+/**
+ * Sentry's build-time half: source map upload and the tunnel route.
+ *
+ * `withSentryConfig` wraps the config above rather than replacing anything in
+ * it - the security headers and the storage-origin guard are untouched, and
+ * `headers()` is still ours.
+ *
+ * Uploading source maps needs SENTRY_AUTH_TOKEN, which only CI and the
+ * deployment have. Without it the build must still succeed, or every local
+ * build and every fork's CI breaks on a credential they were never given -
+ * so upload is enabled only when the token is present.
+ */
+const sentryBuildOptions = {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Without this, a minified stack trace names `a.b.c` and nothing else.
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+    // The maps are uploaded to Sentry, then deleted from the output. Leaving
+    // them served publicly would hand the whole source tree to anyone asking.
+    deleteSourcemapsAfterUpload: true,
+  },
+
+  // Routes the SDK's requests through this origin. Ad blockers routinely block
+  // requests to sentry.io outright, and a browser error that cannot be
+  // reported is the one class of bug nobody ever hears about.
+  tunnelRoute: '/monitoring',
+
+  silent: !process.env.CI,
+  // Strips the SDK's own debug/logging code from the production bundle.
+  disableLogger: true,
+}
+
+export default withSentryConfig(nextConfig, sentryBuildOptions)

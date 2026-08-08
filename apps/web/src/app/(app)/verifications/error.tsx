@@ -1,6 +1,18 @@
 'use client'
 
-export default function Error({ reset }: { error: Error; reset: () => void }) {
+import { useEffect } from 'react'
+
+import { reportClientError } from '@/lib/report-client-error'
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => reportClientError(error), [error])
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-16 text-center">
       <h2 className="text-lg font-semibold text-red-400">Could not load verifications</h2>
