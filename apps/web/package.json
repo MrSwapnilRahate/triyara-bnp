@@ -48,7 +48,7 @@
     "axe-core": "^4.12.1",
     "jsdom": "^25.0.1",
     "msw": "^2.15.0",
-    "postcss": "^8.5.25",
+    "postcss": "^8.5.26",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
