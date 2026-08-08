@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs'
 import { AppError, logger } from '@triyara/lib'
 import { ZodError } from 'zod'
 
@@ -131,6 +132,53 @@ function storageShape(error: unknown): Record<string, unknown> | null {
 }
 
 /**
+ * Sends the same error to Sentry, with the same correlation the log line gets.
+ *
+ * Deliberately inside this function rather than at a second seam. Everything
+ * that makes the logging correct - 5xx only, so a 404 raises no alert; one
+ * caller, so nothing is reported twice; requestId, userId and organizationId
+ * already resolved - is inherited here rather than reimplemented somewhere it
+ * could drift. The `isUnexpected` guard above is the *only* place that decision
+ * is made, for both destinations.
+ *
+ * This is why the SDK's automatic route-handler capture is not relied on: it
+ * has no notion of `AppError`, so a `NotFoundError` would page someone. Our
+ * routes catch their own errors, so nothing propagates for it to see anyway.
+ *
+ * Failing to report must never break the request - the same rule the logger
+ * below follows, for the same reason.
+ */
+function reportToSentry(error: unknown, context: ErrorLogContext, status: number): void {
+  try {
+    Sentry.captureException(error, {
+      // The id the caller was shown in the response envelope. It is the only
+      // reference a user can quote, so it has to be searchable in Sentry too.
+      tags: {
+        requestId: context.requestId,
+        organizationId: context.organizationId,
+        source: context.source ?? 'route',
+        status: String(status),
+        ...(prismaCode(error) ? { prismaCode: prismaCode(error) } : {}),
+      },
+      // Id only. `scrubEvent` strips address and name even if something else
+      // sets them, but there is no reason to offer them in the first place.
+      user: context.userId ? { id: context.userId } : undefined,
+      contexts: { request: { method: context.method, path: context.path } },
+    })
+  } catch {
+    // An unreachable Sentry, a misconfigured DSN, a transport that throws:
+    // none of it may cost the caller their response, and the log line below
+    // still records what happened.
+  }
+}
+
+/** The Prisma error code as a tag, so "every P2002 today" is one search. */
+function prismaCode(error: unknown): string | undefined {
+  const shape = prismaShape(error)
+  return typeof shape?.code === 'string' ? shape.code : undefined
+}
+
+/**
  * Writes one line for one unexpected server error, and returns whether it did.
  *
  * Only 5xx is written. A 404, a 403, a 409 or a 412 is the API working
@@ -151,6 +199,8 @@ export function logServerError(error: unknown, context: ErrorLogContext): boolea
 
   const prisma = prismaShape(error)
   const storage = storageShape(error)
+
+  reportToSentry(error, context, status)
 
   try {
     logger.error(

@@ -4,6 +4,8 @@ import { Button, EmptyState } from '@triyara/ui'
 import { AlertTriangle } from 'lucide-react'
 import { useEffect } from 'react'
 
+import { reportClientError } from '@/lib/report-client-error'
+
 /**
  * Route-level boundary (TRY-BNP-PORTAL-01 §20). A failure here replaces this
  * screen only - the shell, navigation and every other route stay usable.
@@ -15,9 +17,7 @@ export default function Error({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  useEffect(() => {
-    console.error(error)
-  }, [error])
+  useEffect(() => reportClientError(error), [error])
 
   return (
     <div className="p-gutter">

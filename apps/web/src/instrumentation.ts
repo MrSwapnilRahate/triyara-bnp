@@ -1,4 +1,22 @@
+import * as Sentry from '@sentry/nextjs'
 import type { Instrumentation } from 'next'
+
+import { sentryOptions } from '@/lib/sentry-options'
+
+/**
+ * Starts Sentry once per server runtime.
+ *
+ * Next calls this before anything else runs, in each runtime separately, which
+ * is why the SDK needs it here rather than at the top of a module: an `init`
+ * that ran during a request would miss everything that failed before it.
+ *
+ * Both runtimes share `sentryOptions()`. The edge one gets the same redaction
+ * as the Node one, because a policy written twice is a policy that will differ.
+ */
+export function register(): void {
+  const runtime = process.env.NEXT_RUNTIME
+  if (runtime === 'nodejs' || runtime === 'edge') Sentry.init(sentryOptions())
+}
 
 /**
  * Everything the route wrapper cannot see.
@@ -15,6 +33,14 @@ import type { Instrumentation } from 'next'
  * The logger is imported lazily because this file is evaluated in every runtime
  * the app has, including the edge one, where pino's Node transport must not be
  * pulled in at module scope.
+ *
+ * Sentry's own recipe is `onRequestError = Sentry.captureRequestError`. That is
+ * not used here, on purpose. `logServerError` already reports to Sentry, so
+ * adding it would file every render failure twice; and it has no notion of
+ * `AppError`, so a `NotFoundError` thrown by a Server Component would raise an
+ * alert for a page that correctly showed "not found". Routing everything
+ * through the one funnel keeps "5xx only, exactly once" true of both
+ * destinations at once.
  */
 export const onRequestError: Instrumentation.onRequestError = async (error, request) => {
   const { logServerError, pathOf } = await import('@/lib/error-log')
