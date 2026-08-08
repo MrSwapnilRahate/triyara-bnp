@@ -55,6 +55,24 @@ function sanitize(fileName: string): string {
   return fileName.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120)
 }
 
+/**
+ * The prefix every key this endpoint may reference has to sit under.
+ *
+ * `presign` issues keys here and nowhere else, but `submit` receives the key
+ * back from the browser, and until this existed it accepted any key at all -
+ * checking only that the object exists. This endpoint is unauthenticated, so
+ * "the caller told us" is the weakest possible provenance for a path.
+ *
+ * `Document.create` has carried the equivalent check (`assertOrgKey`) all
+ * along. The two public registration endpoints, which need it most, were the
+ * ones without it.
+ */
+function assertRegistrationKey(organizationId: string, storageKey: string): void {
+  if (!storageKey.startsWith(`${organizationId}/registrations/`)) {
+    throw new ValidationError('That upload does not belong to this registration.')
+  }
+}
+
 export function createSupplierRegistrationService({
   repo,
   storage,
@@ -128,6 +146,10 @@ export function createSupplierRegistrationService({
       const documents: VerifiedUpload[] = []
 
       for (const doc of dto.documents) {
+        // Before `stat`, not after: otherwise this endpoint answers whether an
+        // arbitrary key exists in the bucket, which is a question an anonymous
+        // caller has no business asking.
+        assertRegistrationKey(organizationId, doc.storageKey)
         const stat = await storage.stat(doc.storageKey)
         if (!stat) {
           throw new ValidationError(
@@ -148,6 +170,7 @@ export function createSupplierRegistrationService({
       // SupplierCertification: the claim is recorded on the supplier, and only
       // a reviewer who has read the scan may turn it into a certification.
       for (const cert of certificateScans) {
+        assertRegistrationKey(organizationId, cert.storageKey!)
         const stat = await storage.stat(cert.storageKey!)
         if (!stat) {
           throw new ValidationError(
