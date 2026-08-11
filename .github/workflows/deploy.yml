@@ -108,12 +108,34 @@ jobs:
         # of the schema it expects. Migrations are additive by convention
         # (expand/contract), so if the deploy then fails, the old code keeps
         # running against a superset schema rather than a broken one.
+        #
+        # This step used to source the whole Vercel environment, which meant
+        # migrating over the POOLED endpoint the application runs on. The
+        # migration engine takes a session-level advisory lock, and PgBouncer's
+        # transaction pooling cannot hold one - so that would hang or fail on
+        # the first real deploy. It never surfaced only because DEPLOY_ENABLED
+        # has never been true.
+        env:
+          # Step-scoped deliberately. The direct endpoint exists for the
+          # migration engine and must not leak into `vercel build` or
+          # `vercel deploy` below, which take their configuration from Vercel
+          # and must keep using the pooled URL the runtime needs.
+          #
+          # Named DATABASE_URL because that is what the datasource reads; the
+          # schema declares no `directUrl`, so the split lives here rather than
+          # in Prisma.
+          DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
         run: |
           set -euo pipefail
-          set -a
-          # shellcheck disable=SC1090
-          . "./$PRODUCTION_ENV_FILE"
-          set +a
+          # Fails before `vercel build` and `vercel deploy`, so a missing
+          # secret costs nothing and cannot half-deploy.
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DIRECT_DATABASE_URL is not set."
+            echo "Migrations require the Neon DIRECT endpoint - the host WITHOUT '-pooler'."
+            echo "The pooled URL in Vercel cannot hold the advisory lock the migration engine takes."
+            echo "Add it under Settings, Secrets and variables, Actions, repository secrets."
+            exit 1
+          fi
           pnpm --filter @triyara/db db:deploy
 
       - name: Build
@@ -128,9 +150,14 @@ jobs:
           echo "Deployed: $url"
 
       - name: Smoke check the deployment
-        # Proves the deployment boots and serves. /api/health is static, so it
-        # does not exercise the database or storage - the post-deploy checks in
-        # docs/07-deployment/README.md cover those and are not automatable here
+        # /api/health is a readiness check, not a liveness one: it runs
+        # `SELECT 1` and answers 503 when the database is unreachable. So the
+        # `"status":"ok"` assertion below proves the deployment boots AND that
+        # it can reach the database through the pooled runtime URL - which is
+        # exactly the half the migration step above does not exercise.
+        #
+        # Storage is still not covered here; the post-deploy checks in
+        # docs/07-deployment/README.md handle that, and they are not automatable
         # without writing rows to production.
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
