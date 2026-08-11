@@ -5,6 +5,13 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Vercel builds and runs on Amazon Linux 2023 (OpenSSL 3.0), which Prisma
+  // calls rhel-openssl-3.0.x. "native" alone resolves to the build host, so
+  // the engine that ships is whatever the builder happened to be - correct on
+  // Vercel, wrong the moment anything builds elsewhere. Naming the target
+  // makes the artifact deterministic and lets a macOS machine verify that the
+  // Linux engine is actually bundled.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {

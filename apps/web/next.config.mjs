@@ -1,4 +1,9 @@
 import { withSentryConfig } from '@sentry/nextjs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const appDir = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.join(appDir, '..', '..')
 
 /**
  * Origin the browser uploads documents to.
@@ -141,6 +146,33 @@ const nextConfig = {
     '@triyara/storage',
   ],
   serverExternalPackages: ['@prisma/client', 'bcryptjs'],
+
+  /**
+   * Where file tracing is allowed to look.
+   *
+   * `apps/web` does not depend on @prisma/client directly - it arrives through
+   * @triyara/db - and pnpm keeps transitive packages in the store at
+   * <root>/node_modules/.pnpm rather than hoisting them. Without a root that
+   * spans the workspace, the tracer stops at the app directory and the query
+   * engine is never a candidate for copying.
+   */
+  outputFileTracingRoot: repoRoot,
+
+  /**
+   * The query engine is a native binary that nothing imports.
+   *
+   * `serverExternalPackages` keeps @prisma/client out of the webpack bundle,
+   * which is correct - but it makes the engine entirely tracing's
+   * responsibility, and tracing follows `require`/`import`. Prisma loads the
+   * .node file by path at runtime, so no static reference exists to follow and
+   * the file is silently left behind. Production then failed with
+   * "Could not locate the Query Engine for runtime rhel-openssl-3.0.x" while
+   * the build reported success.
+   */
+  outputFileTracingIncludes: {
+    '/**/*': ['../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/*.node'],
+  },
+
   headers() {
     return Promise.resolve([{ source: '/:path*', headers: securityHeaders }])
   },
