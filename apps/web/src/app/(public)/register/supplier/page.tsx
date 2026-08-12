@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 
+import { BackToMarketingSite } from '@/components/back-to-marketing-site'
 import { RegistrationWizard } from '@/features/supplier-registration/components/registration-wizard'
 
 export const metadata: Metadata = {
@@ -11,5 +12,15 @@ export const metadata: Metadata = {
 // Public, unauthenticated. Listed in PUBLIC_PATHS so middleware does not send a
 // supplier who has never met us to the login page.
 export default function SupplierRegistrationPage() {
-  return <RegistrationWizard />
+  return (
+    <>
+      {/* Most people arriving here came from the marketing site. Giving them a
+          way back costs one line and is the difference between leaving to read
+          more and leaving for good. */}
+      <div className="mx-auto w-full max-w-3xl px-gutter pt-gutter">
+        <BackToMarketingSite />
+      </div>
+      <RegistrationWizard />
+    </>
+  )
 }
