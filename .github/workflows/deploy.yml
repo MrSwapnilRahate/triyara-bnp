@@ -154,22 +154,34 @@ jobs:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
-          code=000
+          # `vercel curl` rather than plain curl. Deployment Protection answers
+          # an unauthenticated request with a 302 to the Vercel login page, so
+          # the old check failed on the redirect and never reached the app. The
+          # CLI carries the same token used to deploy and bypasses protection
+          # for this request only - nothing about the deployment's protection
+          # settings changes, and the endpoint stays private.
+          health=""
           for _ in 1 2 3 4 5 6; do
-            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' "$DEPLOY_URL/api/health" || echo 000)
-            [ "$code" = "200" ] && break
+            health=$(vercel curl "$DEPLOY_URL/api/health" --token="$VERCEL_TOKEN" --yes 2>/dev/null || true)
+            echo "$health" | grep -q '"status":"ok"' && break
             sleep 5
           done
-          if [ "$code" != "200" ]; then
-            echo "::error::Health check returned HTTP $code from $DEPLOY_URL/api/health"
-            cat /tmp/health.json 2>/dev/null || true
+
+          if ! echo "$health" | grep -q '"status":"ok"'; then
+            echo "::error::Health check failed for $DEPLOY_URL/api/health"
+            echo "$health"
             exit 1
           fi
-          grep -q '"status":"ok"' /tmp/health.json || {
-            echo "::error::Health endpoint answered 200 with an unexpected payload."
-            cat /tmp/health.json
+
+          # Asserted separately from status: the endpoint answers 503 with
+          # status "degraded" when the database is unreachable, so a bare
+          # status check would pass on a deployment that cannot serve.
+          if ! echo "$health" | grep -q '"database":"ok"'; then
+            echo "::error::Health check returned status ok but the database is not ok."
+            echo "$health"
             exit 1
-          }
+          fi
+
           echo "Health check passed: $DEPLOY_URL/api/health"
 
       - name: Summary
