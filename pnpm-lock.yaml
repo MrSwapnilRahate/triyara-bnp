@@ -242,6 +242,9 @@ importers:
       '@prisma/client':
         specifier: ^6.2.1
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      '@triyara/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@triyara/lib':
         specifier: workspace:*
         version: link:../lib

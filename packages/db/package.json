@@ -18,13 +18,15 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo dist",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:bootstrap-admin": "tsx prisma/bootstrap-admin.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
+    "@triyara/auth": "workspace:*",
     "@triyara/lib": "workspace:*"
   },
   "devDependencies": {

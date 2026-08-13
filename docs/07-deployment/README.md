@@ -106,7 +106,61 @@ does nothing — the dashboard setting is unambiguous.
 6. Set `DEPLOY_ENABLED=true`.
 7. Trigger **Actions → Deploy → Run workflow** rather than waiting for a merge,
    so the first production deploy is one you are watching.
-8. Work through the post-deploy checks below.
+8. Create the first administrator (see below) — until then nobody can sign in.
+9. Work through the post-deploy checks below.
+
+### The first administrator
+
+Nothing in the running application can create the first administrator. An
+invitation needs an administrator to send it, a password reset needs an account
+to reset, and `db:seed` creates one whose password is published in this
+repository. A fresh production database therefore has nobody who can sign in.
+
+`db:bootstrap-admin` exists for that one moment. It is manual, it is not wired
+into startup, build, deploy, CI or `db:seed`, and it runs only when a person
+runs it.
+
+```bash
+BOOTSTRAP_ADMIN_EMAIL=you@example.com \
+BOOTSTRAP_ADMIN_PASSWORD='…' \
+DATABASE_URL='…' \
+pnpm --filter @triyara/db db:bootstrap-admin -- --confirm
+```
+
+Without `--confirm` it prints the host, database, organization and email it
+would write to, and exits having changed nothing. Run it that way first:
+`DATABASE_URL` is usually whatever a shell last exported, and the dry run is
+what stops the wrong database being written to.
+
+| Variable                   | Required | Notes                                                                                     |
+| -------------------------- | -------- | ----------------------------------------------------------------------------------------- |
+| `BOOTSTRAP_ADMIN_EMAIL`    | yes      | Lowercased. Becomes the sign-in address                                                   |
+| `BOOTSTRAP_ADMIN_PASSWORD` | yes      | 12+ characters, upper, lower and a digit — the same rule the change-password form applies |
+| `BOOTSTRAP_ADMIN_NAME`     | no       | Defaults to `Triyara Administrator`                                                       |
+| `BOOTSTRAP_ADMIN_ORG_SLUG` | no       | Defaults to `triyara`. The organization must already exist                                |
+
+**Supply the password through the environment and nowhere else.** It must not
+be committed, pasted into a ticket, or written to an env file that outlives the
+command. Prefer a shell that does not record history for that line. Neither the
+command nor its error messages ever print the password or the hash.
+
+Re-running is safe. An account that already exists is left exactly as it was —
+no password overwritten, no name changed — so running this again after a
+password rotation cannot silently undo it. The one thing it will still do is
+add the ADMIN role if that link is missing.
+
+Afterwards:
+
+1. Sign in at `/login` with that address.
+2. Remove `BOOTSTRAP_ADMIN_*` from your shell and any local env file.
+3. Set `SUPER_ADMIN_EMAILS` in Vercel production explicitly. The code falls back
+   to a hardcoded Stage-1 address when it is unset, which works but leaves who
+   may approve admin access requests undeclared.
+
+This does not contradict the rule that ADMIN cannot be assigned through the
+admin screens. That rule exists so the role is granted only by a Super Admin
+approving a request — and it is precisely why a first grant has to happen out of
+band, since otherwise there is nobody to approve the first request.
 
 ### Post-deploy checks
 
