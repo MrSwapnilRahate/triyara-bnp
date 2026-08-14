@@ -77,11 +77,13 @@ export function createLoginAuditService({
 
     /**
      * Security review of authentication attempts. Restricted to administrators:
-     * `manage Organization` resolves to ADMIN only under the frozen ability
-     * model, so a READ_ONLY user cannot enumerate login activity.
+     * `manage AuditLog` resolves to ADMIN only, so a READ_ONLY user cannot
+     * enumerate login activity. It asked for `manage Organization` until the
+     * trails got their own subject - same answer for every configured role,
+     * but the question is now about the thing being read.
      */
     async list(ctx: LoginAuditCtx, query: ListLoginAttemptsQuery): Promise<LoginAttemptListResult> {
-      assertAbility(ctx, 'manage', 'Organization')
+      assertAbility(ctx, 'manage', 'AuditLog')
       return attempts.list({
         organizationId: ctx.organizationId,
         email: query.email,

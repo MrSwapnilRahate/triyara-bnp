@@ -41,6 +41,19 @@ export const SUBJECTS = [
   // ADMIN's `manage all`, exactly as the two services already documented.
   'Product',
   'Category',
+  // The audit trail and the login-attempt trail, previously authorized as
+  // `Organization`. That subject was chosen for its effect - `manage
+  // Organization` resolves to ADMIN only - and not because a trail is an
+  // organization, which left "may rename the tenant" and "may read every
+  // before/after payload recorded in it" as one permission.
+  //
+  // It stays at `manage`, deliberately. Every role holds `read all`, so
+  // `read AuditLog` would hand both trails to EXPORT_MANAGER, VERIFIER and
+  // READ_ONLY - the widening the audit route already warns about, since the
+  // trail carries the payloads of every entity in the tenant and is therefore
+  // more revealing than any single module's read. ADMIN reaches it through
+  // `manage all`, so no role rule below needs to mention it.
+  'AuditLog',
 ] as const
 export type Subject = (typeof SUBJECTS)[number]
 

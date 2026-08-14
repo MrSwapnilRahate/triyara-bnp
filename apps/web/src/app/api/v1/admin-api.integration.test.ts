@@ -175,7 +175,7 @@ describe.skipIf(!process.env.DATABASE_URL)('admin API (integration, real Postgre
         authState.roles = [role]
         const res = await listAudit(req('/api/v1/audit'))
         // `read all` is not enough: the trail is more revealing than any single
-        // module read, so it needs `manage Organization`.
+        // module read, so it needs `manage AuditLog`.
         expect(res.status).toBe(403)
       }
       authState.roles = ['ADMIN']

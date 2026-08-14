@@ -21,12 +21,13 @@ import type {
 
 // Administration services (TRY-BNP-ADMIN-01).
 //
-// Authorization reuses the frozen CASL subjects; no new subject is introduced.
-//
-//   Audit trail        -> `manage Organization`, i.e. ADMIN only. The trail
+//   Audit trail        -> `manage AuditLog`, i.e. ADMIN only. The trail
 //                         carries before/after payloads for every entity in the
 //                         tenant, so it is strictly more revealing than any
-//                         single module's read permission.
+//                         single module's read permission. It read `manage
+//                         Organization` until the trail got its own subject,
+//                         which granted the same set of roles but tied the
+//                         audit trail to tenant administration.
 //   Organization read  -> `read Organization` (every role)
 //   Organization write -> `manage Organization` (ADMIN only)
 //   Profile            -> authentication only. A user reads and renames their
@@ -86,7 +87,7 @@ export function createAdminService({
   return {
     /** The audit trail, newest first. Read-only: nothing writes through here. */
     async listAudit(ctx: AdminServiceCtx, query: ListAuditQuery): Promise<AuditListResult> {
-      assertAbility(ctx, 'manage', 'Organization')
+      assertAbility(ctx, 'manage', 'AuditLog')
       return audit.list(ctx.organizationId, {
         limit: query.limit,
         ...(query.cursor ? { cursor: query.cursor } : {}),
@@ -103,7 +104,7 @@ export function createAdminService({
 
     /** Everything that ever happened to one record, oldest first. */
     async auditForEntity(ctx: AdminServiceCtx, entityType: string, entityId: string) {
-      assertAbility(ctx, 'manage', 'Organization')
+      assertAbility(ctx, 'manage', 'AuditLog')
       return audit.forEntity(ctx.organizationId, entityType, entityId)
     },
 
