@@ -171,6 +171,11 @@ export function createAdminService({
      * name, email and avatar, never anything else about a colleague.
      */
     async searchUsers(ctx: AdminServiceCtx, query: ListUsersQuery) {
+      // Deliberately `read`, not `manage`: this is the colleague lookup behind
+      // global search, and it is documented and tested as open to any signed-in
+      // role. It is not security metadata - four fields, active users only, no
+      // paging and no detail route to follow - so it stays where it was while
+      // sessions, roles, permissions and security profiles move.
       assertAbility(ctx, 'read', 'User')
       return users.searchDirectory(ctx.organizationId, query.q, query.limit)
     },

@@ -40,10 +40,12 @@ export function createEmailVerificationService({
   ttlMs = DEFAULT_TTL_MS,
 }: EmailVerificationDeps) {
   return {
-    /** Current verification state for a user. Self, or any user for a reader. */
+    /** Current verification state. Your own, or anyone's for an administrator. */
     async status(ctx: EmailVerificationCtx, userId?: string): Promise<UserSecurityProfileRecord> {
       const target = userId ?? ctx.user.id
-      if (target !== ctx.user.id) assertAbility(ctx, 'read', 'User')
+      // A security profile - lockout state and verification standing. Reading
+      // somebody else's is administration.
+      if (target !== ctx.user.id) assertAbility(ctx, 'manage', 'User')
       return repo.ensure(target, ctx.organizationId)
     },
 

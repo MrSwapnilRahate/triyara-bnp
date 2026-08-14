@@ -90,10 +90,18 @@ export function createSessionService({ repo, users, events }: SessionServiceDeps
       await repo.touch(tokenId)
     },
 
-    /** Own sessions need no privilege; another user's require read on User. */
+    /**
+     * Own sessions need no privilege; another user's are administration.
+     *
+     * `manage User` rather than `read User`. A session row carries an IP
+     * address, a user agent and a last-seen time - where somebody was and what
+     * they were using. Every role holds `read all`, so gating this on a read
+     * let an export manager or a read-only account enumerate the movements of
+     * everyone in the tenant, the super administrator included.
+     */
     async list(ctx: SessionServiceCtx, query: ListSessionsQuery): Promise<SessionListResult> {
       const targetUserId = query.userId ?? ctx.user.id
-      if (targetUserId !== ctx.user.id) assertAbility(ctx, 'read', 'User')
+      if (targetUserId !== ctx.user.id) assertAbility(ctx, 'manage', 'User')
 
       return repo.list({
         organizationId: ctx.organizationId,
