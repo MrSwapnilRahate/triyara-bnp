@@ -23,6 +23,18 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Triyara Business Network Platform',
   description: 'Internal business network platform for Triyara Exports LLP.',
+  // Declared here rather than through the app/icon.* file convention so there
+  // is one place that says what the browser gets, and no chance of two
+  // declarations disagreeing. The tab icons put the emblem on the brand navy:
+  // the mark is gold on dark by design, and a tab may be either, so the
+  // container is what keeps it legible without touching the artwork.
+  icons: {
+    icon: [
+      { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
