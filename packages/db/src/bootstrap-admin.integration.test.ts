@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
+import { PrismaClient } from '@prisma/client'
 import { verifyPassword } from '@triyara/auth'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -25,6 +26,34 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
     // it should have been asserting the bootstrap produces, and a database with
     // no role catalogue at all still looked healthy.
     await prisma.organization.create({ data: { name: 'Bootstrap Test Org', slug } })
+  })
+
+  it('stays within a round-trip budget the default timeout can afford', async () => {
+    // The failure this guards: the catalogue was first written as four
+    // `upsert` calls, which Prisma compiles into select-insert-select each.
+    // Twenty statements is nothing locally and five wide-area round trips too
+    // many against a database in another region - production timed out at
+    // 5258ms against Prisma's 5s default.
+    //
+    // Counted rather than timed, because a timing assertion on a machine with
+    // a millisecond-away database measures nothing and fails at random.
+    const counter = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] })
+    const statements: string[] = []
+    counter.$on('query', (e) => statements.push(e.query.trim().toUpperCase()))
+
+    try {
+      await bootstrapAdmin(counter, config(`budget-${randomUUID().slice(0, 8)}@example.com`))
+    } finally {
+      await counter.$disconnect()
+    }
+
+    // DEALLOCATE is prepared-statement housekeeping, not work we asked for.
+    const issued = statements.filter((s) => !s.startsWith('DEALLOCATE'))
+    expect(issued.filter((s) => s.startsWith('BEGIN'))).toHaveLength(1)
+    expect(issued.filter((s) => s.startsWith('COMMIT'))).toHaveLength(1)
+    // One INSERT for the whole catalogue, not one per role.
+    expect(issued.filter((s) => s.includes('INSERT') && s.includes('"ROLE"'))).toHaveLength(1)
+    expect(issued.length).toBeLessThanOrEqual(12)
   })
 
   it('creates the whole role catalogue, not only the role it grants', async () => {
