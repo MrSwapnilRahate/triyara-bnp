@@ -308,6 +308,9 @@ describe('security metadata is administration, not a read', () => {
   const sessions = () =>
     createSessionService({
       repo: fakeSessionRepo({ list: async () => ({ items: [makeSession()], nextCursor: null }) }),
+      // Ordinary staff own these sessions, so the Super Admin guard added in
+      // the same service never fires and the read boundary is what is measured.
+      users: fakeSessionUsers(),
       events: fakeEvents(),
     })
 
