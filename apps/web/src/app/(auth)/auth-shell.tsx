@@ -20,7 +20,7 @@ export function AuthShell({
   children: ReactNode
 }) {
   return (
-    <AuthLayout brand={<Brand href="" />} title={title} description={subtitle}>
+    <AuthLayout brand={<Brand href="" size="lg" />} title={title} description={subtitle}>
       {children}
     </AuthLayout>
   )
