@@ -10,7 +10,7 @@ import { ok, parseQuery, route } from '@/lib/api'
 // by the repositories inside the same transaction as the change they describe.
 // A trail an operator can append to or edit is not a trail.
 //
-// Authorization is `manage Organization` - ADMIN only. The trail carries
+// Authorization is `manage AuditLog` - ADMIN only. The trail carries
 // before/after payloads for every entity in the tenant, so it is strictly more
 // revealing than any single module's read permission, and gating it at read
 // level would leak through it.
