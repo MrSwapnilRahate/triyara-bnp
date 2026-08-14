@@ -63,6 +63,15 @@ const MIN_PASSWORD_LENGTH = 12
  */
 const ROLE_CATALOGUE: RoleName[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
 
+/**
+ * How long the write is allowed to take, against Prisma's 5s default.
+ *
+ * Headroom for a slow link and a cold database, not permission to do more work
+ * inside the transaction - the statement count is what actually keeps this
+ * fast, and the regression test holds it there.
+ */
+const TRANSACTION_TIMEOUT_MS = { timeout: 20_000 }
+
 /** Deliberately narrow. A bootstrap that guesses at input is a bootstrap that surprises. */
 export function parseBootstrapConfig(env: NodeJS.ProcessEnv): BootstrapConfig {
   const email = (env.BOOTSTRAP_ADMIN_EMAIL ?? '').trim().toLowerCase()
@@ -107,11 +116,24 @@ export function parseBootstrapConfig(env: NodeJS.ProcessEnv): BootstrapConfig {
  * not silently undo it. The one thing it will still do for an existing user is
  * add the ADMIN link if it is missing, because a user without the role is the
  * half-finished state this command exists to resolve.
+ *
+ * Written to be frugal with round trips rather than merely correct. Unlike
+ * every other transaction in this codebase, this one runs from an operator's
+ * laptop against a database in another region, so each statement costs a
+ * wide-area round trip instead of a local one and the default 5s budget buys
+ * far fewer of them. An earlier version issued twenty and timed out against
+ * production at 5258ms.
  */
 export async function bootstrapAdmin(
   prisma: PrismaClient,
   config: BootstrapConfig,
 ): Promise<BootstrapResult> {
+  // Hashed before the transaction opens, never inside it. bcrypt at cost 12 is
+  // a few hundred milliseconds of pure CPU, and spending that while holding an
+  // open transaction spends the timeout budget on work the database is not
+  // even waiting for.
+  const passwordHash = await hashPassword(config.password)
+
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const organization = await tx.organization.findUnique({
       where: { slug: config.organizationSlug },
@@ -128,11 +150,16 @@ export async function bootstrapAdmin(
     }
 
     // The whole catalogue, because the invite flow resolves every role by name
-    // and cannot create a missing one. `update: {}` so a re-run leaves existing
-    // rows exactly as they are.
-    for (const name of ROLE_CATALOGUE) {
-      await tx.role.upsert({ where: { name }, update: {}, create: { name } })
-    }
+    // and cannot create a missing one.
+    //
+    // One statement, not four upserts. Prisma compiles `upsert` on this shape
+    // into select-insert-select, so the loop it replaces cost twelve round
+    // trips; `skipDuplicates` gets the same idempotence from a single
+    // INSERT ... ON CONFLICT DO NOTHING and leaves existing rows untouched.
+    await tx.role.createMany({
+      data: ROLE_CATALOGUE.map((name) => ({ name })),
+      skipDuplicates: true,
+    })
 
     // Only ADMIN is granted. Creating the other three above is not granting
     // them: a bootstrap that handed out more than it was asked for would be the
@@ -171,7 +198,7 @@ export async function bootstrapAdmin(
         organizationId: organization.id,
         email: config.email,
         name: config.name,
-        passwordHash: await hashPassword(config.password),
+        passwordHash,
         status: 'ACTIVE',
         roles: { create: { roleId: adminRole.id } },
       },
@@ -184,5 +211,12 @@ export async function bootstrapAdmin(
       email: config.email,
       organizationSlug: config.organizationSlug,
     }
-  })
+    // An explicit budget, which no other transaction in this codebase sets and
+    // which none of them should copy. They run inside the same region as the
+    // database and the 5s default is right for them. This one runs wherever the
+    // operator happens to be, over a link nobody controls, against a Neon
+    // compute that may be waking from suspend - so the work being small is not
+    // by itself enough, and a one-off command that has to be re-run is worse
+    // than one that waits.
+  }, TRANSACTION_TIMEOUT_MS)
 }
