@@ -6,8 +6,10 @@ import type { CreateProductDto, ListProductsQuery, UpdateProductDto } from '@tri
 
 import { slugify } from './category.service'
 
-// Product service (TRY-BNP-CATALOG-S1). Authorized as `ReferenceData`: readable
-// by every role, writable by ADMIN only under the frozen ability model.
+// Product service (TRY-BNP-CATALOG-S1). Authorized on its own `Product`
+// subject: readable by every role, writable by ADMIN only - the same answer it
+// gave as `ReferenceData`, now decided against the catalogue record rather than
+// shared with specification definitions and tag vocabularies.
 
 export type ProductServiceCtx = AuthContext & { requestId?: string }
 
@@ -29,7 +31,7 @@ export function createProductService({ repo, events }: ProductServiceDeps) {
 
   return {
     async list(ctx: ProductServiceCtx, query: ListProductsQuery): Promise<ProductListResult> {
-      assertAbility(ctx, 'read', 'ReferenceData')
+      assertAbility(ctx, 'read', 'Product')
       return repo.list({
         organizationId: ctx.organizationId,
         q: query.q,
@@ -53,14 +55,14 @@ export function createProductService({ repo, events }: ProductServiceDeps) {
       id: string,
       opts: { includeDeleted?: boolean } = {},
     ): Promise<ProductRecord> {
-      assertAbility(ctx, 'read', 'ReferenceData')
+      assertAbility(ctx, 'read', 'Product')
       const product = await repo.findById(ctx.organizationId, id, opts)
       if (!product) throw new NotFoundError('Product not found.')
       return product
     },
 
     async create(ctx: ProductServiceCtx, dto: CreateProductDto): Promise<ProductRecord> {
-      assertAbility(ctx, 'create', 'ReferenceData')
+      assertAbility(ctx, 'create', 'Product')
 
       // A soft-deleted product keeps its SKU, so surface restore rather than
       // letting the caller hit a bare unique violation.
@@ -91,7 +93,7 @@ export function createProductService({ repo, events }: ProductServiceDeps) {
       expectedVersion: number,
       dto: UpdateProductDto,
     ): Promise<ProductRecord> {
-      assertAbility(ctx, 'update', 'ReferenceData')
+      assertAbility(ctx, 'update', 'Product')
 
       if (dto.sku) {
         const clash = await repo.findBySku(ctx.organizationId, dto.sku)
@@ -115,7 +117,7 @@ export function createProductService({ repo, events }: ProductServiceDeps) {
       id: string,
       expectedVersion: number,
     ): Promise<ProductRecord> {
-      assertAbility(ctx, 'delete', 'ReferenceData')
+      assertAbility(ctx, 'delete', 'Product')
       const product = await repo.softDelete(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'product.deleted', { productId: product.id, sku: product.sku })
       return product
@@ -126,7 +128,7 @@ export function createProductService({ repo, events }: ProductServiceDeps) {
       id: string,
       expectedVersion: number,
     ): Promise<ProductRecord> {
-      assertAbility(ctx, 'update', 'ReferenceData')
+      assertAbility(ctx, 'update', 'Product')
       const product = await repo.restore(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'product.restored', { productId: product.id, sku: product.sku })
       return product
