@@ -104,27 +104,53 @@ describe('direct ADMIN assignment is blocked', () => {
 })
 
 describe('super admin protection', () => {
-  it('refuses to remove ADMIN from the only super administrator', async () => {
-    // Strip it and nobody can ever approve an access request again - the
-    // workflow would have an approver who cannot reach it.
+  it('refuses an ordinary administrator removing a super administrator’s ADMIN', async () => {
+    // Refused on who is asking, before any counting. This used to depend on the
+    // target being the LAST super administrator, which meant a second one made
+    // both demotable by an ordinary admin.
     const { service, revoke } = deps({
       targetEmail: SUPER,
       repo: { listAdminEmails: async () => ['other-admin@triyara.test'] } as never,
     })
     await expect(service.revoke(ctxFor(['ADMIN']), 'u2', 'ADMIN')).rejects.toThrow(
-      /only super administrator/i,
+      /only a super administrator/i,
     )
     expect(revoke).not.toHaveBeenCalled()
   })
 
-  it('permits removal once another super administrator holds ADMIN', async () => {
+  it('refuses an ordinary administrator even when another super administrator remains', async () => {
+    // The case the old rule allowed. Nobody is left without an approver here,
+    // and it is still refused - the objection is to the actor, not the count.
+    const { service, revoke } = deps({
+      targetEmail: SUPER,
+      repo: { listAdminEmails: async () => [SUPER] } as never,
+    })
+    await expect(service.revoke(ctxFor(['ADMIN']), 'u2', 'ADMIN')).rejects.toThrow(
+      /only a super administrator/i,
+    )
+    expect(revoke).not.toHaveBeenCalled()
+  })
+
+  it('permits a super administrator to do it while another still holds ADMIN', async () => {
     // Stage-2 behaviour, reached by configuration rather than a code change.
     const { service, revoke } = deps({
       targetEmail: SUPER,
       repo: { listAdminEmails: async () => [SUPER] } as never,
     })
-    await service.revoke(ctxFor(['ADMIN']), 'u2', 'ADMIN')
+    await service.revoke(ctxFor(['ADMIN'], SUPER), 'u2', 'ADMIN')
     expect(revoke).toHaveBeenCalled()
+  })
+
+  it('still refuses to leave the platform with no super administrator', async () => {
+    // The last-holder guard has to survive the new rule, not be replaced by it.
+    const { service, revoke } = deps({
+      targetEmail: SUPER,
+      repo: { listAdminEmails: async () => ['other-admin@triyara.test'] } as never,
+    })
+    await expect(service.revoke(ctxFor(['ADMIN'], SUPER), 'u2', 'ADMIN')).rejects.toThrow(
+      /only super administrator/i,
+    )
+    expect(revoke).not.toHaveBeenCalled()
   })
 
   it('leaves an ordinary administrator removable', async () => {

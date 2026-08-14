@@ -1,5 +1,10 @@
 import { ACTIONS, SUBJECTS } from '@triyara/auth'
-import { ADMIN_USER_SORTS, ASSIGNABLE_ROLES, USER_STATUSES } from '@triyara/validation'
+import {
+  ADMIN_USER_SORTS,
+  ASSIGNABLE_ROLES,
+  GRANTABLE_ROLES,
+  USER_STATUSES,
+} from '@triyara/validation'
 
 // OpenAPI 3.1 description of the Administration REST API (TRY-BNP-ADMIN-02).
 // Enum members are imported from @triyara/validation rather than restated, so
@@ -209,7 +214,7 @@ export const adminOpenApiDocument = {
               schema: {
                 type: 'object',
                 required: ['role'],
-                properties: { role: { type: 'string', enum: ASSIGNABLE_ROLES } },
+                properties: { role: { type: 'string', enum: GRANTABLE_ROLES } },
               },
             },
           },

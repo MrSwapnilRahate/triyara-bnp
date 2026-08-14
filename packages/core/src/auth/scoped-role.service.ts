@@ -8,8 +8,10 @@ import type {
   ScopedRoleRepository,
 } from '@triyara/db'
 import { type EventBus, makeEvent } from '@triyara/events'
-import { ConflictError, NotFoundError, ValidationError } from '@triyara/lib'
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '@triyara/lib'
 import type { GrantScopedRoleDto, ListScopedRolesQuery } from '@triyara/validation'
+
+import { ADMIN_MUST_BE_REQUESTED_MESSAGE } from '../security/super-admin'
 
 // Scoped role assignments (TRY-BNP-AUTH-02).
 //
@@ -46,6 +48,18 @@ export function createScopedRoleService({ repo, roles, users, events }: ScopedRo
      */
     async grant(ctx: ScopedRoleCtx, dto: GrantScopedRoleDto): Promise<ScopedRoleRecord> {
       assertAbility(ctx, 'update', 'User')
+      // The third way to attach ADMIN to somebody, and it needs the same
+      // refusal as the other two. Refused for everyone, Super Admin included:
+      // an approved access request is the only route to ADMIN, and a scoped
+      // grant that quietly bypassed that would leave a role nobody approved.
+      //
+      // Scoped grants do not currently reach the session - `buildAbilityFor`
+      // is fed from UserRole alone - so this is not closing a live escalation.
+      // It is closing it before that changes, and before `effectiveAccess`
+      // starts reporting an ADMIN nobody granted.
+      if (dto.role === 'ADMIN') {
+        throw new ForbiddenError(ADMIN_MUST_BE_REQUESTED_MESSAGE)
+      }
 
       const target = await users.findById(dto.userId)
       if (!target || target.organizationId !== ctx.organizationId) {
