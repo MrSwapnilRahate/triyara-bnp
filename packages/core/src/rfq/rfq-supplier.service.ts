@@ -16,8 +16,8 @@ import type {
 
 // Supplier participation and bidding (TRY-BNP-RFQ-01).
 //
-// Authorized as `Account`, matching the RFQ service - inviting suppliers and
-// recording their bids are buyer-side acts on a sourcing record.
+// Authorized on `RFQ`, matching the RFQ service - inviting suppliers and
+// recording their bids are acts on the sourcing round, not on a customer.
 
 export type RfqSupplierCtx = AuthContext & { requestId?: string }
 
@@ -56,7 +56,7 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
   // relying on `this`, which would break the moment a caller destructured it.
   const service = {
     async list(ctx: RfqSupplierCtx, rfqId: string): Promise<RfqParticipationRecord[]> {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'RFQ')
       return repo.listParticipation(ctx.organizationId, rfqId)
     },
 
@@ -65,7 +65,7 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
       rfqId: string,
       dto: InviteSuppliersDto,
     ): Promise<RfqParticipationRecord[]> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'RFQ')
 
       const rfq = await rfqs.findById(ctx.organizationId, rfqId)
       if (!rfq) throw new NotFoundError('RFQ not found.')
@@ -89,7 +89,7 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
       expectedVersion: number,
       dto: SupplierParticipationDto,
     ): Promise<RfqParticipationRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'RFQ')
 
       const current = await repo.findParticipation(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Supplier participation not found.')
@@ -126,7 +126,7 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
 
     /** Records a supplier's bid. Re-submitting supersedes rather than overwrites. */
     async submitResponse(ctx: RfqSupplierCtx, id: string, dto: SubmitResponseDto) {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'RFQ')
 
       const participation = await repo.findParticipation(ctx.organizationId, id)
       if (!participation) throw new NotFoundError('Supplier participation not found.')
@@ -184,7 +184,7 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
      * belonging to another RFQ cannot be reached by widening the query.
      */
     async listResponsesForRfq(ctx: RfqSupplierCtx, rfqId: string, query: ListResponsesQuery) {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'RFQ')
       const rfq = await rfqs.findById(ctx.organizationId, rfqId)
       if (!rfq) throw new NotFoundError('RFQ not found.')
       return repo.listResponses({
@@ -209,7 +209,7 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
       rfqSupplierId: string,
       dto: SubmitResponseDto,
     ) {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'RFQ')
       const participation = await repo.findParticipation(ctx.organizationId, rfqSupplierId)
       if (!participation) throw new NotFoundError('Supplier participation not found.')
       if (participation.rfqId !== rfqId) {
@@ -219,7 +219,7 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
     },
 
     async listResponses(ctx: RfqSupplierCtx, query: ListResponsesQuery) {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'RFQ')
       return repo.listResponses({
         organizationId: ctx.organizationId,
         rfqItemId: query.rfqItemId,
@@ -232,13 +232,13 @@ export function createRfqSupplierService({ repo, rfqs, events }: RfqSupplierDeps
 
     /** Current bids for one line, cheapest first - the comparison view. */
     async compareLine(ctx: RfqSupplierCtx, rfqItemId: string) {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'RFQ')
       return repo.compareLine(ctx.organizationId, rfqItemId)
     },
 
     /** Every revision a supplier submitted for one line, newest first. */
     async priceHistory(ctx: RfqSupplierCtx, rfqSupplierId: string, rfqItemId: string) {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'RFQ')
       return repo.priceHistory(ctx.organizationId, rfqSupplierId, rfqItemId)
     },
   }

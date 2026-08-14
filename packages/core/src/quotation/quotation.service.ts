@@ -48,17 +48,18 @@ interface RepricedConditions {
 
 // Quotation service (TRY-BNP-QUOTE-01).
 //
-// Authorization reuses the frozen CASL subjects - no new subject is introduced.
-// A quotation is a commercial record governed as `Account`, exactly as the RFQ
-// module does:
-//   read   Account -> every role
-//   create/update  -> ADMIN and EXPORT_MANAGER
-//   manage         -> ADMIN only, used for approval decisions and margin data
+// Authorized on its own `Quotation` subject, for the same reason the RFQ module
+// has one: pricing a deal is not an act on a customer record. Who may do what is
+// unchanged:
+//   read   Quotation -> every role
+//   create/update    -> ADMIN and EXPORT_MANAGER
+//   manage           -> ADMIN only, used for approval decisions and margin data
+//   delete           -> ADMIN only
 //
 // Three rules distinguish a quotation from an RFQ and drive most of this file:
 //   1. Priced totals are COMPUTED here and PERSISTED, never recomputed on read.
 //   2. Once SENT, a quotation is immutable - changes require a new revision.
-//   3. Cost and margin are internal; exposing them needs `manage Account`.
+//   3. Cost and margin are internal; exposing them needs `manage Quotation`.
 
 export type QuotationServiceCtx = AuthContext & { requestId?: string }
 
@@ -273,7 +274,7 @@ export function createQuotationService({
 
   /**
    * Whether a quotation may be approved by this actor. Above the value threshold
-   * or below the margin floor, only ADMIN (`manage Account`) may approve.
+   * or below the margin floor, only ADMIN (`manage Quotation`) may approve.
    */
   function assertApprovalAuthority(
     ctx: QuotationServiceCtx,
@@ -283,13 +284,13 @@ export function createQuotationService({
     const highValue = grandTotal >= approvalThreshold
     const thinMargin = margin !== null && margin < minMarginPercent
     if (highValue || thinMargin) {
-      assertAbility(ctx, 'manage', 'Account')
+      assertAbility(ctx, 'manage', 'Quotation')
     }
   }
 
   /** Strips internal cost and margin unless the actor may see them. */
   function redact(ctx: QuotationServiceCtx, quotation: QuotationRecord): QuotationRecord {
-    if (ctx.ability.can('manage', 'Account')) return quotation
+    if (ctx.ability.can('manage', 'Quotation')) return quotation
     return {
       ...quotation,
       costTotal: null,
@@ -319,7 +320,7 @@ export function createQuotationService({
   }
 
   async function load(ctx: QuotationServiceCtx, id: string): Promise<QuotationRecord> {
-    assertAbility(ctx, 'read', 'Account')
+    assertAbility(ctx, 'read', 'Quotation')
     const quotation = await repo.findById(ctx.organizationId, id)
     if (!quotation) throw new NotFoundError('Quotation not found.')
     return quotation
@@ -327,7 +328,7 @@ export function createQuotationService({
 
   return {
     async list(ctx: QuotationServiceCtx, query: ListQuotationsQuery): Promise<QuotationListResult> {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'Quotation')
       return repo.list({
         organizationId: ctx.organizationId,
         q: query.q,
@@ -352,7 +353,7 @@ export function createQuotationService({
 
     /** Every revision of one quotation number, oldest first. */
     async history(ctx: QuotationServiceCtx, quotationNumber: string) {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'Quotation')
       return repo.revisionChain(ctx.organizationId, quotationNumber)
     },
 
@@ -361,7 +362,7 @@ export function createQuotationService({
       dto: CreateQuotationDto,
       itemsDto: ReplaceQuotationItemsDto,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'create', 'Account')
+      assertAbility(ctx, 'create', 'Quotation')
       assertItemsWellFormed(itemsDto.items)
       assertValidityWindow(dto.validFrom, dto.validUntil)
 
@@ -396,7 +397,7 @@ export function createQuotationService({
       expectedVersion: number,
       dto: UpdateQuotationDto,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'Quotation')
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Quotation not found.')
       if (!EDITABLE_STATUSES.has(current.status)) {
@@ -437,7 +438,7 @@ export function createQuotationService({
       expectedVersion: number,
       dto: ReplaceQuotationItemsDto,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'Quotation')
       assertItemsWellFormed(dto.items)
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Quotation not found.')
@@ -479,7 +480,7 @@ export function createQuotationService({
       charges: QuotationChargeDto[],
       taxes: QuotationTaxDto[],
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'Quotation')
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Quotation not found.')
       if (!EDITABLE_STATUSES.has(current.status)) {
@@ -593,7 +594,7 @@ export function createQuotationService({
       expectedVersion: number,
       dto: QuotationApprovalDto,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'Quotation')
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Quotation not found.')
 
@@ -634,7 +635,7 @@ export function createQuotationService({
       id: string,
       expectedVersion: number,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'Quotation')
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Quotation not found.')
       if (!(TRANSITIONS[current.status] ?? []).includes('SENT')) {
@@ -677,7 +678,7 @@ export function createQuotationService({
       expectedVersion: number,
       comments?: string,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'Quotation')
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Quotation not found.')
       if (!(TRANSITIONS[current.status] ?? []).includes('ACCEPTED')) {
@@ -718,7 +719,7 @@ export function createQuotationService({
       expectedVersion: number,
       comments?: string,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'Quotation')
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Quotation not found.')
       if (!(TRANSITIONS[current.status] ?? []).includes('EXPIRED')) {
@@ -757,7 +758,7 @@ export function createQuotationService({
       itemsDto: ReplaceQuotationItemsDto,
       dto: ReviseQuotationDto,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'Quotation')
       assertItemsWellFormed(itemsDto.items)
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Quotation not found.')
@@ -791,12 +792,12 @@ export function createQuotationService({
     },
 
     async approvalHistory(ctx: QuotationServiceCtx, id: string) {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'Quotation')
       return repo.approvalHistory(ctx.organizationId, id)
     },
 
     async revisionHistory(ctx: QuotationServiceCtx, id: string) {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'Quotation')
       return repo.revisionHistory(ctx.organizationId, id)
     },
 
@@ -806,7 +807,7 @@ export function createQuotationService({
       id: string,
       expectedVersion: number,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'delete', 'Account')
+      assertAbility(ctx, 'delete', 'Quotation')
       const removed = await repo.softDelete(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'quotation.withdrawn', { quotationId: id })
       return redact(ctx, removed)
@@ -817,7 +818,7 @@ export function createQuotationService({
       id: string,
       expectedVersion: number,
     ): Promise<QuotationRecord> {
-      assertAbility(ctx, 'manage', 'Account')
+      assertAbility(ctx, 'manage', 'Quotation')
       const restored = await repo.restore(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'quotation.restored', { quotationId: id })
       return redact(ctx, restored)
