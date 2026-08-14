@@ -9,9 +9,10 @@ import { type EventBus, makeEvent } from '@triyara/events'
 import { ConflictError, NotFoundError } from '@triyara/lib'
 import type { CreateCategoryDto, ListCategoriesQuery, UpdateCategoryDto } from '@triyara/validation'
 
-// Category service (TRY-BNP-CATALOG-S1). Catalog data is authorized as
-// `ReferenceData`: readable by every role, writable by ADMIN only under the
-// frozen ability model.
+// Category service (TRY-BNP-CATALOG-S1). Authorized on its own `Category`
+// subject: readable by every role, writable by ADMIN only - unchanged from when
+// it shared `ReferenceData` with specification definitions and tag
+// vocabularies.
 
 export type CategoryServiceCtx = AuthContext & { requestId?: string }
 
@@ -43,7 +44,7 @@ export function createCategoryService({ repo, events }: CategoryServiceDeps) {
 
   return {
     async list(ctx: CategoryServiceCtx, query: ListCategoriesQuery): Promise<CategoryListResult> {
-      assertAbility(ctx, 'read', 'ReferenceData')
+      assertAbility(ctx, 'read', 'Category')
       return repo.list({
         organizationId: ctx.organizationId,
         parentId: query.parentId,
@@ -56,14 +57,14 @@ export function createCategoryService({ repo, events }: CategoryServiceDeps) {
     },
 
     async get(ctx: CategoryServiceCtx, id: string): Promise<CategoryRecord> {
-      assertAbility(ctx, 'read', 'ReferenceData')
+      assertAbility(ctx, 'read', 'Category')
       const category = await repo.findById(ctx.organizationId, id)
       if (!category) throw new NotFoundError('Category not found.')
       return category
     },
 
     async create(ctx: CategoryServiceCtx, dto: CreateCategoryDto): Promise<CategoryRecord> {
-      assertAbility(ctx, 'create', 'ReferenceData')
+      assertAbility(ctx, 'create', 'Category')
       const slug = dto.slug ?? slugify(dto.name)
       if (await repo.findBySlug(ctx.organizationId, slug)) {
         throw new ConflictError(`A category with the slug "${slug}" already exists.`)
@@ -80,7 +81,7 @@ export function createCategoryService({ repo, events }: CategoryServiceDeps) {
       expectedVersion: number,
       dto: UpdateCategoryDto,
     ): Promise<CategoryRecord> {
-      assertAbility(ctx, 'update', 'ReferenceData')
+      assertAbility(ctx, 'update', 'Category')
 
       if (dto.slug) {
         const clash = await repo.findBySlug(ctx.organizationId, dto.slug)
@@ -99,7 +100,7 @@ export function createCategoryService({ repo, events }: CategoryServiceDeps) {
       id: string,
       expectedVersion: number,
     ): Promise<CategoryRecord> {
-      assertAbility(ctx, 'delete', 'ReferenceData')
+      assertAbility(ctx, 'delete', 'Category')
       const category = await repo.softDelete(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'category.deleted', { categoryId: category.id })
       return category
@@ -110,7 +111,7 @@ export function createCategoryService({ repo, events }: CategoryServiceDeps) {
       id: string,
       expectedVersion: number,
     ): Promise<CategoryRecord> {
-      assertAbility(ctx, 'update', 'ReferenceData')
+      assertAbility(ctx, 'update', 'Category')
       const category = await repo.restore(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'category.restored', { categoryId: category.id })
       return category

@@ -34,6 +34,13 @@ export const SUBJECTS = [
   // subjects.
   'RFQ',
   'Quotation',
+  // Catalogue records, previously authorized as `ReferenceData` alongside
+  // specification definitions and tag vocabularies. That made "may edit the tag
+  // list" and "may delete a product" the same permission. No role gains or
+  // loses anything here: reads still come from `read all` and writes from
+  // ADMIN's `manage all`, exactly as the two services already documented.
+  'Product',
+  'Category',
 ] as const
 export type Subject = (typeof SUBJECTS)[number]
 
