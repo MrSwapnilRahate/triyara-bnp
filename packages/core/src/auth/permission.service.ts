@@ -112,7 +112,9 @@ export function createPermissionService({ scopedRoles }: PermissionDeps) {
       },
     ): Promise<PermissionMatrix & { scopedRoles: Role[] }> {
       const targetUserId = params.userId ?? ctx.user.id
-      if (targetUserId !== ctx.user.id) assertAbility(ctx, 'read', 'User')
+      // Same boundary as the scoped-role service: another person's permission
+      // matrix is administration, not a read.
+      if (targetUserId !== ctx.user.id) assertAbility(ctx, 'manage', 'User')
 
       const base: Role[] = targetUserId === ctx.user.id ? [...ctx.user.roles] : []
       const grants = await scopedRoles.findActiveForScope(

@@ -8,6 +8,7 @@ import type {
 import type { DomainEvent, EventBus } from '@triyara/events'
 import { describe, expect, it } from 'vitest'
 
+import { createEmailVerificationService } from './email-verification.service'
 import { createPermissionService } from './permission.service'
 import { createScopedRoleService, type ScopedRoleCtx } from './scoped-role.service'
 import { createSessionService } from './session.service'
@@ -270,5 +271,167 @@ describe('session service', () => {
     })
 
     await expect(svc.assertActive('jti-gone')).rejects.toThrow(/no longer valid/i)
+  })
+})
+
+/**
+ * The line between business data and security metadata.
+ *
+ * Every role carries `read all`, so a check written as `read User` was
+ * satisfied by READ_ONLY. That made a session row - IP address, user agent,
+ * last seen - and the shape of everyone's privilege readable by anyone who
+ * could sign in. These cross-user reads are administration, and are gated on
+ * `manage User`, which only ADMIN resolves.
+ *
+ * Asserted against the services, not the screens: the UI hiding a panel is not
+ * authorization, and a client can call the route directly.
+ */
+describe('security metadata is administration, not a read', () => {
+  const OPERATIONAL: Role[][] = [['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']]
+
+  const sessions = () =>
+    createSessionService({
+      repo: fakeSessionRepo({ list: async () => ({ items: [makeSession()], nextCursor: null }) }),
+      events: fakeEvents(),
+    })
+
+  const scoped = () =>
+    createScopedRoleService({
+      repo: fakeScopedRepo(),
+      roles: roles as never,
+      users,
+      events: fakeEvents(),
+    })
+
+  const permissions = () => createPermissionService({ scopedRoles: fakeScopedRepo() })
+
+  describe.each(OPERATIONAL)('%s is refused', (role) => {
+    it("another user's sessions", async () => {
+      await expect(
+        sessions().list(ctxFor([role]), { userId: 'someone-else', limit: 25 }),
+      ).rejects.toThrow(/not permitted/i)
+    })
+
+    it('the scoped role assignment list', async () => {
+      await expect(scoped().list(ctxFor([role]), { limit: 25 })).rejects.toThrow(/not permitted/i)
+    })
+
+    it("another user's effective access", async () => {
+      await expect(
+        scoped().effectiveAccess(ctxFor([role]), {
+          userId: 'someone-else',
+          scopeType: 'ACCOUNT',
+          scopeId: 'acc1',
+        }),
+      ).rejects.toThrow(/not permitted/i)
+    })
+
+    it("another user's permission matrix", async () => {
+      await expect(
+        permissions().forScope(ctxFor([role]), {
+          userId: 'someone-else',
+          scopeType: 'ACCOUNT',
+          scopeId: 'acc1',
+        }),
+      ).rejects.toThrow(/not permitted/i)
+    })
+  })
+
+  describe.each(OPERATIONAL)('%s keeps what it legitimately needs', (role) => {
+    it('its own sessions', async () => {
+      await expect(sessions().list(ctxFor([role]), { limit: 25 })).resolves.toBeDefined()
+    })
+
+    it('its own effective access', async () => {
+      const access = await scoped().effectiveAccess(ctxFor([role]), {
+        scopeType: 'ACCOUNT',
+        scopeId: 'acc1',
+      })
+      expect(access.globalRoles).toEqual([role])
+    })
+
+    it('its own permissions', () => {
+      expect(permissions().mine(ctxFor([role])).permissions.all).toContain('read')
+    })
+
+    it('business reads across the tenant', () => {
+      // The point of the change: `read all` still means all business data.
+      const ability = buildAbilityFor([role])
+      for (const subject of ['Account', 'SupplierProfile', 'BuyerProfile', 'Document'] as const) {
+        expect(ability.can('read', subject), `${role} must still read ${subject}`).toBe(true)
+      }
+    })
+  })
+
+  describe('an administrator still sees everything they administer', () => {
+    it("reads another user's sessions", async () => {
+      await expect(
+        sessions().list(ctxFor(['ADMIN']), { userId: 'someone-else', limit: 25 }),
+      ).resolves.toBeDefined()
+    })
+
+    it('reads the scoped role assignment list', async () => {
+      await expect(scoped().list(ctxFor(['ADMIN']), { limit: 25 })).resolves.toBeDefined()
+    })
+
+    it("reads another user's effective access", async () => {
+      await expect(
+        scoped().effectiveAccess(ctxFor(['ADMIN']), {
+          userId: 'someone-else',
+          scopeType: 'ACCOUNT',
+          scopeId: 'acc1',
+        }),
+      ).resolves.toBeDefined()
+    })
+
+    it("reads another user's permission matrix", async () => {
+      await expect(
+        permissions().forScope(ctxFor(['ADMIN']), {
+          userId: 'someone-else',
+          scopeType: 'ACCOUNT',
+          scopeId: 'acc1',
+        }),
+      ).resolves.toBeDefined()
+    })
+  })
+
+  it('closes the boundary at the ability, so no subject restores it', () => {
+    // A role that cannot `manage User` has no other action that satisfies the
+    // guard - the refusal cannot be walked around through a different subject.
+    for (const role of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+      const ability = buildAbilityFor([role])
+      expect(ability.can('manage', 'User')).toBe(false)
+      expect(ability.can('manage', 'all')).toBe(false)
+    }
+    expect(buildAbilityFor(['ADMIN']).can('manage', 'User')).toBe(true)
+  })
+})
+
+describe('a security profile is administration too', () => {
+  const svc = () =>
+    createEmailVerificationService({
+      repo: {
+        ensure: async (userId: string) => ({ userId, emailVerifiedAt: null }),
+      } as never,
+      users,
+      events: fakeEvents(),
+    })
+
+  it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']] as const)(
+    "refuses %s another user's verification status",
+    async (role) => {
+      await expect(svc().status(ctxFor([role]), 'someone-else')).rejects.toThrow(/not permitted/i)
+    },
+  )
+
+  it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']] as const)(
+    'still lets %s read its own',
+    async (role) => {
+      await expect(svc().status(ctxFor([role]))).resolves.toBeDefined()
+    },
+  )
+
+  it("lets an administrator read another user's", async () => {
+    await expect(svc().status(ctxFor(['ADMIN']), 'someone-else')).resolves.toBeDefined()
   })
 })

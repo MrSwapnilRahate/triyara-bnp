@@ -92,8 +92,10 @@ export function createScopedRoleService({ repo, roles, users, events }: ScopedRo
       }
     },
 
+    // Who holds what, and where. That is the shape of the tenant's privilege,
+    // so it is administration rather than something every reader may browse.
     async list(ctx: ScopedRoleCtx, query: ListScopedRolesQuery): Promise<ScopedRoleListResult> {
-      assertAbility(ctx, 'read', 'User')
+      assertAbility(ctx, 'manage', 'User')
       return repo.list({
         organizationId: ctx.organizationId,
         userId: query.userId,
@@ -140,7 +142,9 @@ export function createScopedRoleService({ repo, roles, users, events }: ScopedRo
       params: { userId?: string; scopeType: RoleScopeType; scopeId: string },
     ) {
       const targetUserId = params.userId ?? ctx.user.id
-      if (targetUserId !== ctx.user.id) assertAbility(ctx, 'read', 'User')
+      // Your own effective access is yours to see; reading somebody else's is
+      // reading their privilege, which belongs with user administration.
+      if (targetUserId !== ctx.user.id) assertAbility(ctx, 'manage', 'User')
 
       const globalRoles: Role[] = targetUserId === ctx.user.id ? [...ctx.user.roles] : []
 
