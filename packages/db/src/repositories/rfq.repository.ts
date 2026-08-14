@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, PreconditionFailedError } from '@triyara/
 import { writeAudit } from '../audit'
 import { prisma } from '../client'
 import { decodeCursor, encodeCursor, type MutationCtx } from './account.repository'
+import { assertBuyerInOrg, assertProductsInOrg } from './tenant-refs'
 
 // RFQ aggregate (TRY-BNP-RFQ-01). Line items are owned by the RFQ and replaced
 // wholesale; supplier participation and responses live in their own repository.
@@ -160,6 +161,13 @@ export const rfqRepository = {
   async create(ctx: MutationCtx, data: CreateRfqData, items: RfqItemData[]): Promise<RfqRecord> {
     try {
       return await prisma.$transaction(async (tx) => {
+        await assertBuyerInOrg(tx, ctx.organizationId, data.buyerId)
+        await assertProductsInOrg(
+          tx,
+          ctx.organizationId,
+          items.map((it) => it.productId),
+        )
+
         const rfq = await tx.rFQ.create({
           data: {
             organizationId: ctx.organizationId,
@@ -314,6 +322,8 @@ export const rfqRepository = {
   ): Promise<RfqRecord> {
     try {
       return await prisma.$transaction(async (tx) => {
+        await assertBuyerInOrg(tx, ctx.organizationId, data.buyerId)
+
         const before = await tx.rFQ.findFirst({
           where: { id, organizationId: ctx.organizationId, deletedAt: null },
           select: listSelect,
@@ -361,6 +371,12 @@ export const rfqRepository = {
     reason?: string,
   ): Promise<RfqRecord> {
     return prisma.$transaction(async (tx) => {
+      await assertProductsInOrg(
+        tx,
+        ctx.organizationId,
+        items.map((it) => it.productId),
+      )
+
       const before = await tx.rFQ.findFirst({
         where: { id, organizationId: ctx.organizationId, deletedAt: null },
         select: { id: true, currentRevision: true },

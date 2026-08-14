@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, PreconditionFailedError } from '@triyara/
 import { writeAudit } from '../audit'
 import { prisma } from '../client'
 import { decodeCursor, encodeCursor, type MutationCtx } from './account.repository'
+import { assertBuyerInOrg, assertProductsInOrg } from './tenant-refs'
 
 // Quotation aggregate (TRY-BNP-QUOTE-01).
 //
@@ -262,6 +263,13 @@ export const quotationRepository = {
   ): Promise<QuotationRecord> {
     try {
       return await prisma.$transaction(async (tx) => {
+        await assertBuyerInOrg(tx, ctx.organizationId, data.buyerId)
+        await assertProductsInOrg(
+          tx,
+          ctx.organizationId,
+          items.map((it) => it.productId),
+        )
+
         const quotation = await tx.quotation.create({
           data: {
             organizationId: ctx.organizationId,
@@ -417,6 +425,8 @@ export const quotationRepository = {
   ): Promise<QuotationRecord> {
     try {
       return await prisma.$transaction(async (tx) => {
+        await assertBuyerInOrg(tx, ctx.organizationId, data.buyerId)
+
         const before = await tx.quotation.findFirst({
           where: { id, organizationId: ctx.organizationId, deletedAt: null },
           select: listSelect,
@@ -468,6 +478,12 @@ export const quotationRepository = {
     totals: QuotationTotals,
   ): Promise<QuotationRecord> {
     return prisma.$transaction(async (tx) => {
+      await assertProductsInOrg(
+        tx,
+        ctx.organizationId,
+        items.map((it) => it.productId),
+      )
+
       const before = await tx.quotation.findFirst({
         where: { id, organizationId: ctx.organizationId, deletedAt: null },
         select: { id: true, _count: { select: { items: true } } },
