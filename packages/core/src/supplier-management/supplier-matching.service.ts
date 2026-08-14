@@ -84,7 +84,14 @@ export function createSupplierMatchingService({ search, scores, history }: Match
       supplierId: string,
       query: SupplierHistoryQuery,
     ): Promise<HistoryResult<SupplierRfqHistoryItem>> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      // What comes back is RFQ data - numbers, titles, statuses - so the read
+      // is authorized as RFQ. `SupplierProfile` stood in for it only because
+      // there was no RFQ subject when this was written.
+      //
+      // The supplier constraint is untouched by that: it has never lived in the
+      // ability check. It is the visibility assertion below plus the supplierId
+      // filter in the query, and both stay exactly as they were.
+      assertAbility(ctx, 'read', 'RFQ')
       // Visibility first: a supplier the caller cannot see must look absent,
       // not merely empty of history.
       await history.assertVisible(ctx.organizationId, supplierId)
@@ -101,7 +108,10 @@ export function createSupplierMatchingService({ search, scores, history }: Match
       supplierId: string,
       query: SupplierHistoryQuery,
     ): Promise<HistoryResult<SupplierQuotationHistoryItem>> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      // Quotation sourcing rows, so the read is authorized as Quotation, for
+      // the same reason as `rfqs` above. Supplier scoping again comes from the
+      // visibility assertion and the query filter, not from this line.
+      assertAbility(ctx, 'read', 'Quotation')
       await history.assertVisible(ctx.organizationId, supplierId)
       return history.quotations({
         organizationId: ctx.organizationId,
