@@ -125,8 +125,10 @@ describe('base role membership routes', () => {
       )
       const res = await assignRole(
         req('/api/v1/admin/users/u1/roles', {
+          // Any grantable role: this case is about the conflict translation,
+          // not about which role. ADMIN would now stop at validation with 422.
           method: 'POST',
-          body: JSON.stringify({ role: 'ADMIN' }),
+          body: JSON.stringify({ role: 'VERIFIER' }),
         }),
         params('u1'),
       )

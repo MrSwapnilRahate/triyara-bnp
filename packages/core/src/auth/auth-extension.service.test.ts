@@ -91,6 +91,16 @@ function fakeSessionRepo(over: Partial<SessionRepository> = {}): SessionReposito
   } as SessionRepository
 }
 
+/**
+ * Session owners for these cases are ordinary staff, so the Super Admin guard
+ * in the service never fires and the behaviour under test is unchanged.
+ */
+function fakeSessionUsers(email = 'someone@triyara.test') {
+  return {
+    findById: async (id: string) => ({ id, organizationId: 'org1', email }),
+  }
+}
+
 const roles = { findByName: async (name: 'VERIFIER' | never) => ({ id: 'role-verifier', name }) }
 const users = {
   findById: async (id: string) => ({
@@ -246,7 +256,11 @@ describe('permission service', () => {
 describe('session service', () => {
   it('lets a user revoke their own session without elevated rights', async () => {
     const sink: DomainEvent[] = []
-    const svc = createSessionService({ repo: fakeSessionRepo(), events: fakeEvents(sink) })
+    const svc = createSessionService({
+      repo: fakeSessionRepo(),
+      users: fakeSessionUsers(),
+      events: fakeEvents(sink),
+    })
 
     const session = await svc.revoke(ctxFor(['READ_ONLY']), 's1', 'LOGOUT')
 
@@ -257,6 +271,7 @@ describe('session service', () => {
   it("refuses to revoke another user's session without update:User", async () => {
     const svc = createSessionService({
       repo: fakeSessionRepo({ findById: async () => makeSession({ userId: 'someone-else' }) }),
+      users: fakeSessionUsers(),
       events: fakeEvents(),
     })
 
@@ -266,6 +281,7 @@ describe('session service', () => {
   it('rejects a session that is no longer active', async () => {
     const svc = createSessionService({
       repo: fakeSessionRepo({ isActive: async () => false }),
+      users: fakeSessionUsers(),
       events: fakeEvents(),
     })
 

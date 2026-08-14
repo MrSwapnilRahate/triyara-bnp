@@ -134,15 +134,21 @@ export function createUserRoleService({ repo, roles, users, events }: UserRoleDe
       const target = await requireUserInOrg(ctx, userId)
       const role = await requireRole(roleName)
 
-      // The Super Admin is the only authority that can approve an admin access
-      // request. Strip their ADMIN role and nobody can ever be made an admin
-      // again - the workflow would have an approver who cannot reach it. The
-      // existing last-admin guard does not cover this: a tenant can hold
-      // several admins and still lose its only Super Admin.
-      //
-      // Reads as a list on purpose. In Stage-2, with more Super Admins
-      // configured, this same call starts permitting the removal.
       if (roleName === 'ADMIN' && isSuperAdmin(target.email)) {
+        // An ordinary administrator may not demote a Super Admin - any Super
+        // Admin, not merely the last one. The Super Admin is who approves an
+        // administrator's own role, so letting an administrator strip that is
+        // letting the subordinate dismiss the authority above it. Counting
+        // them was the wrong question: with two configured, an administrator
+        // could have removed either.
+        if (!isSuperAdmin(ctx.user.email)) {
+          throw new ForbiddenError(
+            'Only a super administrator may change a super administrator’s roles.',
+          )
+        }
+
+        // A Super Admin may manage another, but not down to none: the last one
+        // holding ADMIN is the only person who can reach the approval queue.
         const others = await repo.listAdminEmails(ctx.organizationId, userId)
         if (isLastSuperAdminHolder(target.email, others)) {
           throw new ConflictError(

@@ -29,6 +29,7 @@ export const emailVerificationService = createEmailVerificationService({
 
 export const sessionService = createSessionService({
   repo: sessionRepository,
+  users: userRepository,
   events: eventBus,
 })
 

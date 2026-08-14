@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { ASSIGNABLE_ROLES } from './auth'
+import { ASSIGNABLE_ROLES, grantableRoleSchema } from './auth'
 
 // Administration contracts (TRY-BNP-ADMIN-01): the audit trail, organization
 // settings and the caller's own profile.
@@ -160,7 +160,7 @@ export type ListAdminUsersQuery = z.infer<typeof listAdminUsersQuerySchema>
 export const inviteUserSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().toLowerCase().email().max(254),
-  role: z.enum(ASSIGNABLE_ROLES),
+  role: grantableRoleSchema,
 })
 export type InviteUserDto = z.infer<typeof inviteUserSchema>
 
