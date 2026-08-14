@@ -27,6 +27,13 @@ export const SUBJECTS = [
   'User',
   'Organization',
   'ReferenceData',
+  // RFQs and quotations used to be authorized as `Account`, because there was
+  // no subject for them. That made "may edit a customer record" and "may raise
+  // an RFQ" the same permission, and it made deleting an RFQ require the right
+  // to delete the customer. They are their own resources; they get their own
+  // subjects.
+  'RFQ',
+  'Quotation',
 ] as const
 export type Subject = (typeof SUBJECTS)[number]
 
@@ -54,6 +61,13 @@ export function buildAbilityFor(roles: Role[]): AppAbility {
         'Document',
         'Note',
         'Activity',
+        // Named rather than inherited. An export manager could already raise and
+        // edit both, through `create/update Account`; this says so directly
+        // instead of letting it fall out of a permission about customers.
+        // `manage` and `delete` are deliberately still absent, so awarding,
+        // reopening and deletion stay with ADMIN exactly as before.
+        'RFQ',
+        'Quotation',
       ],
     )
   }

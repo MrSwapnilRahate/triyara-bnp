@@ -12,11 +12,14 @@ import type {
 
 // RFQ service (TRY-BNP-RFQ-01).
 //
-// Authorization reuses the frozen CASL subjects - no new subject is introduced.
-// An RFQ is a buyer-side commercial record, so it is governed as `Account`:
-//   read   Account -> every role
-//   create/update  -> ADMIN and EXPORT_MANAGER
-//   manage         -> ADMIN only, used for approval decisions
+// Authorized on its own `RFQ` subject. It used to borrow `Account`, which meant
+// the right to edit a customer record and the right to raise an RFQ were the
+// same permission, and deleting an RFQ required the right to delete the
+// customer. Who may do what is unchanged:
+//   read   RFQ -> every role
+//   create/update -> ADMIN and EXPORT_MANAGER
+//   manage        -> ADMIN only, used for approval decisions
+//   delete        -> ADMIN only
 
 export type RfqServiceCtx = AuthContext & { requestId?: string }
 
@@ -85,7 +88,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
 
   return {
     async list(ctx: RfqServiceCtx, query: ListRfqsQuery): Promise<RfqListResult> {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'RFQ')
       return repo.list({
         organizationId: ctx.organizationId,
         q: query.q,
@@ -108,7 +111,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
     },
 
     async get(ctx: RfqServiceCtx, id: string): Promise<RfqRecord> {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'RFQ')
       const rfq = await repo.findById(ctx.organizationId, id)
       if (!rfq) throw new NotFoundError('RFQ not found.')
       return rfq
@@ -119,7 +122,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
       dto: CreateRfqDto,
       items: ReplaceRfqItemsDto['items'],
     ): Promise<RfqRecord> {
-      assertAbility(ctx, 'create', 'Account')
+      assertAbility(ctx, 'create', 'RFQ')
       assertBuyerMatchesType(dto.type, dto.buyerId)
       assertItemsWellFormed(items)
 
@@ -184,7 +187,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
       expectedVersion: number,
       dto: UpdateRfqDto,
     ): Promise<RfqRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'RFQ')
 
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('RFQ not found.')
@@ -219,7 +222,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
       dto: ReplaceRfqItemsDto,
       reason?: string,
     ): Promise<RfqRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'RFQ')
       assertItemsWellFormed(dto.items)
 
       const current = await repo.findById(ctx.organizationId, id)
@@ -257,7 +260,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
     },
 
     /**
-     * Approval decision. Restricted to `manage Account`, which resolves to ADMIN
+     * Approval decision. Restricted to `manage RFQ`, which resolves to ADMIN
      * only - raising an RFQ and approving one are deliberately different rights.
      */
     async decide(
@@ -266,7 +269,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
       expectedVersion: number,
       dto: RfqApprovalDto,
     ): Promise<RfqRecord> {
-      assertAbility(ctx, 'manage', 'Account')
+      assertAbility(ctx, 'manage', 'RFQ')
 
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('RFQ not found.')
@@ -304,7 +307,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
 
     /** Moves an approved RFQ out to its invited suppliers. */
     async issue(ctx: RfqServiceCtx, id: string, expectedVersion: number): Promise<RfqRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'RFQ')
 
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('RFQ not found.')
@@ -336,7 +339,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
     /**
      * Awards the round to one supplier.
      *
-     * `manage Account` rather than `update`: deciding who wins commits the
+     * `manage RFQ` rather than `update`: deciding who wins commits the
      * business to a supplier, which is not the same authority as editing an
      * RFQ's shipping port. The buyer review workflow draws the line in the
      * same place.
@@ -352,7 +355,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
       expectedVersion: number,
       participationId: string,
     ): Promise<RfqRecord> {
-      assertAbility(ctx, 'manage', 'Account')
+      assertAbility(ctx, 'manage', 'RFQ')
 
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('RFQ not found.')
@@ -397,7 +400,7 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
      * come from the same TRANSITIONS table, not a second copy of the rules.
      */
     async close(ctx: RfqServiceCtx, id: string, expectedVersion: number): Promise<RfqRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'RFQ')
 
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('RFQ not found.')
@@ -430,11 +433,11 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
 
     /**
      * Returns a cancelled or expired RFQ to DRAFT so it can be re-run. Requires
-     * `manage Account`: reviving a round that was deliberately stopped is an
+     * `manage RFQ`: reviving a round that was deliberately stopped is an
      * administrative act, not routine editing.
      */
     async reopen(ctx: RfqServiceCtx, id: string, expectedVersion: number): Promise<RfqRecord> {
-      assertAbility(ctx, 'manage', 'Account')
+      assertAbility(ctx, 'manage', 'RFQ')
 
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('RFQ not found.')
@@ -463,24 +466,24 @@ export function createRfqService({ repo, events }: RfqServiceDeps) {
     },
 
     async approvalHistory(ctx: RfqServiceCtx, id: string) {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'RFQ')
       return repo.approvalHistory(ctx.organizationId, id)
     },
 
     async revisionHistory(ctx: RfqServiceCtx, id: string) {
-      assertAbility(ctx, 'read', 'Account')
+      assertAbility(ctx, 'read', 'RFQ')
       return repo.revisionHistory(ctx.organizationId, id)
     },
 
     async remove(ctx: RfqServiceCtx, id: string, expectedVersion: number): Promise<RfqRecord> {
-      assertAbility(ctx, 'delete', 'Account')
+      assertAbility(ctx, 'delete', 'RFQ')
       const rfq = await repo.softDelete(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'rfq.deleted', { rfqId: rfq.id, rfqNumber: rfq.rfqNumber })
       return rfq
     },
 
     async restore(ctx: RfqServiceCtx, id: string, expectedVersion: number): Promise<RfqRecord> {
-      assertAbility(ctx, 'update', 'Account')
+      assertAbility(ctx, 'update', 'RFQ')
       const rfq = await repo.restore(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'rfq.restored', { rfqId: rfq.id })
       return rfq
