@@ -20,10 +20,46 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
   }
 
   beforeAll(async () => {
+    // Only the organization. The roles are deliberately NOT created here: this
+    // suite used to upsert ADMIN itself, which meant it set up the very state
+    // it should have been asserting the bootstrap produces, and a database with
+    // no role catalogue at all still looked healthy.
     await prisma.organization.create({ data: { name: 'Bootstrap Test Org', slug } })
-    for (const name of ['ADMIN'] as const) {
-      await prisma.role.upsert({ where: { name }, update: {}, create: { name } })
+  })
+
+  it('creates the whole role catalogue, not only the role it grants', async () => {
+    // The regression this suite missed: production held ADMIN and nothing else,
+    // so the first administrator could sign in and then invite nobody.
+    await bootstrapAdmin(prisma, config(`catalogue-${randomUUID().slice(0, 8)}@example.com`))
+
+    const roles = await prisma.role.findMany({ select: { name: true } })
+    expect(roles.map((r) => r.name).sort()).toEqual([
+      'ADMIN',
+      'EXPORT_MANAGER',
+      'READ_ONLY',
+      'VERIFIER',
+    ])
+  })
+
+  it('leaves the invite flow able to resolve every non-admin role', async () => {
+    // The exact lookup `createWithInvite` performs. If this returns null the
+    // invitation fails with a 404 that reads "this record no longer exists".
+    await bootstrapAdmin(prisma, config(`resolve-${randomUUID().slice(0, 8)}@example.com`))
+
+    for (const name of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+      const role = await prisma.role.findFirst({ where: { name }, select: { id: true } })
+      expect(role, `${name} must be resolvable`).not.toBeNull()
     }
+  })
+
+  it('does not duplicate roles when run twice', async () => {
+    await bootstrapAdmin(prisma, config(`dup1-${randomUUID().slice(0, 8)}@example.com`))
+    const before = await prisma.role.count()
+
+    await bootstrapAdmin(prisma, config(`dup2-${randomUUID().slice(0, 8)}@example.com`))
+
+    expect(await prisma.role.count()).toBe(before)
+    expect(before).toBe(4)
   })
 
   it('creates the user, the ADMIN role link, and an ACTIVE account', async () => {
@@ -113,6 +149,47 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
       select: { role: { select: { name: true } } },
     })
     expect(roles.map((r) => r.role.name)).toEqual(['ADMIN'])
+    // Linking a role must not quietly re-create the account underneath it.
+    const after = await prisma.user.findUniqueOrThrow({
+      where: { email },
+      select: { passwordHash: true, name: true },
+    })
+    expect(after.passwordHash).toBe('placeholder-not-a-real-hash')
+    expect(after.name).toBe('Existing Person')
+  })
+
+  it('keeps role memberships the bootstrap did not grant', async () => {
+    // Someone already carrying EXPORT_MANAGER must not lose it by being made an
+    // administrator - the bootstrap adds ADMIN, it does not reset the person.
+    const email = `keeps-${randomUUID().slice(0, 8)}@example.com`
+    const org = await prisma.organization.findUniqueOrThrow({
+      where: { slug },
+      select: { id: true },
+    })
+    const existingRole = await prisma.role.upsert({
+      where: { name: 'EXPORT_MANAGER' },
+      update: {},
+      create: { name: 'EXPORT_MANAGER' },
+      select: { id: true },
+    })
+    await prisma.user.create({
+      data: {
+        organizationId: org.id,
+        email,
+        name: 'Already Staff',
+        passwordHash: 'placeholder-not-a-real-hash',
+        status: 'ACTIVE',
+        roles: { create: { roleId: existingRole.id } },
+      },
+    })
+
+    await bootstrapAdmin(prisma, config(email))
+
+    const roles = await prisma.userRole.findMany({
+      where: { user: { email } },
+      select: { role: { select: { name: true } } },
+    })
+    expect(roles.map((r) => r.role.name).sort()).toEqual(['ADMIN', 'EXPORT_MANAGER'])
   })
 
   it('grants ADMIN and nothing else', async () => {

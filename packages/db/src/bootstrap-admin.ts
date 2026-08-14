@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client'
+import type { Prisma, PrismaClient, RoleName } from '@prisma/client'
 import { hashPassword } from '@triyara/auth'
 
 /**
@@ -46,6 +46,22 @@ export interface BootstrapResult {
  * to create one account would be the larger change.
  */
 const MIN_PASSWORD_LENGTH = 12
+
+/**
+ * The role catalogue.
+ *
+ * These four rows are names, not grants: creating them gives nobody anything,
+ * and a role only reaches a person through a UserRole row. They are listed here
+ * for the same reason the seed lists them - `RoleName` is a Postgres enum, so
+ * the type existing says nothing about whether the rows do.
+ *
+ * The bootstrap has to create all four rather than only the one it assigns.
+ * `createWithInvite` resolves the requested role by name and throws if the row
+ * is absent, so a database holding only ADMIN gives an administrator who can
+ * sign in and then cannot invite anybody - which is the one thing they need to
+ * do next.
+ */
+const ROLE_CATALOGUE: RoleName[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
 
 /** Deliberately narrow. A bootstrap that guesses at input is a bootstrap that surprises. */
 export function parseBootstrapConfig(env: NodeJS.ProcessEnv): BootstrapConfig {
@@ -111,13 +127,18 @@ export async function bootstrapAdmin(
       )
     }
 
-    // Only ADMIN. The other three roles are created by the seed and by the
-    // admin screens; a bootstrap that granted more than it was asked for would
-    // be the wrong kind of convenient.
-    const adminRole = await tx.role.upsert({
+    // The whole catalogue, because the invite flow resolves every role by name
+    // and cannot create a missing one. `update: {}` so a re-run leaves existing
+    // rows exactly as they are.
+    for (const name of ROLE_CATALOGUE) {
+      await tx.role.upsert({ where: { name }, update: {}, create: { name } })
+    }
+
+    // Only ADMIN is granted. Creating the other three above is not granting
+    // them: a bootstrap that handed out more than it was asked for would be the
+    // wrong kind of convenient.
+    const adminRole = await tx.role.findUniqueOrThrow({
       where: { name: 'ADMIN' },
-      update: {},
-      create: { name: 'ADMIN' },
       select: { id: true },
     })
 

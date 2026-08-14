@@ -144,10 +144,16 @@ be committed, pasted into a ticket, or written to an env file that outlives the
 command. Prefer a shell that does not record history for that line. Neither the
 command nor its error messages ever print the password or the hash.
 
+It also creates the four role rows — `ADMIN`, `EXPORT_MANAGER`, `VERIFIER` and
+`READ_ONLY` — if they are absent. Those are names, not grants: only `ADMIN` is
+assigned, to this one account. They matter because inviting a colleague resolves
+the chosen role by name, so a database missing them produces an administrator
+who can sign in and then cannot invite anybody.
+
 Re-running is safe. An account that already exists is left exactly as it was —
 no password overwritten, no name changed — so running this again after a
-password rotation cannot silently undo it. The one thing it will still do is
-add the ADMIN role if that link is missing.
+password rotation cannot silently undo it. The two things it will still do are
+add the ADMIN role if that link is missing, and fill in any missing role row.
 
 Afterwards:
 
