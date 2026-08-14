@@ -487,10 +487,12 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
     })
 
     it('refuses inviting anyone straight to ADMIN, and creates nothing', async () => {
-      // ADMIN is only ever reached through the access-request workflow.
+      // ADMIN is only ever reached through the access-request workflow. The
+      // request body schema now refuses it too, so this stops at 422 before the
+      // service is reached; the service's own 403 is covered in @triyara/core.
       const email = `noadmin-${uniq()}@triyara.test`
       const res = await post({ name: 'Would-be admin', email, role: 'ADMIN' })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(422)
       expect(await prisma.user.findUnique({ where: { email } })).toBeNull()
     })
 
@@ -498,7 +500,9 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
       const email = `invite-${uniq()}@triyara.test`
       authState.roles = ['EXPORT_MANAGER']
       try {
-        const res = await post({ name: 'Nope', email, role: 'ADMIN' })
+        // A grantable role, so this exercises the authorization refusal rather
+        // than stopping at the body schema.
+        const res = await post({ name: 'Nope', email, role: 'VERIFIER' })
         expect(res.status).toBe(403)
       } finally {
         authState.roles = ['ADMIN']
