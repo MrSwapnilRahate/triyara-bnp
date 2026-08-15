@@ -121,7 +121,7 @@ export const NAVIGATION: GuardedGroup[] = [
         label: 'Audit log',
         href: '/admin/audit',
         icon: <ScrollText />,
-        requires: { action: 'manage', subject: 'Organization' },
+        requires: { action: 'manage', subject: 'AuditLog' },
       },
       {
         label: 'API docs',
