@@ -32,7 +32,9 @@ const OUTCOMES = [
 /**
  * Sign-in history (TRY-BNP-PORTAL-01 §12).
  *
- * ADMIN only, matching `manage Organization` on the endpoint behind it.
+ * ADMIN only, matching `manage AuditLog` on the endpoint behind it. There is no
+ * ability check in here: the endpoint is the boundary, and this tab renders
+ * whatever it returns.
  *
  * Filter state is local rather than in the URL: this is one tab of a detail
  * screen, and putting a date range in the address bar would collide with the

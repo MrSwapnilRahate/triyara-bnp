@@ -66,7 +66,7 @@ const ENTITY_TYPES = ['RFQ', 'Quotation', 'Supplier', 'Product', 'Account', 'Doc
  */
 export function AuditLog() {
   const ability = useAbility()
-  const canRead = ability.can('manage', 'Organization')
+  const canRead = ability.can('manage', 'AuditLog')
 
   const { params, setFilter, nextPage, previousPage, hasPrevious, isFiltered, reset } =
     useListState<AuditParams>(DEFAULTS)

@@ -38,6 +38,44 @@ describe('visibleNavigation', () => {
     expect(items.find((i) => i.href === '/quotations')?.badge).toBeUndefined()
   })
 
+  it('gates the audit entry on AuditLog, not on organization management', () => {
+    // The entry followed the backend to `manage AuditLog`. Every configured
+    // role answers the same for both subjects, so only an actor built by hand
+    // can tell which one the registry asks about.
+    const auditor = { can: (_a: string, s: string) => s === 'AuditLog' }
+    const tenantAdmin = { can: (_a: string, s: string) => s === 'Organization' }
+
+    const href = (ability: { can: (a: string, s: string) => boolean }) =>
+      visibleNavigation(ability as Parameters<typeof visibleNavigation>[0])
+        .flatMap((g) => g.items)
+        .map((i) => i.href)
+
+    expect(href(auditor)).toContain('/admin/audit')
+    expect(href(tenantAdmin)).not.toContain('/admin/audit')
+    // The organization entry is the mirror image, and stays where it was.
+    expect(href(tenantAdmin)).toContain('/admin/organization')
+    expect(href(auditor)).not.toContain('/admin/organization')
+  })
+
+  it.each(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const)(
+    'keeps the audit entry hidden from %s',
+    (role) => {
+      // Unchanged by the subject move: `read all` covers AuditLog, so the entry
+      // would reappear for all three if it were ever gated at `read`.
+      const hrefs = visibleNavigation(buildAbilityFor([role]))
+        .flatMap((g) => g.items)
+        .map((i) => i.href)
+      expect(hrefs).not.toContain('/admin/audit')
+    },
+  )
+
+  it('still shows the audit entry to an ADMIN', () => {
+    const hrefs = visibleNavigation(buildAbilityFor(['ADMIN']))
+      .flatMap((g) => g.items)
+      .map((i) => i.href)
+    expect(hrefs).toContain('/admin/audit')
+  })
+
   it('lists no route that has not been built yet', () => {
     // Wave 1 ships the shell only. Every href here must resolve once its wave
     // lands; this test is the reminder to keep the registry honest.
