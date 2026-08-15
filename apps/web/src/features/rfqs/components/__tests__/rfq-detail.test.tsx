@@ -207,3 +207,83 @@ describe('RfqDetail', () => {
     await expectNoAxeViolations(container)
   })
 })
+
+describe('RfqDetail delete', () => {
+  // `delete RFQ` is ADMIN-only. The backend has enforced it since the service
+  // was written; until now there was no control that called it, so an
+  // administrator could not remove an RFQ from the portal at all.
+  const DELETE_BTN = { name: /^delete$/i }
+
+  function withDelete(rfq: Rfq, { status = 200 } = {}) {
+    const calls: Array<{ method: string; ifMatch: string | null }> = []
+    return {
+      calls,
+      handlers: [
+        ...handlers(rfq),
+        http.delete('/api/rfqs/r1', ({ request }) => {
+          calls.push({ method: request.method, ifMatch: request.headers.get('If-Match') })
+          return status === 200
+            ? HttpResponse.json(ok({ ...rfq, deletedAt: new Date().toISOString() }))
+            : HttpResponse.json(
+                fail([{ code: 'FORBIDDEN', message: 'Not permitted: delete RFQ' }]),
+                { status },
+              )
+        }),
+      ],
+    }
+  }
+
+  it('offers Delete to an ADMIN', async () => {
+    const rfq = makeRfq()
+    server.use(...withDelete(rfq).handlers)
+    renderWithProviders(<RfqDetail id="r1" />, { roles: ['ADMIN'] })
+
+    expect(await screen.findByRole('button', DELETE_BTN)).toBeInTheDocument()
+  })
+
+  it.each(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const)(
+    'hides Delete from %s',
+    async (role) => {
+      // EXPORT_MANAGER holds `update RFQ` and still sees Edit, so this is the
+      // narrower `delete` boundary rather than a blanket read-only screen.
+      const rfq = makeRfq()
+      server.use(...withDelete(rfq).handlers)
+      renderWithProviders(<RfqDetail id="r1" />, { roles: [role] })
+
+      await screen.findByText(rfq.rfqNumber)
+      expect(screen.queryByRole('button', DELETE_BTN)).not.toBeInTheDocument()
+    },
+  )
+
+  it('sends DELETE with the current version and returns to the list', async () => {
+    // If-Match carries the version: a stale tab must lose the race rather than
+    // delete a record someone else has since changed.
+    const user = userEvent.setup()
+    const rfq = makeRfq()
+    const probe = withDelete(rfq)
+    server.use(...probe.handlers)
+    renderWithProviders(<RfqDetail id="r1" />, { roles: ['ADMIN'] })
+
+    await user.click(await screen.findByRole('button', DELETE_BTN))
+    await user.click(await screen.findByRole('button', { name: /delete rfq/i }))
+
+    await waitFor(() => expect(probe.calls).toHaveLength(1))
+    expect(probe.calls[0]?.method).toBe('DELETE')
+    expect(probe.calls[0]?.ifMatch).toBe(`W/"v${rfq.version}"`)
+  })
+
+  it('keeps the dialog open and shows why when the API refuses', async () => {
+    // The failure the UI must not swallow: a 403 that closed the dialog would
+    // read as a successful delete.
+    const user = userEvent.setup()
+    const rfq = makeRfq()
+    server.use(...withDelete(rfq, { status: 403 }).handlers)
+    renderWithProviders(<RfqDetail id="r1" />, { roles: ['ADMIN'] })
+
+    await user.click(await screen.findByRole('button', DELETE_BTN))
+    await user.click(await screen.findByRole('button', { name: /delete rfq/i }))
+
+    expect(await screen.findByText(/not permitted/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /delete rfq/i })).toBeInTheDocument()
+  })
+})

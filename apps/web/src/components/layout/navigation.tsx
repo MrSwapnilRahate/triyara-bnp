@@ -10,13 +10,11 @@ import {
   FolderTree,
   Gauge,
   KeyRound,
-  Layers,
   Package,
   Quote,
   Radar,
   ScrollText,
   ShieldCheck,
-  Tags,
   Truck,
   UserCog,
   Users,
@@ -61,8 +59,11 @@ export const NAVIGATION: GuardedGroup[] = [
     items: [
       { label: 'Products', href: '/catalog/products', icon: <Package /> },
       { label: 'Categories', href: '/catalog/categories', icon: <FolderTree /> },
-      { label: 'Specifications', href: '/catalog/specifications', icon: <Layers /> },
-      { label: 'Tags', href: '/catalog/tags', icon: <Tags /> },
+      // Specifications and Tags are reference data, not screens: the catalog
+      // reference service and its routes are read-only - no create, update or
+      // delete exists anywhere - and both are seeded as fixed vocabularies.
+      // They reach the user through the product form's pickers, and the entries
+      // here only ever led to a 404.
     ],
   },
   {
