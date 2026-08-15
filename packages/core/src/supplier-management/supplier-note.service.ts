@@ -16,7 +16,7 @@ import type {
 
 // Supplier notes - the CRM timeline (TRY-BNP-SUPPLIER-02).
 //
-// Notes are gated on SupplierProfile rather than on a subject of their own:
+// Notes are gated on Supplier rather than on a subject of their own:
 // a note is commercially sensitive in exactly the way the supplier record is,
 // and anyone who may not read the supplier must not read what it said.
 
@@ -38,7 +38,7 @@ export function createSupplierNoteService({ repo, events }: NoteServiceDeps) {
       supplierId: string,
       query: ListSupplierNotesQuery,
     ): Promise<NoteListResult> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       // Visibility first: an unreadable supplier must look empty of notes in
       // the same way it looks absent, never like a supplier with zero notes.
       await repo.assertVisible(ctx.organizationId, supplierId)
@@ -53,7 +53,7 @@ export function createSupplierNoteService({ repo, events }: NoteServiceDeps) {
     },
 
     async add(ctx: NoteServiceCtx, supplierId: string, dto: SupplierNoteDto): Promise<NoteRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       const note = await repo.create(mutationCtx(ctx), supplierId, {
         body: dto.body,
         ...(dto.source ? { source: dto.source } : {}),
@@ -76,7 +76,7 @@ export function createSupplierNoteService({ repo, events }: NoteServiceDeps) {
       expectedVersion: number,
       dto: UpdateSupplierNoteDto,
     ): Promise<NoteRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       await repo.assertVisible(ctx.organizationId, supplierId)
 
       const existing = await repo.findById(ctx.organizationId, id)
@@ -104,7 +104,7 @@ export function createSupplierNoteService({ repo, events }: NoteServiceDeps) {
       id: string,
       expectedVersion: number,
     ): Promise<NoteRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       await repo.assertVisible(ctx.organizationId, supplierId)
 
       const existing = await repo.findById(ctx.organizationId, id)

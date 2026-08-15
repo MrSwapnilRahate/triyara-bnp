@@ -86,7 +86,7 @@ export function SupplierNotes({ supplierId }: { supplierId: string }) {
 
   return (
     <div className="max-w-3xl space-y-gutter">
-      <Can action="update" subject="SupplierProfile">
+      <Can action="update" subject="Supplier">
         <NoteComposer supplierId={supplierId} onSaved={resetPaging} />
       </Can>
 
@@ -374,7 +374,7 @@ function NoteRow({
         {note.body}
       </p>
 
-      <Can action="update" subject="SupplierProfile">
+      <Can action="update" subject="Supplier">
         <div className="mt-gap flex gap-gap">
           <Button variant="ghost" size="sm" onClick={onEdit}>
             Edit

@@ -53,7 +53,7 @@ export function SupplierReviewPanel({
   if (supplier.status !== 'PENDING_REVIEW') return null
 
   return (
-    <Can action="manage" subject="SupplierProfile">
+    <Can action="manage" subject="Supplier">
       <Card className="max-w-3xl">
         <div className="flex flex-wrap items-center justify-between gap-gap">
           <div>

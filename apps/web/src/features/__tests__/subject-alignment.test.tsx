@@ -53,6 +53,7 @@ const { ProductList } = await import('../catalog/components/product-list')
 const { CategoryTree } = await import('../catalog/components/category-tree')
 const { RfqList } = await import('../rfqs/components/rfq-list')
 const { QuotationList } = await import('../quotations/components/quotation-list')
+const { SupplierList } = await import('../suppliers/components/supplier-list')
 
 /** An actor holding every action on exactly the subjects named. */
 const holding = (...subjects: string[]): Pick<AppAbility, 'can'> => ({
@@ -281,6 +282,58 @@ describe('the quotation list asks for Quotation, not Account', () => {
   })
 })
 
+// ---------------------------------------------------------------- Supplier
+
+const SUPPLIER_ROW = {
+  id: 's1',
+  supplierCode: 'SUP-000001',
+  companyName: 'Acme Spices',
+  legalName: 'Acme Spices Pvt Ltd',
+  businessType: 'MANUFACTURER',
+  email: 'trade@acme.test',
+  phone: null,
+  country: 'IN',
+  state: 'Kerala',
+  city: 'Kochi',
+  status: 'APPROVED' as const,
+  isVerified: true,
+  verifiedAt: null,
+  accountId: null,
+  version: 1,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  deletedAt: null,
+}
+
+describe('the supplier master asks for Supplier, not SupplierProfile', () => {
+  const NEW_SUPPLIER = /new supplier/i
+  const handlers = () =>
+    server.use(
+      http.get('/api/suppliers', () => HttpResponse.json(ok([SUPPLIER_ROW], { nextCursor: null }))),
+      http.get('/api/suppliers/countries', () => HttpResponse.json(ok([]))),
+      http.get('/api/suppliers/certifications', () => HttpResponse.json(ok([]))),
+    )
+
+  it('offers the create control to an actor holding Supplier', async () => {
+    injected = holding('Supplier')
+    handlers()
+    renderWithProviders(<SupplierList />, { roles: [INJECT] })
+
+    expect(await screen.findByRole('link', { name: NEW_SUPPLIER })).toBeInTheDocument()
+  })
+
+  it('refuses the create control to an actor holding only SupplierProfile', async () => {
+    // The regression this guards: the account-attached profile used to be the
+    // key to the standalone master record.
+    injected = holding('SupplierProfile')
+    handlers()
+    renderWithProviders(<SupplierList />, { roles: [INJECT] })
+
+    await screen.findByText(SUPPLIER_ROW.supplierCode)
+    expect(screen.queryByRole('link', { name: NEW_SUPPLIER })).not.toBeInTheDocument()
+  })
+})
+
 // ------------------------------------------------- every role is unaffected
 
 describe('every configured role keeps exactly the access it had', () => {
@@ -303,6 +356,11 @@ describe('every configured role keeps exactly the access it had', () => {
       ['update', 'Account', 'Quotation'],
       ['manage', 'Account', 'Quotation'],
       ['delete', 'Account', 'Quotation'],
+      ['read', 'SupplierProfile', 'Supplier'],
+      ['create', 'SupplierProfile', 'Supplier'],
+      ['update', 'SupplierProfile', 'Supplier'],
+      ['delete', 'SupplierProfile', 'Supplier'],
+      ['manage', 'SupplierProfile', 'Supplier'],
     ]
     for (const [action, oldSubject, newSubject] of pairs) {
       expect(

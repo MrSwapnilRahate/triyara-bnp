@@ -25,9 +25,9 @@ import { resolveTransition } from '../onboarding/review-workflow'
 // frozen exports is not an option, so the new module takes the distinct name -
 // the same resolution the schema used for SupplierProduct.
 //
-// Authorization uses the frozen `SupplierProfile` CASL subject, so no new
-// subject is introduced:
-//   read   SupplierProfile -> every role
+// Authorization uses the `Supplier` subject - the standalone master record,
+// distinct from the `SupplierProfile` attached to an Account:
+//   read   Supplier -> every role
 //   create/update          -> ADMIN and EXPORT_MANAGER
 //   manage                 -> ADMIN only, used for approval decisions
 
@@ -55,7 +55,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
 
   return {
     async list(ctx: SupplierMasterCtx, query: ListSuppliersQuery): Promise<SupplierListResult> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.list({
         organizationId: ctx.organizationId,
         q: query.q,
@@ -82,14 +82,14 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
     },
 
     async get(ctx: SupplierMasterCtx, id: string): Promise<SupplierRecord> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       const supplier = await repo.findById(ctx.organizationId, id)
       if (!supplier) throw new NotFoundError('Supplier not found.')
       return supplier
     },
 
     async create(ctx: SupplierMasterCtx, dto: CreateSupplierDto): Promise<SupplierRecord> {
-      assertAbility(ctx, 'create', 'SupplierProfile')
+      assertAbility(ctx, 'create', 'Supplier')
 
       const existing = await repo.findByCode(ctx.organizationId, dto.supplierCode)
       if (existing) {
@@ -114,14 +114,14 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
       expectedVersion: number,
       dto: UpdateSupplierDto,
     ): Promise<SupplierRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       const supplier = await repo.mutate(mutationCtx(ctx), id, expectedVersion, dto)
       await emit(ctx, 'supplier.updated', { supplierId: supplier.id })
       return supplier
     },
 
     /**
-     * Approval decision. Restricted to `manage SupplierProfile`, which resolves
+     * Approval decision. Restricted to `manage Supplier`, which resolves
      * to ADMIN only - onboarding a supplier and approving one are deliberately
      * different privileges.
      */
@@ -131,7 +131,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
       expectedVersion: number,
       dto: SupplierApprovalDto,
     ): Promise<SupplierRecord> {
-      assertAbility(ctx, 'manage', 'SupplierProfile')
+      assertAbility(ctx, 'manage', 'Supplier')
 
       const current = await repo.findById(ctx.organizationId, id)
       if (!current) throw new NotFoundError('Supplier not found.')
@@ -155,7 +155,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
     },
 
     async history(ctx: SupplierMasterCtx, id: string) {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.approvalHistory(ctx.organizationId, id)
     },
 
@@ -164,7 +164,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
       id: string,
       expectedVersion: number,
     ): Promise<SupplierRecord> {
-      assertAbility(ctx, 'delete', 'SupplierProfile')
+      assertAbility(ctx, 'delete', 'Supplier')
       const supplier = await repo.softDelete(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'supplier.deleted', { supplierId: supplier.id })
       return supplier
@@ -175,7 +175,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
       id: string,
       expectedVersion: number,
     ): Promise<SupplierRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       const supplier = await repo.restore(mutationCtx(ctx), id, expectedVersion)
       await emit(ctx, 'supplier.restored', { supplierId: supplier.id })
       return supplier
@@ -183,7 +183,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
 
     /** Compliance sweep: certifications lapsing within `days`. */
     async expiringCertifications(ctx: SupplierMasterCtx, days = 30) {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.expiringCertifications(ctx.organizationId, days)
     },
 
@@ -197,7 +197,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
       ctx: SupplierMasterCtx,
       query: SearchSuppliersQuery,
     ): Promise<SupplierSearchHit[]> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       const result = await repo.list({
         organizationId: ctx.organizationId,
         q: query.q,
@@ -233,7 +233,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
 
     /** Filter vocabulary: countries this tenant actually sources from. */
     async countries(ctx: SupplierMasterCtx, query: SupplierFacetQuery = {}) {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.countryFacets(ctx.organizationId, {
         includeDeleted: query.includeDeleted === 'true',
       })
@@ -241,7 +241,7 @@ export function createSupplierMasterService({ repo, events }: SupplierMasterDeps
 
     /** Filter vocabulary: certification types held, with how many are current. */
     async certifications(ctx: SupplierMasterCtx) {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.certificationFacets(ctx.organizationId)
     },
   }

@@ -14,7 +14,7 @@ import type { SupplierContactDto, UpdateSupplierContactDto } from '@triyara/vali
  *
  * The people at a supplier: who to ring, who quotes, who sends the documents.
  * Authorization mirrors offerings, which is the neighbouring sub-resource -
- * reading needs `read SupplierProfile`, writing needs `update SupplierProfile`,
+ * reading needs `read Supplier`, writing needs `update Supplier`,
  * so ADMIN and EXPORT_MANAGER maintain them and everyone else can look.
  *
  * "Exactly one primary" is enforced in the repository transaction rather than
@@ -74,7 +74,7 @@ function assertReachable(merged: {
 export function createSupplierContactService({ repo, events }: SupplierContactDeps) {
   return {
     async list(ctx: SupplierContactCtx, supplierId: string): Promise<SupplierContactRecord[]> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.list(ctx.organizationId, supplierId)
     },
 
@@ -83,7 +83,7 @@ export function createSupplierContactService({ repo, events }: SupplierContactDe
       supplierId: string,
       dto: SupplierContactDto,
     ): Promise<SupplierContactRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
 
       const data = toData(dto)
       assertReachable(data)
@@ -112,7 +112,7 @@ export function createSupplierContactService({ repo, events }: SupplierContactDe
       expectedVersion: number,
       dto: UpdateSupplierContactDto,
     ): Promise<SupplierContactRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
 
       const existing = await repo.findById(ctx.organizationId, supplierId, id)
       if (!existing) throw new NotFoundError('Contact not found.')
@@ -147,7 +147,7 @@ export function createSupplierContactService({ repo, events }: SupplierContactDe
       id: string,
       expectedVersion: number,
     ): Promise<SupplierContactRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
 
       const contact = await repo.remove(mutationCtx(ctx), supplierId, id, expectedVersion)
 

@@ -79,7 +79,7 @@ export function SupplierDetail({ id }: { id: string }) {
         { label: 'GST', value: supplier.gstNumber ?? '—' },
       ]}
       actions={
-        <Can action="update" subject="SupplierProfile">
+        <Can action="update" subject="Supplier">
           <Button asChild variant="secondary" leadingIcon={<Pencil />}>
             <Link href={`/suppliers/${supplier.id}/edit`}>Edit</Link>
           </Button>

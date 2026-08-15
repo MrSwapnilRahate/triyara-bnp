@@ -46,7 +46,7 @@ function toData(dto: SupplierOfferingDto): UpsertOfferingData {
 export function createSupplierOfferingService({ repo, events }: OfferingServiceDeps) {
   return {
     async list(ctx: OfferingServiceCtx, query: ListOfferingsQuery): Promise<OfferingListResult> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.list({
         organizationId: ctx.organizationId,
         supplierId: query.supplierId,
@@ -60,7 +60,7 @@ export function createSupplierOfferingService({ repo, events }: OfferingServiceD
 
     /** Sourcing shortlist: approved suppliers for a product, preferred first. */
     async suppliersForProduct(ctx: OfferingServiceCtx, productId: string, limit = 25) {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.findSuppliersForProduct(ctx.organizationId, productId, limit)
     },
 
@@ -69,7 +69,7 @@ export function createSupplierOfferingService({ repo, events }: OfferingServiceD
       supplierId: string,
       dto: SupplierOfferingDto,
     ): Promise<OfferingRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       if (dto.validFrom && dto.validTo && dto.validTo <= dto.validFrom) {
         throw new ValidationError('validTo must be after validFrom.')
       }
@@ -95,7 +95,7 @@ export function createSupplierOfferingService({ repo, events }: OfferingServiceD
       expectedVersion: number,
       dto: Partial<SupplierOfferingDto>,
     ): Promise<OfferingRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       const existing = await repo.findById(ctx.organizationId, id)
       if (!existing) throw new NotFoundError('Offering not found.')
 
@@ -121,7 +121,7 @@ export function createSupplierOfferingService({ repo, events }: OfferingServiceD
       id: string,
       expectedVersion: number,
     ): Promise<OfferingRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       const offering = await repo.softDelete(mutationCtx(ctx), id, expectedVersion)
       await events.emit(
         makeEvent({
