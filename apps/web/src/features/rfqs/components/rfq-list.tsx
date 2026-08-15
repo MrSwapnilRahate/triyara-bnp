@@ -111,7 +111,7 @@ export function RfqList() {
         title="No RFQs yet"
         description="An RFQ is what you send suppliers to quote against. It starts in draft, needs approval, and then goes out to the suppliers you invite."
         action={
-          <Can action="create" subject="Account">
+          <Can action="create" subject="RFQ">
             <Button asChild variant="primary" leadingIcon={<Plus />}>
               <Link href="/rfqs/new">New RFQ</Link>
             </Button>
@@ -126,7 +126,7 @@ export function RfqList() {
         title="RFQs"
         description="Requests for quotation. What you asked for, who you asked, and what came back."
         actions={
-          <Can action="create" subject="Account">
+          <Can action="create" subject="RFQ">
             <Button asChild variant="primary" leadingIcon={<Plus />}>
               <Link href="/rfqs/new">New RFQ</Link>
             </Button>

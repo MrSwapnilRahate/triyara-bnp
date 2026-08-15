@@ -12,7 +12,7 @@ import { z } from 'zod'
  * present-and-ignored.
  *
  * `unitCost` is optional and internal. It is what drives margin, and the API
- * redacts it from anyone who cannot `manage Account` - so a user who cannot see
+ * redacts it from anyone who cannot `manage Quotation` - so a user who cannot see
  * it also should not be asked for it. The editor hides the field in that case
  * rather than sending back a value the server would have to reconcile.
  */

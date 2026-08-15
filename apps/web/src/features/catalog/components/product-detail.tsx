@@ -77,13 +77,13 @@ export function ProductDetail({ id }: { id: string }) {
           },
         ]}
         actions={
-          // ReferenceData writes are ADMIN-only, so an export manager sees a
+          // `Product` writes are ADMIN-only, so an export manager sees a
           // read-only page rather than buttons that would 403.
-          <Can action="update" subject="ReferenceData">
+          <Can action="update" subject="Product">
             <Button asChild variant="secondary" leadingIcon={<Pencil />}>
               <Link href={`/catalog/products/${product.id}/edit`}>Edit</Link>
             </Button>
-            <Can action="delete" subject="ReferenceData">
+            <Can action="delete" subject="Product">
               <Button variant="ghost" leadingIcon={<Trash2 />} onClick={() => setConfirmOpen(true)}>
                 Delete
               </Button>

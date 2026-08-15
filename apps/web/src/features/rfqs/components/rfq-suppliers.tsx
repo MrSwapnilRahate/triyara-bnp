@@ -84,7 +84,7 @@ export function RfqSuppliers({ rfq }: { rfq: Rfq }) {
             : `${items.length} invited · ${submitted} submitted`}
         </p>
         {roundOpen ? (
-          <Can action="update" subject="Account">
+          <Can action="update" subject="RFQ">
             <Button
               variant="secondary"
               size="sm"
@@ -169,14 +169,14 @@ export function RfqSuppliers({ rfq }: { rfq: Rfq }) {
                     <DataTableCell className="text-right">
                       {participation.id === awardedParticipationId ? null : canAward &&
                         participation.submittedAt ? (
-                        // `manage Account`, not `update`: committing to a
+                        // `manage RFQ`, not `update`: committing to a
                         // supplier is a different authority from editing the RFQ.
-                        <Can action="manage" subject="Account">
+                        <Can action="manage" subject="RFQ">
                           <AwardButton rfq={rfq} participation={participation} />
                         </Can>
                       ) : roundOpen &&
                         !['SUBMITTED', 'DECLINED', 'WITHDRAWN'].includes(participation.status) ? (
-                        <Can action="update" subject="Account">
+                        <Can action="update" subject="RFQ">
                           <DeclineButton rfqId={rfq.id} participation={participation} />
                         </Can>
                       ) : null}

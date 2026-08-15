@@ -52,7 +52,7 @@ function BlockedAction({
  *      a move that is not legal from here is a guaranteed 409 - and a button
  *      that always fails is worse than no button.
  *   2. CASL, matching the service. Send, accept, expire and the decisions need
- *      `update Account`; WITHDRAW needs `delete Account` (ADMIN only), because
+ *      `update Quotation`; WITHDRAW needs `delete Quotation` (ADMIN only), because
  *      the service implements it as a soft delete.
  *
  * Approval carries a third condition the UI cannot evaluate: above the value
@@ -105,7 +105,7 @@ export function QuotationWorkflowActions({
     <>
       {/* DRAFT -> PENDING_APPROVAL. The decision with no dedicated endpoint. */}
       {canMoveTo(status, 'PENDING_APPROVAL') ? (
-        <Can action="update" subject="Account">
+        <Can action="update" subject="Quotation">
           <BlockedAction
             reason={noLines ? 'Add at least one line before requesting approval.' : null}
           >
@@ -125,7 +125,7 @@ export function QuotationWorkflowActions({
       ) : null}
 
       {canMoveTo(status, 'APPROVED') ? (
-        <Can action="update" subject="Account">
+        <Can action="update" subject="Quotation">
           <BlockedAction
             reason={noLines ? 'A quotation needs priced lines before approval.' : null}
           >
@@ -146,7 +146,7 @@ export function QuotationWorkflowActions({
       ) : null}
 
       {canMoveTo(status, 'REJECTED') ? (
-        <Can action="update" subject="Account">
+        <Can action="update" subject="Quotation">
           <Button
             variant="ghost"
             leadingIcon={<XCircle />}
@@ -159,7 +159,7 @@ export function QuotationWorkflowActions({
       ) : null}
 
       {canMoveTo(status, 'SENT') ? (
-        <Can action="update" subject="Account">
+        <Can action="update" subject="Quotation">
           <Button
             variant="primary"
             leadingIcon={<Send />}
@@ -172,7 +172,7 @@ export function QuotationWorkflowActions({
       ) : null}
 
       {canMoveTo(status, 'ACCEPTED') ? (
-        <Can action="update" subject="Account">
+        <Can action="update" subject="Quotation">
           <Button
             variant="primary"
             leadingIcon={<ThumbsUp />}
@@ -185,7 +185,7 @@ export function QuotationWorkflowActions({
       ) : null}
 
       {canMoveTo(status, 'EXPIRED') ? (
-        <Can action="update" subject="Account">
+        <Can action="update" subject="Quotation">
           <Button
             variant="secondary"
             leadingIcon={<Clock />}
@@ -198,7 +198,7 @@ export function QuotationWorkflowActions({
       ) : null}
 
       {/* Withdraw needs `delete`, so it is invisible to EXPORT_MANAGER. */}
-      {canMoveTo(status, 'WITHDRAWN') && ability.can('delete', 'Account') ? (
+      {canMoveTo(status, 'WITHDRAWN') && ability.can('delete', 'Quotation') ? (
         <Button
           variant="ghost"
           leadingIcon={<Trash2 />}

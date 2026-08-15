@@ -112,7 +112,7 @@ export function ProductList() {
         title="No products yet"
         description="Products are the catalog entries every RFQ and quotation line references."
         action={
-          <Can action="create" subject="ReferenceData">
+          <Can action="create" subject="Product">
             <Button asChild variant="primary" leadingIcon={<Plus />}>
               <Link href="/catalog/products/new">New product</Link>
             </Button>
@@ -127,10 +127,10 @@ export function ProductList() {
         title="Products"
         description="Catalog master data. Every RFQ and quotation line references a product here."
         actions={
-          // Catalog is governed by ReferenceData, which only ADMIN can write.
+          // The catalogue is governed by `Product`, which only ADMIN can write.
           // Hidden rather than disabled: a greyed button teaches an export
           // manager only that something exists they cannot have (§4, §6).
-          <Can action="create" subject="ReferenceData">
+          <Can action="create" subject="Product">
             <Button asChild variant="primary" leadingIcon={<Plus />}>
               <Link href="/catalog/products/new">New product</Link>
             </Button>

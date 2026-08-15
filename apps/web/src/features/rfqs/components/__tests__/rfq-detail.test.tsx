@@ -133,7 +133,7 @@ describe('RfqDetail', () => {
   })
 
   describe('authorization', () => {
-    it('hides Reopen from EXPORT_MANAGER, which lacks manage Account', async () => {
+    it('hides Reopen from EXPORT_MANAGER, which lacks manage RFQ', async () => {
       server.use(...handlers(makeRfq({ status: 'CANCELLED' })))
       renderWithProviders(<RfqDetail id="r1" />, { roles: ['EXPORT_MANAGER'] })
 
