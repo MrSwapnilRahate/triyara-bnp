@@ -221,6 +221,25 @@ export function useDecideQuotation(id: string) {
  * Account` (ADMIN) and hides the record from default list queries - both of
  * which the UI states plainly rather than papering over.
  */
+/**
+ * Undoes a withdrawal. `manage Quotation` - ADMIN only, deliberately stricter
+ * than the other domains: a quotation a buyer has seen is a record, so putting
+ * it back is an administrative act rather than an edit.
+ */
+export function useRestoreQuotation(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (version: number) => {
+      const result = await api.post<Quotation>(`${BASE}/${id}/restore`, undefined, { version })
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: quotationKeys.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: quotationKeys.all })
+    },
+  })
+}
+
 export function useWithdrawQuotation(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
