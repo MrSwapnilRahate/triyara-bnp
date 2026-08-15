@@ -4,7 +4,7 @@ import { ConflictError, NotFoundError, PreconditionFailedError } from '@triyara/
 import { writeAudit } from '../audit'
 import { prisma } from '../client'
 import { decodeCursor, encodeCursor, type MutationCtx } from './account.repository'
-import { assertBuyerInOrg, assertProductsInOrg } from './tenant-refs'
+import { assertBuyerInOrg, assertPaymentTermInOrg, assertProductsInOrg } from './tenant-refs'
 
 // Quotation aggregate (TRY-BNP-QUOTE-01).
 //
@@ -264,6 +264,7 @@ export const quotationRepository = {
     try {
       return await prisma.$transaction(async (tx) => {
         await assertBuyerInOrg(tx, ctx.organizationId, data.buyerId)
+        await assertPaymentTermInOrg(tx, ctx.organizationId, data.paymentTermId)
         await assertProductsInOrg(
           tx,
           ctx.organizationId,
@@ -426,6 +427,7 @@ export const quotationRepository = {
     try {
       return await prisma.$transaction(async (tx) => {
         await assertBuyerInOrg(tx, ctx.organizationId, data.buyerId)
+        await assertPaymentTermInOrg(tx, ctx.organizationId, data.paymentTermId)
 
         const before = await tx.quotation.findFirst({
           where: { id, organizationId: ctx.organizationId, deletedAt: null },

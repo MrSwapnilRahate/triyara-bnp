@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { prisma } from '../client'
+import { accountRepository } from './account.repository'
 import { quotationRepository } from './quotation.repository'
 import { rfqRepository } from './rfq.repository'
 
@@ -251,5 +252,208 @@ describe.skipIf(!process.env.DATABASE_URL)('cross-tenant references (integration
     expect(message).toContain(foreignProductId)
     expect(message).not.toContain(foreignSku)
     expect(message).not.toMatch(/Tenant|confidential|xt-theirs/i)
+  })
+
+  describe('Account refuses an owner from another tenant', () => {
+    // The owner is chosen by id and `accountSelect` joins `owner` for the name
+    // and email, so an unchecked id put another tenant's person into a record
+    // the caller was entitled to read. Reproduced before it was closed.
+    let foreignUserId = ''
+    let ownUserId = ''
+    let foreignUserEmail = ''
+
+    beforeAll(async () => {
+      const mine = await prisma.user.findFirstOrThrow({ where: { email: 'xt-mine@triyara.test' } })
+      const theirs = await prisma.user.findFirstOrThrow({
+        where: { email: 'xt-theirs@triyara.test' },
+      })
+      ownUserId = mine.id
+      foreignUserId = theirs.id
+      foreignUserEmail = theirs.email
+    })
+
+    it('rejects a foreign ownerId on create, and writes nothing', async () => {
+      const legalName = `Owner probe ${uniq()}`
+      await expect(
+        accountRepository.create(ctx, { legalName, ownerId: foreignUserId } as never),
+      ).rejects.toThrow(/User not found/)
+
+      expect(await prisma.account.findFirst({ where: { legalName } })).toBeNull()
+    })
+
+    it('accepts an owner from the caller own tenant', async () => {
+      const created = await accountRepository.create(ctx, {
+        legalName: `Owner ok ${uniq()}`,
+        ownerId: ownUserId,
+      } as never)
+      expect(created.ownerId).toBe(ownUserId)
+    })
+
+    it('still allows an account with no owner', async () => {
+      // `null` clears the assignment; the check must not turn that into an error.
+      const created = await accountRepository.create(ctx, {
+        legalName: `Owner none ${uniq()}`,
+      } as never)
+      expect(created.ownerId).toBeNull()
+    })
+
+    it('rejects a foreign owner on update and leaves the existing one intact', async () => {
+      // assignOwner and the bulk assign_owner action both arrive through mutate.
+      const created = await accountRepository.create(ctx, {
+        legalName: `Owner keep ${uniq()}`,
+        ownerId: ownUserId,
+      } as never)
+
+      await expect(
+        accountRepository.mutate(
+          ctx,
+          created.id,
+          created.version,
+          { ownerId: foreignUserId } as never,
+          'account.assigned',
+        ),
+      ).rejects.toThrow(/User not found/)
+
+      const after = await prisma.account.findUniqueOrThrow({ where: { id: created.id } })
+      expect(after.ownerId).toBe(ownUserId)
+    })
+
+    it('never returns the foreign user details in the refusal', async () => {
+      const error = await accountRepository
+        .create(ctx, { legalName: `Owner leak ${uniq()}`, ownerId: foreignUserId } as never)
+        .catch((e: Error) => e)
+
+      const message = (error as Error).message
+      expect(message).toContain(foreignUserId)
+      expect(message).not.toContain(foreignUserEmail)
+      expect(message).not.toMatch(/xt-theirs/i)
+    })
+  })
+
+  describe('Quotation refuses a payment term from another tenant', () => {
+    // Quotation detail joins paymentTerm for code, name, net days and advance
+    // percent - a tenant's commercial terms. Reproduced before it was closed.
+    let foreignTermId = ''
+    let ownTermId = ''
+    let foreignTermName = ''
+
+    beforeAll(async () => {
+      const theirOrg = await prisma.organization.findFirstOrThrow({
+        where: { slug: 'xt-theirs' },
+      })
+      const foreign = await prisma.paymentTerm.create({
+        data: {
+          organizationId: theirOrg.id,
+          code: num('FOR'),
+          name: `Foreign terms ${uniq()}`,
+          netDays: 45,
+        },
+      })
+      const own = await prisma.paymentTerm.create({
+        data: {
+          organizationId: ctx.organizationId,
+          code: num('OWN'),
+          name: 'Own terms',
+          netDays: 30,
+        },
+      })
+      foreignTermId = foreign.id
+      foreignTermName = foreign.name
+      ownTermId = own.id
+    })
+
+    const header = (over: Record<string, unknown> = {}) => ({
+      quotationNumber: num('Q'),
+      type: 'FIRM' as const,
+      title: 'Payment term probe',
+      buyerId: ownBuyerId,
+      currency: 'USD',
+      baseCurrency: 'USD',
+      validUntil: new Date(Date.now() + 86_400_000),
+      ...over,
+    })
+    const freeLine = () => ({
+      productId: null,
+      customProductName: 'Free text',
+      description: 'L',
+      quantity: 1,
+      unit: 'KG',
+      unitPrice: 10,
+    })
+    const sums = () => ({
+      subtotal: 10,
+      chargesTotal: 0,
+      discountTotal: 0,
+      taxTotal: 0,
+      grandTotal: 10,
+    })
+
+    it('rejects a foreign paymentTermId on create, and writes nothing', async () => {
+      const quotationNumber = num('Q')
+      await expect(
+        quotationRepository.create(
+          ctx,
+          header({ quotationNumber, paymentTermId: foreignTermId }) as never,
+          [freeLine()] as never,
+          sums() as never,
+        ),
+      ).rejects.toThrow(/Payment term not found/)
+
+      expect(await prisma.quotation.findFirst({ where: { quotationNumber } })).toBeNull()
+    })
+
+    it('accepts a payment term from the caller own tenant', async () => {
+      const created = await quotationRepository.create(
+        ctx,
+        header({ paymentTermId: ownTermId }) as never,
+        [freeLine()] as never,
+        sums() as never,
+      )
+      expect(created.paymentTermId).toBe(ownTermId)
+    })
+
+    it('still allows a quotation with no payment term', async () => {
+      const created = await quotationRepository.create(
+        ctx,
+        header() as never,
+        [freeLine()] as never,
+        sums() as never,
+      )
+      expect(created.paymentTermId).toBeNull()
+    })
+
+    it('rejects a foreign payment term on update and leaves the existing one', async () => {
+      const created = await quotationRepository.create(
+        ctx,
+        header({ paymentTermId: ownTermId }) as never,
+        [freeLine()] as never,
+        sums() as never,
+      )
+
+      await expect(
+        quotationRepository.mutate(ctx, created.id, created.version, {
+          paymentTermId: foreignTermId,
+        } as never),
+      ).rejects.toThrow(/Payment term not found/)
+
+      const after = await prisma.quotation.findUniqueOrThrow({ where: { id: created.id } })
+      expect(after.paymentTermId).toBe(ownTermId)
+    })
+
+    it('never returns the foreign payment term details in the refusal', async () => {
+      const error = await quotationRepository
+        .create(
+          ctx,
+          header({ paymentTermId: foreignTermId }) as never,
+          [freeLine()] as never,
+          sums() as never,
+        )
+        .catch((e: Error) => e)
+
+      const message = (error as Error).message
+      expect(message).toContain(foreignTermId)
+      expect(message).not.toContain(foreignTermName)
+      expect(message).not.toMatch(/xt-theirs/i)
+    })
   })
 })
