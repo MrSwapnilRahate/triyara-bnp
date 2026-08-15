@@ -84,5 +84,23 @@ describe('visibleNavigation', () => {
     )
     expect(hrefs).toContain('/dashboard')
     expect(new Set(hrefs).size).toBe(hrefs.length)
+
+    // The reminder above, made enforceable. `/admin/api-docs` had no page and
+    // was shown to ADMIN for months, so the entry pointed at a 404 rather than
+    // being caught by the rule this test describes.
+    expect(hrefs).not.toContain('/admin/api-docs')
+  })
+
+  it('offers no admin entry that lacks a page', () => {
+    // The registry may only name screens that exist. Listed explicitly rather
+    // than globbed: a filesystem check here would pass on a directory with no
+    // page.tsx in it, which is exactly the shape of the entry that got through.
+    const built = ['/admin/users', '/admin/access-requests', '/admin/organization', '/admin/audit']
+    const adminHrefs = visibleNavigation(buildAbilityFor(['ADMIN']))
+      .flatMap((g) => g.items)
+      .map((i) => i.href)
+      .filter((h) => h.startsWith('/admin/'))
+
+    expect(adminHrefs.sort()).toEqual([...built].sort())
   })
 })
