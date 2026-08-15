@@ -108,6 +108,27 @@ export function useDeleteRfq() {
   })
 }
 
+/**
+ * Undoes a soft delete. `update RFQ`, so ADMIN and EXPORT_MANAGER both
+ * reach it - the same pair that may edit an RFQ.
+ *
+ * Sends If-Match with the version from the deleted record, so a stale tab
+ * cannot resurrect something another administrator has since changed.
+ */
+export function useRestoreRfq() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      const result = await api.post<Rfq>(`${BASE}/${id}/restore`, undefined, { version })
+      return result.data
+    },
+    onSuccess: (rfq) => {
+      void queryClient.invalidateQueries({ queryKey: rfqKeys.detail(rfq.id) })
+      void queryClient.invalidateQueries({ queryKey: rfqKeys.all })
+    },
+  })
+}
+
 // ---- Line items ----
 
 export function useRfqItems(id: string | undefined) {

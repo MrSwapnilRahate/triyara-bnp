@@ -93,6 +93,25 @@ export function useUpdateCategory() {
   })
 }
 
+/**
+ * Undoes a soft delete. `update Category` - ADMIN only, matching the rest of
+ * the catalogue's write boundary.
+ */
+export function useRestoreCategory() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      const result = await api.post<Category>(`/api/catalog/categories/${id}/restore`, undefined, {
+        version,
+      })
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: catalogKeys.categories() })
+    },
+  })
+}
+
 export function useDeleteCategory() {
   const queryClient = useQueryClient()
   return useMutation({

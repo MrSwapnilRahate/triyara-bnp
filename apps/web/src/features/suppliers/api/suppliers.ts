@@ -87,6 +87,24 @@ export function useUpdateSupplier(id: string) {
   })
 }
 
+/**
+ * Undoes a soft delete. `update Supplier`, so ADMIN and EXPORT_MANAGER both
+ * reach it - the same pair that maintains the supplier master.
+ */
+export function useRestoreSupplier() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      const result = await api.post<Supplier>(`${BASE}/${id}/restore`, undefined, { version })
+      return result.data
+    },
+    onSuccess: (supplier) => {
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplier.id) })
+      void queryClient.invalidateQueries({ queryKey: supplierKeys.all })
+    },
+  })
+}
+
 export function useDeleteSupplier() {
   const queryClient = useQueryClient()
   return useMutation({

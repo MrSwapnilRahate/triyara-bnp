@@ -82,6 +82,24 @@ export function useUpdateProduct(id: string) {
   })
 }
 
+/**
+ * Undoes a soft delete. `update Product` - ADMIN only, since the catalogue is
+ * readable by every role but writable by ADMIN alone.
+ */
+export function useRestoreProduct() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      const result = await api.post<Product>(`${BASE}/${id}/restore`, undefined, { version })
+      return result.data
+    },
+    onSuccess: (product) => {
+      void queryClient.invalidateQueries({ queryKey: catalogKeys.product(product.id) })
+      void queryClient.invalidateQueries({ queryKey: catalogKeys.products() })
+    },
+  })
+}
+
 export function useDeleteProduct() {
   const queryClient = useQueryClient()
   return useMutation({
