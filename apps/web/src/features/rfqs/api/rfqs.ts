@@ -86,6 +86,28 @@ export function useUpdateRfq(id: string) {
   })
 }
 
+/**
+ * Soft-deletes an RFQ. `delete RFQ` is ADMIN-only, so the control that calls
+ * this is gated the same way; the API refuses anyone else regardless.
+ *
+ * The detail entry is removed rather than invalidated: refetching a record the
+ * list no longer returns would only produce a 404 for a screen the caller is
+ * navigating away from.
+ */
+export function useDeleteRfq() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, version }: { id: string; version: number }) => {
+      await api.delete(`${BASE}/${id}`, version)
+      return id
+    },
+    onSuccess: (id) => {
+      queryClient.removeQueries({ queryKey: rfqKeys.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: rfqKeys.all })
+    },
+  })
+}
+
 // ---- Line items ----
 
 export function useRfqItems(id: string | undefined) {

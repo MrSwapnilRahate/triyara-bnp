@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { buildAbilityFor } from '@triyara/auth'
 import { describe, expect, it } from 'vitest'
 
@@ -91,16 +94,34 @@ describe('visibleNavigation', () => {
     expect(hrefs).not.toContain('/admin/api-docs')
   })
 
-  it('offers no admin entry that lacks a page', () => {
-    // The registry may only name screens that exist. Listed explicitly rather
-    // than globbed: a filesystem check here would pass on a directory with no
-    // page.tsx in it, which is exactly the shape of the entry that got through.
-    const built = ['/admin/users', '/admin/access-requests', '/admin/organization', '/admin/audit']
-    const adminHrefs = visibleNavigation(buildAbilityFor(['ADMIN']))
+  it('names only routes that have a page, across the whole registry', () => {
+    // The invariant this file has claimed since it was written, finally applied
+    // to EVERY entry rather than one section. Scoping an earlier version to
+    // `/admin/` is why `/catalog/specifications` and `/catalog/tags` sat in the
+    // sidebar pointing at 404s - ungated, so every role saw them.
+    //
+    // Resolved against the filesystem, so a new entry is checked automatically
+    // and no list here can go stale. `page.tsx` specifically: a directory alone
+    // does not make a route, which is the exact shape that slipped through.
+    const appDir = join(process.cwd(), 'src/app/(app)')
+    const hrefs = visibleNavigation(buildAbilityFor(['ADMIN']))
       .flatMap((g) => g.items)
       .map((i) => i.href)
-      .filter((h) => h.startsWith('/admin/'))
 
-    expect(adminHrefs.sort()).toEqual([...built].sort())
+    const missing = hrefs.filter((h) => !existsSync(join(appDir, h, 'page.tsx')))
+    expect(missing).toEqual([])
+  })
+
+  it('checks the registry against every role, not only ADMIN', () => {
+    // ADMIN sees the most, but an entry with no `requires` is shown to everyone
+    // - which is what made the two catalog entries reachable by READ_ONLY.
+    const appDir = join(process.cwd(), 'src/app/(app)')
+    for (const role of ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+      const missing = visibleNavigation(buildAbilityFor([role]))
+        .flatMap((g) => g.items)
+        .map((i) => i.href)
+        .filter((h) => !existsSync(join(appDir, h, 'page.tsx')))
+      expect(missing, role).toEqual([])
+    }
   })
 })
