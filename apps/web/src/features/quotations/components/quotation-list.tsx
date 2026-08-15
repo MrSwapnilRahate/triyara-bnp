@@ -118,7 +118,7 @@ export function QuotationList() {
         title="No quotations yet"
         description="A quotation is the priced offer you send a buyer. It starts in draft, goes through approval, and becomes a commitment once sent."
         action={
-          <Can action="create" subject="Account">
+          <Can action="create" subject="Quotation">
             <Button asChild variant="primary" leadingIcon={<Plus />}>
               <Link href="/quotations/new">New quotation</Link>
             </Button>
@@ -133,7 +133,7 @@ export function QuotationList() {
         title="Quotations"
         description="Priced offers to buyers. What you quoted, at what terms, and where it stands."
         actions={
-          <Can action="create" subject="Account">
+          <Can action="create" subject="Quotation">
             <Button asChild variant="primary" leadingIcon={<Plus />}>
               <Link href="/quotations/new">New quotation</Link>
             </Button>

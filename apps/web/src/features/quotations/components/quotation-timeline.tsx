@@ -29,7 +29,7 @@ interface TimelineEntry {
  *
  * An approval row carries the threshold and margin AT DECISION TIME, which is
  * what lets an auditor see why approval was required. `marginPercent` is null
- * for a caller who cannot `manage Account`; that absence is rendered as absence.
+ * for a caller who cannot `manage Quotation`; that absence is rendered as absence.
  */
 export function QuotationTimeline({ quotation }: { quotation: Quotation }) {
   const approvals = useApprovals(quotation.id)

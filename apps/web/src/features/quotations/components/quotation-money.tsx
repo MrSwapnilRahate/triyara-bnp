@@ -57,7 +57,7 @@ export function QuotationTotals({ quotation }: { quotation: Quotation }) {
             </dd>
           </div>
 
-          {/* Cost and margin are null for anyone who cannot `manage Account`.
+          {/* Cost and margin are null for anyone who cannot `manage Quotation`.
               The rows are omitted rather than shown empty: an empty margin
               field invites the reader to wonder what the number is. */}
           {quotation.marginPercent !== null || quotation.costTotal !== null ? (

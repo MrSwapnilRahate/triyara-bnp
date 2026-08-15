@@ -66,7 +66,7 @@ export function QuotationForm({ quotation, version }: { quotation?: Quotation; v
   const toast = useToast()
   const ability = useAbility()
   const isEdit = Boolean(quotation)
-  const showCost = ability.can('manage', 'Account')
+  const showCost = ability.can('manage', 'Quotation')
 
   const create = useCreateQuotation()
   const update = useUpdateQuotation(quotation?.id ?? '')

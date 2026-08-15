@@ -98,14 +98,14 @@ export function QuotationDetail({ id }: { id: string }) {
       actions={
         <>
           {editable ? (
-            <Can action="update" subject="Account">
+            <Can action="update" subject="Quotation">
               <Button asChild variant="ghost" leadingIcon={<Pencil />}>
                 <Link href={`/quotations/${quotation.id}/edit`}>Edit</Link>
               </Button>
             </Can>
           ) : null}
           {canRevise(quotation) ? (
-            <Can action="update" subject="Account">
+            <Can action="update" subject="Quotation">
               <Button asChild variant="secondary" leadingIcon={<GitBranch />}>
                 <Link href={`/quotations/${quotation.id}/revise`}>Revise</Link>
               </Button>
@@ -217,7 +217,7 @@ export function QuotationDetail({ id }: { id: string }) {
                 {costHidden ? ' · cost and margin are not visible to your role' : ''}
               </p>
               {editable ? (
-                <Can action="update" subject="Account">
+                <Can action="update" subject="Quotation">
                   <Button asChild size="sm" variant="secondary" leadingIcon={<ListPlus />}>
                     <Link href={`/quotations/${quotation.id}/items`}>Edit lines</Link>
                   </Button>
@@ -232,7 +232,7 @@ export function QuotationDetail({ id }: { id: string }) {
                 title="No lines yet"
                 description="A quotation needs at least one priced line before it can be approved."
                 action={
-                  <Can action="update" subject="Account">
+                  <Can action="update" subject="Quotation">
                     <Button asChild variant="primary">
                       <Link href={`/quotations/${quotation.id}/items`}>Add lines</Link>
                     </Button>
@@ -305,7 +305,7 @@ export function QuotationDetail({ id }: { id: string }) {
           <TabsContent value="charges" className="space-y-gap-lg p-gutter">
             {editable ? (
               <div className="flex justify-end">
-                <Can action="update" subject="Account">
+                <Can action="update" subject="Quotation">
                   <Button asChild size="sm" variant="secondary" leadingIcon={<Receipt />}>
                     <Link href={`/quotations/${quotation.id}/conditions`}>
                       Edit charges and taxes

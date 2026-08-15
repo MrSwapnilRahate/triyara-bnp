@@ -119,7 +119,7 @@ export const quotation = (over: Partial<Quotation> = {}): Quotation => ({
   ...over,
 })
 
-/** The same quotation as seen by a role that cannot `manage Account`. */
+/** The same quotation as seen by a role that cannot `manage Quotation`. */
 export const redacted = (over: Partial<Quotation> = {}): Quotation =>
   quotation({
     costTotal: null,

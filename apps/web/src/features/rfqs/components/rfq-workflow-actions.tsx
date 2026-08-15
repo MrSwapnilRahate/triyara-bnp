@@ -15,8 +15,8 @@ import { canClose, canPublish, canReopen, type Rfq, RFQ_TRANSITIONS } from '../t
  *
  * Two independent gates decide whether a button appears, and both must pass:
  *
- *   1. Authorization. Publish and close need `update Account`; reopen and the
- *      approval decisions need `manage Account`, which only ADMIN holds. These
+ *   1. Authorization. Publish and close need `update RFQ`; reopen and the
+ *      approval decisions need `manage RFQ`, which only ADMIN holds. These
  *      mirror rfq.service.ts exactly - the UI hides what the API would refuse
  *      rather than offering it and rendering a 403.
  *   2. The state machine. A move that is not in TRANSITIONS from here is a
@@ -73,7 +73,7 @@ export function RfqWorkflowActions({ rfq, version }: { rfq: Rfq; version: number
 
   const allowed = RFQ_TRANSITIONS[rfq.status]
   const noSuppliers = rfq.suppliers.length === 0
-  const canManage = ability.can('manage', 'Account')
+  const canManage = ability.can('manage', 'RFQ')
 
   async function submitDecision(decision: 'PENDING' | 'APPROVED' | 'REJECTED') {
     try {
@@ -94,7 +94,7 @@ export function RfqWorkflowActions({ rfq, version }: { rfq: Rfq; version: number
     <>
       {/* DRAFT -> PENDING_APPROVAL. Anyone who can update may ask for approval. */}
       {allowed.includes('PENDING_APPROVAL') ? (
-        <Can action="update" subject="Account">
+        <Can action="update" subject="RFQ">
           <BlockedAction
             reason={
               rfq.items.length === 0 ? 'Add at least one line before requesting approval.' : null
@@ -139,7 +139,7 @@ export function RfqWorkflowActions({ rfq, version }: { rfq: Rfq; version: number
 
       {/* APPROVED -> ISSUED. */}
       {rfq.status === 'APPROVED' ? (
-        <Can action="update" subject="Account">
+        <Can action="update" subject="RFQ">
           <BlockedAction
             reason={noSuppliers ? 'Invite at least one supplier before publishing.' : null}
           >
@@ -160,7 +160,7 @@ export function RfqWorkflowActions({ rfq, version }: { rfq: Rfq; version: number
       ) : null}
 
       {canClose(rfq.status) ? (
-        <Can action="update" subject="Account">
+        <Can action="update" subject="RFQ">
           <Button
             variant="secondary"
             loading={close.isPending}
@@ -173,7 +173,7 @@ export function RfqWorkflowActions({ rfq, version }: { rfq: Rfq; version: number
 
       {/* Reopen needs `manage`, so it is invisible to EXPORT_MANAGER. */}
       {canReopen(rfq.status) ? (
-        <Can action="manage" subject="Account">
+        <Can action="manage" subject="RFQ">
           <Button
             variant="secondary"
             leadingIcon={<RotateCcw />}

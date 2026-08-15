@@ -8,7 +8,7 @@ import type { QuotationStatusName } from '@triyara/validation'
  * to state. Formatting happens at the edge; the canonical value stays a string.
  *
  * `unitCost` and `marginPercent` are `string | null` rather than optional. The
- * service NULLS them for any caller who cannot `manage Account` - so null means
+ * service NULLS them for any caller who cannot `manage Quotation` - so null means
  * "you may not see this", and the UI must render that absence rather than try
  * to reconstruct the number from anything else.
  */
@@ -56,9 +56,9 @@ export interface QuotationItem {
   rfqItemId: string | null
   quantity: string
   unit: string
-  /** Null when the caller cannot `manage Account`. Never inferred. */
+  /** Null when the caller cannot `manage Quotation`. Never inferred. */
   unitCost: string | null
-  /** Null when the caller cannot `manage Account`. Never inferred. */
+  /** Null when the caller cannot `manage Quotation`. Never inferred. */
   marginPercent: string | null
   unitPrice: string
   lineSubtotal: string
@@ -111,9 +111,9 @@ export interface Quotation extends QuotationListItem {
   leadTimeDays: number | null
   packingSummary: string | null
   samplingTerms: string | null
-  /** Null when the caller cannot `manage Account`. */
+  /** Null when the caller cannot `manage Quotation`. */
   costTotal: string | null
-  /** Null when the caller cannot `manage Account`. */
+  /** Null when the caller cannot `manage Quotation`. */
   marginPercent: string | null
   rejectedAt: string | null
   rejectionReason: string | null

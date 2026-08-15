@@ -129,7 +129,7 @@ describe('ProductList', () => {
       expect(screen.getByRole('link', { name: 'New product' })).toBeInTheDocument()
     })
 
-    it('HIDES New product from an EXPORT_MANAGER - the catalog is ReferenceData', async () => {
+    it('HIDES New product from an EXPORT_MANAGER - the catalogue is ADMIN-write', async () => {
       server.use(...handlers())
       renderWithProviders(<ProductList />, { roles: ['EXPORT_MANAGER'] })
       await screen.findByRole('table')

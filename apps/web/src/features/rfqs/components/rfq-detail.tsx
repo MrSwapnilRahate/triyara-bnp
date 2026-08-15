@@ -93,7 +93,7 @@ export function RfqDetail({ id }: { id: string }) {
       ]}
       actions={
         <>
-          <Can action="update" subject="Account">
+          <Can action="update" subject="RFQ">
             <Button asChild variant="ghost" leadingIcon={<Pencil />}>
               <Link href={`/rfqs/${rfq.id}/edit`}>Edit</Link>
             </Button>
@@ -131,7 +131,7 @@ export function RfqDetail({ id }: { id: string }) {
                 {rfq.currentRevision}
               </p>
               {!linesFrozen ? (
-                <Can action="update" subject="Account">
+                <Can action="update" subject="RFQ">
                   <Button asChild size="sm" variant="secondary" leadingIcon={<ListPlus />}>
                     <Link href={`/rfqs/${rfq.id}/items`}>Revise lines</Link>
                   </Button>
@@ -146,7 +146,7 @@ export function RfqDetail({ id }: { id: string }) {
                 title="No lines yet"
                 description="An RFQ needs at least one line before it can be approved."
                 action={
-                  <Can action="update" subject="Account">
+                  <Can action="update" subject="RFQ">
                     <Button asChild variant="primary">
                       <Link href={`/rfqs/${rfq.id}/items`}>Add lines</Link>
                     </Button>

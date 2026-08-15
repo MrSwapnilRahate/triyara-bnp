@@ -68,7 +68,7 @@ describe('QuotationDetail', () => {
     })
 
     it('omits cost and margin entirely when the API redacted them', async () => {
-      // The API nulls these for a caller without `manage Account`. The UI must
+      // The API nulls these for a caller without `manage Quotation`. The UI must
       // not render an empty margin row - that invites the reader to wonder what
       // the number is - and must never reconstruct it from price and total.
       const user = userEvent.setup()
@@ -182,7 +182,7 @@ describe('QuotationDetail', () => {
   })
 
   describe('authorization', () => {
-    it('hides Withdraw from EXPORT_MANAGER, which lacks delete Account', async () => {
+    it('hides Withdraw from EXPORT_MANAGER, which lacks delete Quotation', async () => {
       server.use(...handlers(makeQuotation()))
       renderWithProviders(<QuotationDetail id="q1" />, { roles: ['EXPORT_MANAGER'] })
       await screen.findByText('Q3 spice programme')

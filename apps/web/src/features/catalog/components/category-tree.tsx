@@ -51,7 +51,7 @@ export function CategoryTree() {
         title="Categories"
         description="Unlimited nesting. A product belongs to exactly one category; filters match a whole subtree."
         actions={
-          <Can action="create" subject="ReferenceData">
+          <Can action="create" subject="Category">
             <Button asChild variant="primary" leadingIcon={<Plus />}>
               <Link href="/catalog/categories/new">New category</Link>
             </Button>
@@ -76,7 +76,7 @@ export function CategoryTree() {
                 title="No categories yet"
                 description="Categories organise the catalog. Every product needs one."
                 action={
-                  <Can action="create" subject="ReferenceData">
+                  <Can action="create" subject="Category">
                     <Button asChild variant="primary" leadingIcon={<Plus />}>
                       <Link href="/catalog/categories/new">New category</Link>
                     </Button>

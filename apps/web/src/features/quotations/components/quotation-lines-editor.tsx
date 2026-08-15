@@ -45,7 +45,7 @@ export function QuotationLinesEditor({ id, mode }: { id: string; mode: 'replace'
   const replace = useReplaceItems(id)
   const revise = useReviseQuotation(id)
 
-  const showCost = ability.can('manage', 'Account')
+  const showCost = ability.can('manage', 'Quotation')
 
   const {
     control,
