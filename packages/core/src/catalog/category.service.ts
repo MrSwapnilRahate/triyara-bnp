@@ -51,6 +51,7 @@ export function createCategoryService({ repo, events }: CategoryServiceDeps) {
         pathPrefix: query.pathPrefix,
         isActive: query.isActive === undefined ? undefined : query.isActive === 'true',
         q: query.q,
+        includeDeleted: query.includeDeleted === 'true',
         limit: query.limit,
         cursor: query.cursor,
       })

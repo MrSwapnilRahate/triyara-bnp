@@ -62,6 +62,7 @@ const { RfqList } = await import('../rfqs/components/rfq-list')
 const { ProductList } = await import('../catalog/components/product-list')
 const { SupplierList } = await import('../suppliers/components/supplier-list')
 const { QuotationList } = await import('../quotations/components/quotation-list')
+const { CategoryTree } = await import('../catalog/components/category-tree')
 
 const holding = (...subjects: string[]): Pick<AppAbility, 'can'> => ({
   can: ((_a: string, s: string) => subjects.includes(s)) as AppAbility['can'],
@@ -367,5 +368,133 @@ describe('each list names the subject and action its own backend guard uses', ()
     renderWithProviders(<QuotationList />, { roles: [INJECT] })
 
     expect(await screen.findByRole('button', RESTORE)).toBeInTheDocument()
+  })
+})
+
+// ----------------------------------------------------------------- Category
+
+describe('deleted categories appear inline in the tree', () => {
+  const cat = (over: Record<string, unknown> = {}) => ({
+    id: 'c1',
+    name: 'Spices',
+    slug: 'spices',
+    description: null,
+    parentId: null,
+    path: '/spices',
+    depth: 0,
+    sortOrder: 0,
+    isActive: true,
+    version: 2,
+    deletedAt: null,
+    ...over,
+  })
+
+  const restoreCalls: Array<{ ifMatch: string | null }> = []
+
+  const tree = (rows: unknown[]) =>
+    server.use(
+      http.get('/api/catalog/categories', ({ request }) => {
+        // The tree always asks for deleted rows - there is no filter, by design.
+        expect(new URL(request.url).searchParams.get('includeDeleted')).toBe('true')
+        return HttpResponse.json(ok(rows, { nextCursor: null }))
+      }),
+      http.post('/api/catalog/categories/c1/restore', ({ request }) => {
+        restoreCalls.push({ ifMatch: request.headers.get('If-Match') })
+        return HttpResponse.json(ok(cat({ deletedAt: null, version: 3 })))
+      }),
+    )
+
+  it('shows a deleted category, struck through and not as a link', async () => {
+    search = new URLSearchParams()
+    injected = buildAbilityFor(['ADMIN'])
+    tree([cat({ deletedAt: DELETED_AT })])
+    renderWithProviders(<CategoryTree />, { roles: [INJECT] })
+
+    const name = await screen.findByText('Spices')
+    expect(name.className).toContain('line-through')
+    // An active category links to its filtered product list; a deleted one
+    // filters to nothing, so it must not be a link.
+    expect(screen.queryByRole('link', { name: 'Spices' })).not.toBeInTheDocument()
+  })
+
+  it('keeps an active category a link', async () => {
+    search = new URLSearchParams()
+    injected = buildAbilityFor(['ADMIN'])
+    tree([cat()])
+    renderWithProviders(<CategoryTree />, { roles: [INJECT] })
+
+    expect(await screen.findByRole('link', { name: 'Spices' })).toBeInTheDocument()
+  })
+
+  it('keeps a live child nested under a deleted parent', async () => {
+    // The reason deleted parents are fetched rather than hidden:
+    // buildCategoryTree treats a node whose parent is absent as a ROOT, so
+    // hiding the parent would silently promote the child to the top level.
+    search = new URLSearchParams()
+    injected = buildAbilityFor(['ADMIN'])
+    tree([
+      cat({ deletedAt: DELETED_AT }),
+      cat({ id: 'c2', name: 'Turmeric', parentId: 'c1', path: '/spices/turmeric', depth: 1 }),
+    ])
+    renderWithProviders(<CategoryTree />, { roles: [INJECT] })
+
+    const user = userEvent.setup()
+    await screen.findByText('Spices')
+    // Collapsed by default, so the child only renders once the deleted parent
+    // is expanded - which is itself the point: it is still a parent.
+    await user.click(screen.getByRole('button', { name: /expand spices/i }))
+
+    // The child sits inside the parent's group, not beside it at the root.
+    const group = await screen.findByRole('group')
+    expect(group).toHaveTextContent('Turmeric')
+  })
+
+  it('offers Restore to ADMIN', async () => {
+    search = new URLSearchParams()
+    injected = buildAbilityFor(['ADMIN'])
+    tree([cat({ deletedAt: DELETED_AT })])
+    renderWithProviders(<CategoryTree />, { roles: [INJECT] })
+
+    expect(await screen.findByRole('button', RESTORE)).toBeInTheDocument()
+  })
+
+  it('posts with the node version so a stale tree cannot resurrect it', async () => {
+    const user = userEvent.setup()
+    search = new URLSearchParams()
+    injected = buildAbilityFor(['ADMIN'])
+    restoreCalls.length = 0
+    tree([cat({ deletedAt: DELETED_AT })])
+    renderWithProviders(<CategoryTree />, { roles: [INJECT] })
+
+    await user.click(await screen.findByRole('button', RESTORE))
+    await user.click(await screen.findByRole('button', { name: /restore category/i }))
+
+    await waitFor(() => expect(restoreCalls).toHaveLength(1))
+    expect(restoreCalls[0]?.ifMatch).toBe('W/"v2"')
+  })
+
+  it.each(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[])(
+    'withholds Restore from %s',
+    async (role) => {
+      // The catalogue is readable by every role and writable by ADMIN alone,
+      // so even an export manager sees the deleted category but cannot act.
+      search = new URLSearchParams()
+      injected = buildAbilityFor([role])
+      tree([cat({ deletedAt: DELETED_AT })])
+      renderWithProviders(<CategoryTree />, { roles: [INJECT] })
+
+      await screen.findByText('Spices')
+      expect(screen.queryByRole('button', RESTORE)).not.toBeInTheDocument()
+    },
+  )
+
+  it('asks about Category, not a neighbouring catalogue subject', async () => {
+    search = new URLSearchParams()
+    injected = holding('Product')
+    tree([cat({ deletedAt: DELETED_AT })])
+    renderWithProviders(<CategoryTree />, { roles: [INJECT] })
+
+    await screen.findByText('Spices')
+    expect(screen.queryByRole('button', RESTORE)).not.toBeInTheDocument()
   })
 })

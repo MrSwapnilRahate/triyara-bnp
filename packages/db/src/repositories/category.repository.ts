@@ -57,6 +57,7 @@ export interface ListCategoriesParams {
   pathPrefix?: string
   isActive?: boolean
   q?: string
+  includeDeleted?: boolean
   limit: number
   cursor?: string
 }
@@ -143,7 +144,9 @@ export const categoryRepository = {
   async list(params: ListCategoriesParams): Promise<CategoryListResult> {
     const where: Prisma.CategoryWhereInput = {
       organizationId: params.organizationId,
-      deletedAt: null,
+      // Hidden by default, exactly as before; the tree asks for them so a
+      // deleted category can be found and restored.
+      ...(params.includeDeleted ? {} : { deletedAt: null }),
       ...(params.parentId ? { parentId: params.parentId } : {}),
       ...(params.pathPrefix ? { path: { startsWith: params.pathPrefix } } : {}),
       ...(params.isActive === undefined ? {} : { isActive: params.isActive }),
