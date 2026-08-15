@@ -25,8 +25,8 @@ import type {
  * occupying a request handler.
  *
  * Authorization mirrors contacts and certifications, the sibling
- * sub-resources: reading needs `read SupplierProfile`, writing needs `update
- * SupplierProfile`.
+ * sub-resources: reading needs `read Supplier`, writing needs `update
+ * Supplier`.
  */
 
 export type SupplierDocumentCtx = AuthContext & { requestId?: string }
@@ -87,7 +87,7 @@ export function createSupplierDocumentService({
 }: SupplierDocumentDeps) {
   return {
     async list(ctx: SupplierDocumentCtx, supplierId: string): Promise<SupplierDocumentRecord[]> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.list(ctx.organizationId, supplierId)
     },
 
@@ -101,7 +101,7 @@ export function createSupplierDocumentService({
       supplierId: string,
       dto: PresignSupplierDocumentDto,
     ): Promise<PresignedUpload> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       // Before issuing an upload target: a presigned URL for a supplier the
       // caller cannot see would be a write into someone else's namespace.
       await repo.assertVisible(ctx.organizationId, supplierId)
@@ -124,7 +124,7 @@ export function createSupplierDocumentService({
       supplierId: string,
       dto: SupplierDocumentDto,
     ): Promise<SupplierDocumentRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
       // Visibility first, storage second. Reversing these turns a 404 into a
       // 422 that confirms whether an object exists under someone else's
       // supplier.
@@ -171,7 +171,7 @@ export function createSupplierDocumentService({
       expectedVersion: number,
       dto: UpdateSupplierDocumentDto,
     ): Promise<SupplierDocumentRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
 
       const existing = await repo.findById(ctx.organizationId, supplierId, id)
       if (!existing) throw new NotFoundError('Document not found.')
@@ -213,7 +213,7 @@ export function createSupplierDocumentService({
       id: string,
       disposition: 'inline' | 'attachment' = 'attachment',
     ): Promise<string> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
 
       const document = await repo.findById(ctx.organizationId, supplierId, id)
       if (!document) throw new NotFoundError('Document not found.')
@@ -233,7 +233,7 @@ export function createSupplierDocumentService({
       id: string,
       expectedVersion: number,
     ): Promise<SupplierDocumentRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
 
       const document = await repo.remove(mutationCtx(ctx), supplierId, id, expectedVersion)
 

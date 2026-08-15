@@ -50,7 +50,7 @@ export function createSupplierMatchingService({ search, scores, history }: Match
       ctx: MatchingCtx,
       query: ListSuppliersQuery,
     ): Promise<ScoredSupplierListResult> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
 
       const page = await search(ctx, query)
       if (page.items.length === 0) return { ...page, scores: [] }
@@ -71,7 +71,7 @@ export function createSupplierMatchingService({ search, scores, history }: Match
 
     /** One supplier's score, for the detail drawer. */
     async score(ctx: MatchingCtx, supplierId: string): Promise<SupplierScore | null> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       await history.assertVisible(ctx.organizationId, supplierId)
 
       const signals = await scores.collectScoreSignals(ctx.organizationId, [supplierId])

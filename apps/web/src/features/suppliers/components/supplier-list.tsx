@@ -111,7 +111,7 @@ export function SupplierList() {
         title="No suppliers yet"
         description="Suppliers are the sourcing master record: who can supply what, and on what terms."
         action={
-          <Can action="create" subject="SupplierProfile">
+          <Can action="create" subject="Supplier">
             <Button asChild variant="primary" leadingIcon={<Plus />}>
               <Link href="/suppliers/new">New supplier</Link>
             </Button>
@@ -126,7 +126,7 @@ export function SupplierList() {
         title="Suppliers"
         description="Sourcing master data. Not a CRM - this is who can supply what, and on what terms."
         actions={
-          <Can action="create" subject="SupplierProfile">
+          <Can action="create" subject="Supplier">
             <Button asChild variant="primary" leadingIcon={<Plus />}>
               <Link href="/suppliers/new">New supplier</Link>
             </Button>

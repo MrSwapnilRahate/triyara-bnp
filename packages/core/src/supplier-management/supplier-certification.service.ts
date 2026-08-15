@@ -13,7 +13,7 @@ import type { SupplierCertificationDto, UpdateSupplierCertificationDto } from '@
  * Supplier certifications (TRY-BNP-SUPPLIER-CERT).
  *
  * Authorization mirrors contacts and offerings, the sibling sub-resources:
- * reading needs `read SupplierProfile`, writing needs `update SupplierProfile`,
+ * reading needs `read Supplier`, writing needs `update Supplier`,
  * so ADMIN and EXPORT_MANAGER maintain them and everyone else can look.
  */
 
@@ -70,7 +70,7 @@ export function createSupplierCertificationService({ repo, events }: SupplierCer
       ctx: SupplierCertificationCtx,
       supplierId: string,
     ): Promise<SupplierCertificationRecord[]> {
-      assertAbility(ctx, 'read', 'SupplierProfile')
+      assertAbility(ctx, 'read', 'Supplier')
       return repo.list(ctx.organizationId, supplierId)
     },
 
@@ -79,7 +79,7 @@ export function createSupplierCertificationService({ repo, events }: SupplierCer
       supplierId: string,
       dto: SupplierCertificationDto,
     ): Promise<SupplierCertificationRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
 
       const data = toData(dto)
       assertDateOrder(data)
@@ -113,7 +113,7 @@ export function createSupplierCertificationService({ repo, events }: SupplierCer
       expectedVersion: number,
       dto: UpdateSupplierCertificationDto,
     ): Promise<SupplierCertificationRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
 
       const existing = await repo.findById(ctx.organizationId, supplierId, id)
       if (!existing) throw new NotFoundError('Certification not found.')
@@ -150,7 +150,7 @@ export function createSupplierCertificationService({ repo, events }: SupplierCer
       id: string,
       expectedVersion: number,
     ): Promise<SupplierCertificationRecord> {
-      assertAbility(ctx, 'update', 'SupplierProfile')
+      assertAbility(ctx, 'update', 'Supplier')
 
       const certification = await repo.remove(mutationCtx(ctx), supplierId, id, expectedVersion)
 

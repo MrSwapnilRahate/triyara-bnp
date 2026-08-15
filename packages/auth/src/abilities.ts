@@ -54,6 +54,18 @@ export const SUBJECTS = [
   // more revealing than any single module's read. ADMIN reaches it through
   // `manage all`, so no role rule below needs to mention it.
   'AuditLog',
+  // The standalone supplier master and everything hanging off it - contacts,
+  // certifications, documents, notes, product offerings, matching. Previously
+  // authorized as `SupplierProfile`, which is a different Prisma model: the
+  // profile attached to an Account. Two unrelated records shared one
+  // permission, so "may maintain an account's supplier profile" and "may
+  // delete the supplier master's certifications" could not be told apart.
+  //
+  // Unlike the earlier subject splits this one is NOT behaviour-preserving on
+  // its own: EXPORT_MANAGER holds create/update on SupplierProfile, and a new
+  // subject starts with nothing. The grant below restores it deliberately -
+  // see the role rules.
+  'Supplier',
 ] as const
 export type Subject = (typeof SUBJECTS)[number]
 
@@ -88,6 +100,16 @@ export function buildAbilityFor(roles: Role[]): AppAbility {
         // reopening and deletion stay with ADMIN exactly as before.
         'RFQ',
         'Quotation',
+        // The supplier master, which an export manager already maintained
+        // through `create/update SupplierProfile` when the two models shared a
+        // subject. Named here so the split changes no answer: the supplier
+        // master service documents this exact contract - "create/update ->
+        // ADMIN and EXPORT_MANAGER" - and a test has asserted since it was
+        // written that an export manager may onboard a supplier.
+        //
+        // `manage` and `delete` stay absent, so approving and removing a
+        // supplier remain ADMIN's, exactly as before.
+        'Supplier',
       ],
     )
   }

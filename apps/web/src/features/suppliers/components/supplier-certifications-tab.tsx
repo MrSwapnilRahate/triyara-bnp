@@ -55,7 +55,7 @@ import type { SupplierCertificationRow } from '../types'
  * organic before showing anyone to a buyer, so the list leads with what lapses
  * next rather than with the certificate number.
  *
- * Editing is gated on `update SupplierProfile` - ADMIN and EXPORT_MANAGER. A
+ * Editing is gated on `update Supplier` - ADMIN and EXPORT_MANAGER. A
  * lesser role sees the certificates and no controls.
  */
 
@@ -77,7 +77,7 @@ const asDate = (value: string | null) => (value ? value.slice(0, 10) : '')
 
 export function SupplierCertificationsTab({ supplierId }: { supplierId: string }) {
   const ability = useAbility()
-  const canWrite = ability.can('update', 'SupplierProfile')
+  const canWrite = ability.can('update', 'Supplier')
 
   const certifications = useSupplierCertificationList(supplierId)
   const remove = useDeleteSupplierCertification(supplierId)

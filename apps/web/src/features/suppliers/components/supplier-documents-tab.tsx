@@ -47,7 +47,7 @@ import type { SupplierDocumentRow } from '../types'
  * so nobody has to scroll back through a chat to find the file a supplier sent
  * three weeks ago.
  *
- * Editing is gated on `update SupplierProfile` - ADMIN and EXPORT_MANAGER. A
+ * Editing is gated on `update Supplier` - ADMIN and EXPORT_MANAGER. A
  * lesser role can see and download, which is the common case for anyone
  * answering a buyer.
  */
@@ -80,7 +80,7 @@ const previewable = (mime: string | null) =>
 
 export function SupplierDocumentsTab({ supplierId }: { supplierId: string }) {
   const ability = useAbility()
-  const canWrite = ability.can('update', 'SupplierProfile')
+  const canWrite = ability.can('update', 'Supplier')
 
   const documents = useSupplierDocuments(supplierId)
   const remove = useDeleteSupplierDocument(supplierId)

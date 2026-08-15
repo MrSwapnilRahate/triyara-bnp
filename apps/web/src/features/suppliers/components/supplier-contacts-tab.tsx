@@ -56,7 +56,7 @@ import type { SupplierContact } from '../types'
  * form leads with the three ways to reach someone and treats the rest as
  * optional detail.
  *
- * Editing is gated on `update SupplierProfile` - ADMIN and EXPORT_MANAGER. A
+ * Editing is gated on `update Supplier` - ADMIN and EXPORT_MANAGER. A
  * lesser role sees the contacts and no controls, rather than buttons that
  * refuse.
  */
@@ -74,7 +74,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function SupplierContactsTab({ supplierId }: { supplierId: string }) {
   const ability = useAbility()
-  const canWrite = ability.can('update', 'SupplierProfile')
+  const canWrite = ability.can('update', 'Supplier')
 
   const contacts = useSupplierContacts(supplierId)
   const remove = useDeleteSupplierContact(supplierId)
