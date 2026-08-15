@@ -15,7 +15,6 @@ import {
   Quote,
   Radar,
   ScrollText,
-  Settings,
   ShieldCheck,
   Tags,
   Truck,
@@ -123,12 +122,10 @@ export const NAVIGATION: GuardedGroup[] = [
         icon: <ScrollText />,
         requires: { action: 'manage', subject: 'AuditLog' },
       },
-      {
-        label: 'API docs',
-        href: '/admin/api-docs',
-        icon: <Settings />,
-        requires: { action: 'manage', subject: 'Organization' },
-      },
+      // API docs is deliberately absent, for the same reason Roles is: there is
+      // no /admin/api-docs page, and a sidebar entry that 404s is worse than one
+      // that is missing. The OpenAPI documents are served at
+      // /api/*/openapi.json for any signed-in user and need no screen to exist.
     ],
   },
 ]
