@@ -23,11 +23,17 @@ import { type ReactNode, useMemo } from 'react'
 import { DebouncedSearch } from '@/components/data/debounced-search'
 import { FilterSelect } from '@/components/data/filter-select'
 import { QueryBoundary } from '@/components/data/query-boundary'
+import { RestoreAction } from '@/components/data/restore-action'
 import { SortableHeader } from '@/components/data/sortable-header'
 import { Can } from '@/lib/ability-context'
 import { nextSort, useListState } from '@/lib/list-state'
 
-import { useSupplierCertifications, useSupplierCountries, useSuppliers } from '../api/suppliers'
+import {
+  useRestoreSupplier,
+  useSupplierCertifications,
+  useSupplierCountries,
+  useSuppliers,
+} from '../api/suppliers'
 
 interface SupplierListParams {
   [key: string]: string | undefined
@@ -39,6 +45,7 @@ interface SupplierListParams {
   businessType?: string
   country?: string
   isVerified?: string
+  includeDeleted?: string
 }
 
 const DEFAULTS: Partial<SupplierListParams> = { limit: '25', sort: '-createdAt' }
@@ -52,6 +59,7 @@ const DEFAULTS: Partial<SupplierListParams> = { limit: '25', sort: '-createdAt' 
  */
 export function SupplierList() {
   const router = useRouter()
+  const restore = useRestoreSupplier()
   const { params, setFilter, setSort, nextPage, previousPage, hasPrevious, isFiltered, reset } =
     useListState<SupplierListParams>(DEFAULTS)
 
@@ -66,6 +74,7 @@ export function SupplierList() {
         : {}),
       ...(params.country ? { country: params.country } : {}),
       ...(params.isVerified ? { isVerified: params.isVerified as 'true' | 'false' } : {}),
+      ...(params.includeDeleted ? { includeDeleted: params.includeDeleted as 'true' } : {}),
       ...(params.sort ? { sort: params.sort as 'companyName' } : {}),
     }),
     [params],
@@ -197,6 +206,17 @@ export function SupplierList() {
                 ]}
                 className="w-32"
               />
+              {/* Deleted suppliers are absent unless asked for - the API
+                  soft-deletes, and the detail route does not accept
+                  includeDeleted, so this is the only way to reach one. */}
+              <FilterSelect
+                label="Deleted"
+                allLabel="Hidden"
+                value={params.includeDeleted}
+                onChange={(value) => setFilter('includeDeleted', value)}
+                options={[{ value: 'true', label: 'Shown' }]}
+                className="w-36"
+              />
               {isFiltered ? (
                 <Button size="sm" variant="ghost" onClick={reset}>
                   Clear filters
@@ -251,23 +271,33 @@ export function SupplierList() {
                   currentSort={params.sort}
                   onSort={() => undefined}
                 />
+                {params.includeDeleted ? <th scope="col" /> : null}
               </tr>
             </DataTableHead>
             <tbody>
               {items.map((supplier) => (
                 <DataTableRow
                   key={supplier.id}
-                  interactive
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`${supplier.companyName}, ${supplier.supplierCode}`}
-                  onClick={() => router.push(`/suppliers/${supplier.id}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      router.push(`/suppliers/${supplier.id}`)
-                    }
-                  }}
+                  className={supplier.deletedAt ? 'text-content-muted' : undefined}
+                  // Deleted rows do not link: the detail route 404s on them, so
+                  // they carry Restore instead.
+                  {...(supplier.deletedAt
+                    ? {
+                        'aria-label': `${supplier.companyName}, ${supplier.supplierCode}, deleted`,
+                      }
+                    : {
+                        interactive: true,
+                        tabIndex: 0,
+                        role: 'link',
+                        'aria-label': `${supplier.companyName}, ${supplier.supplierCode}`,
+                        onClick: () => router.push(`/suppliers/${supplier.id}`),
+                        onKeyDown: (event: React.KeyboardEvent) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            router.push(`/suppliers/${supplier.id}`)
+                          }
+                        },
+                      })}
                 >
                   <DataTableCell className="font-mono text-xs">
                     {supplier.supplierCode}
@@ -292,6 +322,21 @@ export function SupplierList() {
                       <span className="text-content-subtle">—</span>
                     )}
                   </DataTableCell>
+                  {params.includeDeleted ? (
+                    <DataTableCell>
+                      {supplier.deletedAt ? (
+                        <RestoreAction
+                          action="update"
+                          subject="Supplier"
+                          label={supplier.companyName}
+                          noun="supplier"
+                          onRestore={() =>
+                            restore.mutateAsync({ id: supplier.id, version: supplier.version })
+                          }
+                        />
+                      ) : null}
+                    </DataTableCell>
+                  ) : null}
                 </DataTableRow>
               ))}
             </tbody>

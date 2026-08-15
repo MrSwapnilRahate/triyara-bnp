@@ -23,11 +23,13 @@ import { type ReactNode, useMemo } from 'react'
 import { DebouncedSearch } from '@/components/data/debounced-search'
 import { FilterSelect } from '@/components/data/filter-select'
 import { QueryBoundary } from '@/components/data/query-boundary'
+import { RestoreAction } from '@/components/data/restore-action'
 import { SortableHeader } from '@/components/data/sortable-header'
 import { Can } from '@/lib/ability-context'
 import { nextSort, useListState } from '@/lib/list-state'
 
-import { useQuotations } from '../api/quotations'
+import { useQuotations, useRestoreQuotation } from '../api/quotations'
+import type { QuotationListItem } from '../types'
 import { formatMoney, isLapsed } from '../types'
 import { humanise } from './humanise'
 
@@ -241,6 +243,7 @@ export function QuotationList() {
                 />
                 <SortableHeader label="Terms" currentSort={params.sort} onSort={() => undefined} />
                 <SortableHeader label="Rev" currentSort={params.sort} onSort={() => undefined} />
+                {params.includeDeleted ? <th scope="col" /> : null}
               </tr>
             </DataTableHead>
             <tbody>
@@ -249,17 +252,26 @@ export function QuotationList() {
                 return (
                   <DataTableRow
                     key={quotation.id}
-                    interactive
-                    tabIndex={0}
-                    role="link"
-                    aria-label={`${quotation.quotationNumber}, ${quotation.title}`}
-                    onClick={() => open(quotation.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        open(quotation.id)
-                      }
-                    }}
+                    className={quotation.deletedAt ? 'text-content-muted' : undefined}
+                    // A withdrawn quotation does not link: the detail route
+                    // 404s on it, so the row carries Restore instead.
+                    {...(quotation.deletedAt
+                      ? {
+                          'aria-label': `${quotation.quotationNumber}, ${quotation.title}, withdrawn`,
+                        }
+                      : {
+                          interactive: true,
+                          tabIndex: 0,
+                          role: 'link',
+                          'aria-label': `${quotation.quotationNumber}, ${quotation.title}`,
+                          onClick: () => open(quotation.id),
+                          onKeyDown: (event: React.KeyboardEvent) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              open(quotation.id)
+                            }
+                          },
+                        })}
                   >
                     <DataTableCell className="font-mono text-xs">
                       {quotation.quotationNumber}
@@ -298,6 +310,11 @@ export function QuotationList() {
                         </Badge>
                       ) : null}
                     </DataTableCell>
+                    {params.includeDeleted ? (
+                      <DataTableCell>
+                        {quotation.deletedAt ? <QuotationRestore quotation={quotation} /> : null}
+                      </DataTableCell>
+                    ) : null}
                   </DataTableRow>
                 )
               })}
@@ -306,5 +323,24 @@ export function QuotationList() {
         </DataTableLayout>
       </div>
     </>
+  )
+}
+
+/**
+ * `useRestoreQuotation` is keyed by quotation id - the only restore hook that
+ * is, because the detail screen uses it too - so it cannot be called once for
+ * the whole list the way the others are. A row-scoped component keeps the rule
+ * of hooks intact without reshaping the hook.
+ */
+function QuotationRestore({ quotation }: { quotation: QuotationListItem }) {
+  const restore = useRestoreQuotation(quotation.id)
+  return (
+    <RestoreAction
+      action="manage"
+      subject="Quotation"
+      label={quotation.quotationNumber}
+      noun="quotation"
+      onRestore={() => restore.mutateAsync(quotation.version)}
+    />
   )
 }

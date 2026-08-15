@@ -23,11 +23,12 @@ import { type ReactNode, useMemo } from 'react'
 import { DebouncedSearch } from '@/components/data/debounced-search'
 import { FilterSelect } from '@/components/data/filter-select'
 import { QueryBoundary } from '@/components/data/query-boundary'
+import { RestoreAction } from '@/components/data/restore-action'
 import { SortableHeader } from '@/components/data/sortable-header'
 import { Can } from '@/lib/ability-context'
 import { nextSort, useListState } from '@/lib/list-state'
 
-import { useRfqs } from '../api/rfqs'
+import { useRestoreRfq, useRfqs } from '../api/rfqs'
 import { isOverdue } from '../types'
 import { humanise } from './humanise'
 
@@ -41,6 +42,7 @@ interface RfqListParams {
   type?: string
   priority?: string
   destinationCountry?: string
+  includeDeleted?: string
 }
 
 const DEFAULTS: Partial<RfqListParams> = { limit: '25', sort: '-createdAt' }
@@ -67,6 +69,7 @@ export function RfqList() {
       ...(params.type ? { type: params.type as (typeof RFQ_TYPES)[number] } : {}),
       ...(params.priority ? { priority: params.priority as (typeof RFQ_PRIORITIES)[number] } : {}),
       ...(params.destinationCountry ? { destinationCountry: params.destinationCountry } : {}),
+      ...(params.includeDeleted ? { includeDeleted: params.includeDeleted as 'true' } : {}),
       ...(params.sort ? { sort: params.sort as '-createdAt' } : {}),
     }),
     [params],
@@ -77,6 +80,7 @@ export function RfqList() {
   const pagination = rfqs.data?.meta.pagination
 
   const open = (id: string) => router.push(`/rfqs/${id}`)
+  const restore = useRestoreRfq()
 
   let state: ReactNode
   if (rfqs.isPending) state = <SkeletonTable rows={8} columns={7} />
@@ -175,6 +179,17 @@ export function RfqList() {
                 options={RFQ_PRIORITIES.map((p) => ({ value: p, label: humanise(p) }))}
                 className="w-36"
               />
+              {/* Deleted RFQs are absent unless asked for - the API soft-deletes.
+                  This filter is the only way to reach one in order to restore
+                  it, because the detail route does not accept includeDeleted. */}
+              <FilterSelect
+                label="Deleted"
+                allLabel="Hidden"
+                value={params.includeDeleted}
+                onChange={(value) => setFilter('includeDeleted', value)}
+                options={[{ value: 'true', label: 'Shown' }]}
+                className="w-36"
+              />
               {isFiltered ? (
                 <Button size="sm" variant="ghost" onClick={reset}>
                   Clear filters
@@ -224,6 +239,8 @@ export function RfqList() {
                   currentSort={params.sort}
                   onSort={() => undefined}
                 />
+                {/* Only carries anything while deleted rows are on screen. */}
+                {params.includeDeleted ? <th scope="col" /> : null}
               </tr>
             </DataTableHead>
             <tbody>
@@ -232,17 +249,26 @@ export function RfqList() {
                 return (
                   <DataTableRow
                     key={rfq.id}
-                    interactive
-                    tabIndex={0}
-                    role="link"
-                    aria-label={`${rfq.rfqNumber}, ${rfq.title}`}
-                    onClick={() => open(rfq.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        open(rfq.id)
-                      }
-                    }}
+                    className={rfq.deletedAt ? 'text-content-muted' : undefined}
+                    // A deleted row does not link: /rfqs/:id does not accept
+                    // includeDeleted, so following it would 404. It carries a
+                    // Restore control instead, which is all that is left to do
+                    // with it.
+                    {...(rfq.deletedAt
+                      ? { 'aria-label': `${rfq.rfqNumber}, ${rfq.title}, deleted` }
+                      : {
+                          interactive: true,
+                          tabIndex: 0,
+                          role: 'link',
+                          'aria-label': `${rfq.rfqNumber}, ${rfq.title}`,
+                          onClick: () => open(rfq.id),
+                          onKeyDown: (event: React.KeyboardEvent) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              open(rfq.id)
+                            }
+                          },
+                        })}
                   >
                     <DataTableCell className="font-mono text-xs">{rfq.rfqNumber}</DataTableCell>
                     <DataTableCell className="font-medium">{rfq.title}</DataTableCell>
@@ -288,6 +314,21 @@ export function RfqList() {
                       {[rfq.destinationPort, rfq.destinationCountry].filter(Boolean).join(', ') ||
                         '—'}
                     </DataTableCell>
+                    {params.includeDeleted ? (
+                      <DataTableCell>
+                        {rfq.deletedAt ? (
+                          <RestoreAction
+                            action="update"
+                            subject="RFQ"
+                            label={rfq.rfqNumber}
+                            noun="RFQ"
+                            onRestore={() =>
+                              restore.mutateAsync({ id: rfq.id, version: rfq.version })
+                            }
+                          />
+                        ) : null}
+                      </DataTableCell>
+                    ) : null}
                   </DataTableRow>
                 )
               })}
