@@ -61,3 +61,46 @@ export async function assertBuyerInOrg(
   })
   if (!found) throw new NotFoundError(`Buyer not found: ${buyerId}`)
 }
+
+/**
+ * Refuses unless the user belongs to this organization.
+ *
+ * The account owner is chosen by id, and `accountSelect` joins `owner` for the
+ * name and email - so a foreign id put another tenant's person into a record
+ * the caller was entitled to read. `null` clears the owner and is left alone;
+ * User has no `deletedAt`, so presence in the organization is the whole test.
+ */
+export async function assertUserInOrg(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  userId: string | null | undefined,
+): Promise<void> {
+  if (!userId) return
+
+  const found = await tx.user.findFirst({
+    where: { id: userId, organizationId },
+    select: { id: true },
+  })
+  if (!found) throw new NotFoundError(`User not found: ${userId}`)
+}
+
+/**
+ * Refuses unless the payment term belongs to this organization.
+ *
+ * Quotation detail joins `paymentTerm` for its code, name, net days and advance
+ * percent - a tenant's commercial terms - so a foreign id returned all of that
+ * through a quotation of the caller's own.
+ */
+export async function assertPaymentTermInOrg(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  paymentTermId: string | null | undefined,
+): Promise<void> {
+  if (!paymentTermId) return
+
+  const found = await tx.paymentTerm.findFirst({
+    where: { id: paymentTermId, organizationId, deletedAt: null },
+    select: { id: true },
+  })
+  if (!found) throw new NotFoundError(`Payment term not found: ${paymentTermId}`)
+}

@@ -2,6 +2,7 @@ import { Prisma, type RelationshipStatus } from '@prisma/client'
 import { ConflictError, NotFoundError, PreconditionFailedError } from '@triyara/lib'
 
 import { prisma } from '../client'
+import { assertUserInOrg } from './tenant-refs'
 
 // ---- Explicit select (no over-fetching, deterministic shape, no N+1) ----
 const accountSelect = {
@@ -163,6 +164,9 @@ export const accountRepository: AccountRepository = {
   async create(ctx, data) {
     return prisma.$transaction(async (tx) => {
       await assertNameFree(tx, ctx.organizationId, data.legalName)
+      // The owner is chosen by id and joined back into every account read, so a
+      // foreign one puts another tenant's person into a record of ours.
+      await assertUserInOrg(tx, ctx.organizationId, data.ownerId)
       const created = await tx.account.create({
         data: {
           organizationId: ctx.organizationId,
@@ -247,6 +251,9 @@ export const accountRepository: AccountRepository = {
       if (data.legalName && data.legalName.toLowerCase() !== before.legalName.toLowerCase()) {
         await assertNameFree(tx, ctx.organizationId, data.legalName, id)
       }
+      // Covers assignOwner and the bulk assign_owner action, which both arrive
+      // here; a null owner clears the assignment and is left alone.
+      await assertUserInOrg(tx, ctx.organizationId, data.ownerId)
 
       const updated = await tx.account.updateMany({
         where: {
