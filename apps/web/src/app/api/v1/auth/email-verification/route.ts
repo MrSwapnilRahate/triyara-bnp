@@ -4,6 +4,7 @@ import { requestEmailVerificationSchema } from '@triyara/validation'
 import { requireAuth } from '@/auth/context'
 import { enforceWriteLimit, ok, parseBody, route } from '@/lib/api'
 import { emailVerificationService } from '@/lib/auth-extension-service'
+import { emailService } from '@/lib/email'
 
 // GET  /api/v1/auth/email-verification        -> own verification status
 // POST /api/v1/auth/email-verification        -> issue a verification token
@@ -34,13 +35,25 @@ export function POST(req: Request) {
       userId: targetUserId,
     })
 
-    // The plaintext token is deliberately NOT returned in the response body.
-    // Email delivery arrives with the notifications transport; until then the
-    // link is logged, matching the existing password-reset flow.
-    logger.info(
-      { userId: targetUserId ?? auth.user.id, verifyPath: `/verify-email?token=${issued.token}` },
-      'Email verification requested',
-    )
+    // The plaintext token leaves the process ONLY in the email. It is not in
+    // the response body and it is not logged - a log line carrying it would let
+    // anyone with log access confirm any address, which is the whole point of
+    // hashing it at rest.
+    //
+    // A delivery failure does not fail the request, matching password reset:
+    // the token is already issued and valid, and the user can ask again.
+    try {
+      await emailService.emailVerification({
+        email: issued.email,
+        token: issued.token,
+        expiresInMinutes: Math.round((issued.expiresAt.getTime() - Date.now()) / 60_000),
+      })
+    } catch (err) {
+      logger.error(
+        { err: String(err), userId: targetUserId ?? auth.user.id },
+        'email_verification.email_failed',
+      )
+    }
 
     return ok(
       { email: issued.email, expiresAt: issued.expiresAt, sent: true },

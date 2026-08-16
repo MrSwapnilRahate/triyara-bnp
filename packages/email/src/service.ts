@@ -197,6 +197,31 @@ export function createEmailService(deps: EmailServiceDeps) {
     },
 
     /**
+     * Confirms an address the account holder just claimed.
+     *
+     * The token reaches the user ONLY here, in the link. It is never returned
+     * by the API and never logged, exactly as the reset flow treats its own.
+     */
+    async emailVerification(input: {
+      email: string
+      token: string
+      expiresInMinutes: number
+    }): Promise<SendResult> {
+      const to = addressesFor('email_verification', [{ name: input.email, email: input.email }])
+      return deliver(
+        'email_verification',
+        to,
+        templates.emailVerification({
+          verifyUrl: templates.joinUrl(
+            appUrl,
+            `/verify-email?token=${encodeURIComponent(input.token)}`,
+          ),
+          expiresInMinutes: input.expiresInMinutes,
+        }),
+      )
+    },
+
+    /**
      * Tells the super administrator that someone wants admin access.
      *
      * Goes only to the configured Super Admins - never to the wider staff

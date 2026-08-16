@@ -220,6 +220,39 @@ export function passwordReset(input: { resetUrl: string; expiresInMinutes: numbe
 }
 
 // ---------------------------------------------------------------------------
+// 8b. Email verification
+// ---------------------------------------------------------------------------
+
+export function emailVerification(input: {
+  verifyUrl: string
+  expiresInMinutes: number
+}): Rendered {
+  const html = renderLayout({
+    heading: 'Confirm your email address',
+    bodyHtml: paras(
+      'Confirm this address so it can be used for sign-in notices and account recovery on your TRIYARA Business Network account.',
+      `This link works once and expires in ${input.expiresInMinutes} minutes.`,
+    ),
+    cta: { label: 'Confirm this address', url: input.verifyUrl },
+    footnote:
+      'If you did not ask for this, no action is needed — nothing about your account has changed. ' +
+      `If the button does not work, paste this into your browser:<br>${esc(input.verifyUrl)}`,
+  })
+  return {
+    subject: 'Confirm your TRIYARA email address',
+    html,
+    text: renderText([
+      'Confirm this address so it can be used for sign-in notices and account recovery on your TRIYARA Business Network account.',
+      '',
+      `This link works once and expires in ${input.expiresInMinutes} minutes:`,
+      input.verifyUrl,
+      '',
+      'If you did not ask for this, no action is needed.',
+    ]),
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 9. Staff invite
 // ---------------------------------------------------------------------------
 
