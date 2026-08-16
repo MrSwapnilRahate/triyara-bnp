@@ -23,11 +23,12 @@ import { type ReactNode, useMemo } from 'react'
 import { DebouncedSearch } from '@/components/data/debounced-search'
 import { FilterSelect } from '@/components/data/filter-select'
 import { QueryBoundary } from '@/components/data/query-boundary'
+import { RestoreAction } from '@/components/data/restore-action'
 import { SortableHeader } from '@/components/data/sortable-header'
 import { Can } from '@/lib/ability-context'
 import { nextSort, useListState } from '@/lib/list-state'
 
-import { useProducts } from '../api/products'
+import { useProducts, useRestoreProduct } from '../api/products'
 import { useCategories } from '../api/reference'
 
 /** Every search param this screen reads. Declared so the compiler checks them. */
@@ -39,6 +40,7 @@ interface ProductListParams {
   q?: string
   status?: string
   categoryId?: string
+  includeDeleted?: string
 }
 
 const DEFAULTS: Partial<ProductListParams> = { limit: '25', sort: '-createdAt' }
@@ -56,6 +58,7 @@ const DEFAULTS: Partial<ProductListParams> = { limit: '25', sort: '-createdAt' }
  */
 export function ProductList() {
   const router = useRouter()
+  const restore = useRestoreProduct()
   const { params, setFilter, setSort, nextPage, previousPage, hasPrevious, isFiltered, reset } =
     useListState<ProductListParams>(DEFAULTS)
 
@@ -66,6 +69,7 @@ export function ProductList() {
       ...(params.q ? { q: params.q } : {}),
       ...(params.status ? { status: params.status as (typeof PRODUCT_STATUSES)[number] } : {}),
       ...(params.categoryId ? { categoryId: params.categoryId } : {}),
+      ...(params.includeDeleted ? { includeDeleted: params.includeDeleted as 'true' } : {}),
       ...(params.sort ? { sort: params.sort as 'name' } : {}),
     }),
     [params],
@@ -177,6 +181,17 @@ export function ProductList() {
                 }))}
                 className="w-56"
               />
+              {/* Deleted products are absent unless asked for - the API
+                  soft-deletes, and the detail route does not accept
+                  includeDeleted, so this is the only way to reach one. */}
+              <FilterSelect
+                label="Deleted"
+                allLabel="Hidden"
+                value={params.includeDeleted}
+                onChange={(value) => setFilter('includeDeleted', value)}
+                options={[{ value: 'true', label: 'Shown' }]}
+                className="w-36"
+              />
               {isFiltered ? (
                 <Button size="sm" variant="ghost" onClick={reset}>
                   Clear filters
@@ -225,23 +240,31 @@ export function ProductList() {
                   currentSort={params.sort}
                   onSort={() => undefined}
                 />
+                {params.includeDeleted ? <th scope="col" /> : null}
               </tr>
             </DataTableHead>
             <tbody>
               {items.map((product) => (
                 <DataTableRow
                   key={product.id}
-                  interactive
-                  tabIndex={0}
-                  role="link"
-                  aria-label={`${product.name}, ${product.sku}`}
-                  onClick={() => router.push(`/catalog/products/${product.id}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      router.push(`/catalog/products/${product.id}`)
-                    }
-                  }}
+                  className={product.deletedAt ? 'text-content-muted' : undefined}
+                  // Deleted rows do not link: the detail route 404s on them, so
+                  // they carry Restore instead.
+                  {...(product.deletedAt
+                    ? { 'aria-label': `${product.name}, ${product.sku}, deleted` }
+                    : {
+                        interactive: true,
+                        tabIndex: 0,
+                        role: 'link',
+                        'aria-label': `${product.name}, ${product.sku}`,
+                        onClick: () => router.push(`/catalog/products/${product.id}`),
+                        onKeyDown: (event: React.KeyboardEvent) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            router.push(`/catalog/products/${product.id}`)
+                          }
+                        },
+                      })}
                 >
                   <DataTableCell className="font-mono text-xs">{product.sku}</DataTableCell>
                   <DataTableCell className="font-medium">{product.name}</DataTableCell>
@@ -257,6 +280,21 @@ export function ProductList() {
                   <DataTableCell className="font-mono text-xs text-content-muted">
                     {product.hsCode ?? '—'}
                   </DataTableCell>
+                  {params.includeDeleted ? (
+                    <DataTableCell>
+                      {product.deletedAt ? (
+                        <RestoreAction
+                          action="update"
+                          subject="Product"
+                          label={product.name}
+                          noun="product"
+                          onRestore={() =>
+                            restore.mutateAsync({ id: product.id, version: product.version })
+                          }
+                        />
+                      ) : null}
+                    </DataTableCell>
+                  ) : null}
                 </DataTableRow>
               ))}
             </tbody>

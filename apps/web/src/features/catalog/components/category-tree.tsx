@@ -16,9 +16,10 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 
 import { InlineQueryError } from '@/components/data/query-boundary'
+import { RestoreAction } from '@/components/data/restore-action'
 import { Can } from '@/lib/ability-context'
 
-import { useCategories } from '../api/reference'
+import { useCategories, useRestoreCategory } from '../api/reference'
 import { buildCategoryTree, type CategoryNode } from '../types'
 
 /**
@@ -31,7 +32,12 @@ import { buildCategoryTree, type CategoryNode } from '../types'
  * reconciled against the server rather than an optimistic move.
  */
 export function CategoryTree() {
-  const query = useCategories({ limit: 100 })
+  // Deleted categories are fetched alongside the active ones rather than behind
+  // a filter: the tree is a hierarchy, and hiding a deleted parent would
+  // silently promote its live children to roots - buildCategoryTree treats a
+  // node whose parent is absent as a root. Showing them keeps the shape honest
+  // and is the only way to reach one in order to restore it.
+  const query = useCategories({ limit: 100, includeDeleted: 'true' })
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const tree = useMemo(() => buildCategoryTree(query.data?.items ?? []), [query.data?.items])
@@ -141,14 +147,24 @@ function CategoryBranch({
           <span aria-hidden="true" className="size-5" />
         )}
 
-        <Link
-          href={`/catalog/products?categoryId=${node.id}`}
-          className="focus-ring flex-1 truncate rounded-xs text-base text-content hover:text-accent"
-        >
-          {node.name}
-        </Link>
+        {node.deletedAt ? (
+          // Not a link: a deleted category filters to nothing, and this row's
+          // job is to be restored rather than followed.
+          <span className="flex-1 truncate text-base text-content-muted line-through">
+            {node.name}
+          </span>
+        ) : (
+          <Link
+            href={`/catalog/products?categoryId=${node.id}`}
+            className="focus-ring flex-1 truncate rounded-xs text-base text-content hover:text-accent"
+          >
+            {node.name}
+          </Link>
+        )}
 
-        {node.isActive ? null : (
+        {node.deletedAt ? (
+          <CategoryRestore node={node} />
+        ) : node.isActive ? null : (
           <Badge size="sm" tone="neutral">
             Inactive
           </Badge>
@@ -170,5 +186,24 @@ function CategoryBranch({
         </ul>
       ) : null}
     </li>
+  )
+}
+
+/**
+ * `useRestoreCategory` invalidates the whole category list, which is what the
+ * tree reads - so a restored category loses its strike-through without a
+ * refresh. Row-scoped like the quotation control, to keep the hook next to the
+ * node it acts on.
+ */
+function CategoryRestore({ node }: { node: CategoryNode }) {
+  const restore = useRestoreCategory()
+  return (
+    <RestoreAction
+      action="update"
+      subject="Category"
+      label={node.name}
+      noun="category"
+      onRestore={() => restore.mutateAsync({ id: node.id, version: node.version })}
+    />
   )
 }

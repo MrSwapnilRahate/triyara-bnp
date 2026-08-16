@@ -69,6 +69,17 @@ export interface Profile {
   lastLoginAt: string | null
 }
 
+/**
+ * Verification standing, from the security profile rather than from `/me`.
+ * `emailVerifiedAt` is the fact; `verified` is the server's own reading of it,
+ * so the UI never has to decide what a null timestamp means.
+ */
+export interface EmailVerificationStatus {
+  userId: string
+  emailVerifiedAt: string | null
+  verified: boolean
+}
+
 export interface DirectoryUser {
   id: string
   name: string

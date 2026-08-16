@@ -287,4 +287,66 @@ describe.skipIf(!process.env.DATABASE_URL)('catalog repositories (integration)',
     const overlap = first.items.filter((a) => second.items.some((b) => b.id === a.id))
     expect(overlap).toHaveLength(0)
   })
+
+  describe('category list and soft-deleted rows', () => {
+    // The tree fetches deleted categories so they can be restored, and so a
+    // deleted parent does not silently orphan its live children. Both halves
+    // of that contract live here: hidden by default, returned when asked.
+    it('hides a soft-deleted category by default and returns it when asked', async () => {
+      const slug = `del-${uniq()}`
+      const created = await categoryRepository.create(ctx, { name: 'Doomed', slug })
+
+      await categoryRepository.softDelete(ctx, created.id, created.version)
+
+      const hidden = await categoryRepository.list({ organizationId, limit: 100 })
+      expect(hidden.items.find((c) => c.id === created.id)).toBeUndefined()
+
+      const shown = await categoryRepository.list({
+        organizationId,
+        limit: 100,
+        includeDeleted: true,
+      })
+      const found = shown.items.find((c) => c.id === created.id)
+      expect(found).toBeDefined()
+      expect(found?.deletedAt).not.toBeNull()
+    })
+
+    it('restores it back into the default list', async () => {
+      const created = await categoryRepository.create(ctx, {
+        name: 'Returning',
+        slug: `ret-${uniq()}`,
+      })
+      const deleted = await categoryRepository.softDelete(ctx, created.id, created.version)
+      const restored = await categoryRepository.restore(ctx, created.id, deleted.version)
+
+      expect(restored.deletedAt).toBeNull()
+      const active = await categoryRepository.list({ organizationId, limit: 100 })
+      expect(active.items.find((c) => c.id === created.id)).toBeDefined()
+    })
+
+    it('never returns another tenant deleted categories', async () => {
+      // includeDeleted widens the deletedAt filter, never the tenant one.
+      const other = await prisma.organization.upsert({
+        where: { slug: 'cat-other-tenant' },
+        update: {},
+        create: { name: 'Other', slug: 'cat-other-tenant' },
+      })
+      const foreign = await prisma.category.create({
+        data: {
+          organizationId: other.id,
+          name: 'Foreign',
+          slug: `foreign-${uniq()}`,
+          path: 'f',
+          deletedAt: new Date(),
+        },
+      })
+
+      const shown = await categoryRepository.list({
+        organizationId,
+        limit: 100,
+        includeDeleted: true,
+      })
+      expect(shown.items.find((c) => c.id === foreign.id)).toBeUndefined()
+    })
+  })
 })

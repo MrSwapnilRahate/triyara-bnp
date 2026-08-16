@@ -37,6 +37,7 @@ import { describeApiError } from '@/lib/api-error'
 
 import { useChangePassword, useProfile, useUpdateProfile } from '../api/admin'
 import type { Profile as ProfileRecord } from '../types'
+import { EmailVerificationCard } from './email-verification-card'
 
 /**
  * My profile (§9, §18).
@@ -281,6 +282,10 @@ function ProfileForm({ me }: { me: ProfileRecord }) {
               </CardContent>
             </Card>
           </form>
+
+          {/* Outside the form, like the password card: sending a verification
+              email is its own request, and "Save changes" must not trigger it. */}
+          <EmailVerificationCard email={me.email} />
 
           <PasswordForm />
         </div>

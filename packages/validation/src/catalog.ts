@@ -48,6 +48,8 @@ export const listCategoriesQuerySchema = z.object({
   pathPrefix: z.string().optional(),
   isActive: z.enum(['true', 'false']).optional(),
   q: z.string().trim().optional(),
+  /** Soft-deleted categories are hidden unless asked for, as elsewhere. */
+  includeDeleted: z.enum(['true', 'false']).optional(),
 })
 export type ListCategoriesQuery = z.infer<typeof listCategoriesQuerySchema>
 

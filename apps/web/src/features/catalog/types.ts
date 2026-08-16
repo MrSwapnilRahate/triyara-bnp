@@ -56,6 +56,8 @@ export interface Category {
   sortOrder: number
   isActive: boolean
   version: number
+  /** Set when soft-deleted. The tree asks for these so they can be restored. */
+  deletedAt?: string | null
   productCount?: number
 }
 
