@@ -6,6 +6,8 @@ export const adminKeys = {
   audit: (query: Record<string, unknown>) => [...adminKeys.all, 'audit', query] as const,
   organization: () => [...adminKeys.all, 'organization'] as const,
   profile: () => [...adminKeys.all, 'profile'] as const,
+  /** Own verification standing. Separate from `profile`: a different record. */
+  emailVerification: () => [...adminKeys.all, 'email-verification'] as const,
   notificationPreferences: () => [...adminKeys.all, 'notification-preferences'] as const,
   directory: (q: string) => [...adminKeys.all, 'directory', q] as const,
 

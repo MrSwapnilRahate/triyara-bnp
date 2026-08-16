@@ -15,6 +15,7 @@ import type {
   DashboardSummary,
   DashboardTrends,
   DirectoryUser,
+  EmailVerificationStatus,
   Organization,
   Profile,
 } from '../types'
@@ -134,6 +135,80 @@ export function useUpdateProfile() {
     },
     onSuccess: (profile) => {
       queryClient.setQueryData(adminKeys.profile(), profile)
+    },
+  })
+}
+
+/**
+ * Own verification standing.
+ *
+ * `/me` does not carry it - verification lives on the security profile, a
+ * separate record - so this is its own read. Never served from cache: the
+ * address is verified by opening a link, which happens in another tab or on a
+ * phone, so a stale answer here is the normal case rather than the exception.
+ */
+export function useEmailVerificationStatus() {
+  return useQuery({
+    queryKey: adminKeys.emailVerification(),
+    queryFn: async ({ signal }) => {
+      const result = await api.get<EmailVerificationStatus>(`${BASE}/auth/email-verification`, {
+        signal,
+      })
+      return result.data
+    },
+    staleTime: STALE_TIME.detail,
+  })
+}
+
+/**
+ * Sends yourself a verification link.
+ *
+ * Takes no argument, deliberately. The route reads `?userId=` so an
+ * administrator can issue one for somebody else, and the service demands
+ * `update User` to do it - a target this hook must never be able to supply,
+ * because the screen it serves is "my profile". Verifying your own address is
+ * not an administrative act and must not acquire the shape of one.
+ *
+ * The response carries the address and the expiry; the token is in the email
+ * and nowhere else.
+ */
+export function useRequestEmailVerification() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const result = await api.post<{ email: string; expiresAt: string; sent: boolean }>(
+        `${BASE}/auth/email-verification`,
+        {},
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.emailVerification() })
+    },
+  })
+}
+
+/**
+ * Consumes the token from the emailed link. Identity comes from the token, so
+ * nothing else is sent.
+ *
+ * Both the standing and the profile are invalidated: the badge on the profile
+ * screen reads the former, and a session that verified in this tab should not
+ * find a stale "not verified" waiting on the other one.
+ */
+export function useConfirmEmailVerification() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const result = await api.post<EmailVerificationStatus>(
+        `${BASE}/auth/email-verification/confirm`,
+        { token },
+      )
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.emailVerification() })
+      void queryClient.invalidateQueries({ queryKey: adminKeys.profile() })
     },
   })
 }
