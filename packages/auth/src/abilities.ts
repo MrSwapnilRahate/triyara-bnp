@@ -75,6 +75,12 @@ export const SUBJECTS = [
   // deliberate rather than inherited - and it is the only place in this file
   // that V3 adds. No existing subject's grant is touched.
   'CostScenario',
+  // Negotiated freight rates (V3.3, ADR-0012). NOT `ReferenceData`: Port and
+  // ContainerType are global facts anyone may read and only an administrator
+  // curates, whereas a freight rate is this tenant's commercial term. Filing it
+  // under ReferenceData would have made recording a negotiated rate an
+  // administrative act, which is not how a trade desk works.
+  'FreightRate',
 ] as const
 export type Subject = (typeof SUBJECTS)[number]
 
@@ -126,10 +132,12 @@ export function buildAbilityFor(roles: Role[]): AppAbility {
         // and it is deliberate: withdrawing a quotation a buyer has seen is an
         // administrative act, discarding your own draft calculation is not.
         'CostScenario',
+        // The export manager who negotiates the rate is the one who records it.
+        'FreightRate',
       ],
     )
     // Restore rides on `update`, matching RFQ, Supplier, Product and Category.
-    can('delete', 'CostScenario')
+    can('delete', ['CostScenario', 'FreightRate'])
   }
 
   if (has('VERIFIER')) {

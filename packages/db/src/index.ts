@@ -102,6 +102,15 @@ export {
   type UpdateDocumentInput,
 } from './repositories/document.repository'
 export {
+  type CreateFreightRateData,
+  type FreightRateListResult,
+  type FreightRateRecord,
+  type FreightRateRepository,
+  freightRateRepository,
+  type ListFreightRatesParams,
+  type UpdateFreightRateData,
+} from './repositories/freight-rate.repository'
+export {
   type ListLoginAttemptsParams,
   type LoginAttemptListResult,
   type LoginAttemptRecord,
@@ -109,6 +118,13 @@ export {
   loginAttemptRepository,
   type RecordLoginAttempt,
 } from './repositories/login-attempt.repository'
+export {
+  type ContainerTypeRecord,
+  type ListPortsParams,
+  type LogisticsReferenceRepository,
+  logisticsReferenceRepository,
+  type PortRecord,
+} from './repositories/logistics-reference.repository'
 export {
   type ListNotificationsParams,
   type NewNotification,

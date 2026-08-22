@@ -81,6 +81,7 @@ model Organization {
   paymentTerms    PaymentTerm[]
   exchangeRates   ExchangeRate[]
   costScenarios   CostScenario[]
+  freightRates    FreightRate[]
   specDefinitions ProductSpecificationDefinition[]
   tags            Tag[]
 }
@@ -3103,8 +3104,16 @@ model CostScenario {
   /// phase; storing the code now means that migration adds a foreign key
   /// rather than cleaning up free text, which is the trap V2's `port String?`
   /// fields fell into.
-  originLocode       String? @db.Char(5)
-  destinationLocode  String? @db.Char(5)
+  originLocode      String? @db.Char(5)
+  destinationLocode String? @db.Char(5)
+
+  /// Nullable Port references, added in V3.3 ALONGSIDE the codes above rather
+  /// than replacing them. Additive on purpose: no existing row is invalidated,
+  /// and a corridor whose port is not yet curated still works through the
+  /// LOCODE fallback.
+  originPortId       String?
+  destinationPortId  String?
+  containerTypeId    String?
   destinationCountry String? @db.Char(2)
 
   mode ShipmentMode?
@@ -3138,15 +3147,20 @@ model CostScenario {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  product      Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
-  buyer        Account?             @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  charges      CostScenarioCharge[]
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product         Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  originPort      Port?                @relation("ScenarioOriginPort", fields: [originPortId], references: [id], onDelete: Restrict)
+  destinationPort Port?                @relation("ScenarioDestinationPort", fields: [destinationPortId], references: [id], onDelete: Restrict)
+  containerType   ContainerType?       @relation(fields: [containerTypeId], references: [id], onDelete: Restrict)
+  buyer           Account?             @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  charges         CostScenarioCharge[]
 
   @@index([organizationId, deletedAt])
   @@index([organizationId, productId])
   @@index([organizationId, buyerId])
   @@index([organizationId, incoterm])
+  @@index([originPortId])
+  @@index([destinationPortId])
   @@index([organizationId, createdAt])
   @@index([productId])
   @@index([buyerId])
@@ -3192,4 +3206,153 @@ model CostScenarioCharge {
   @@index([scenarioId, sequence])
   @@index([organizationId, type])
   @@index([scenarioId, deletedAt])
+}
+
+// ===========================================================================
+// LOGISTICS REFERENCE & FREIGHT (V3.3, ADR-0012)
+//
+// Two kinds of data live here and must not be confused:
+//
+//   GLOBAL REFERENCE   Port, ContainerType. No organizationId. Curated seed
+//                      data, read by every tenant, managed as `ReferenceData`.
+//                      Retired with `isActive`, never deleted - a port does not
+//                      stop having existed.
+//
+//   TENANT COMMERCIAL  FreightRate. A negotiated rate is commercially
+//                      sensitive and must never cross an organization
+//                      boundary, so it is org-scoped, soft-deleted and
+//                      versioned like every other V2 aggregate.
+//
+// The eight free-text `port` fields elsewhere in this schema are deliberately
+// left alone (ADR-0012). Normalising them is a data-quality migration with no
+// V3 benefit and a real risk to existing records.
+// ===========================================================================
+
+/// A seaport, airport or inland container depot, keyed by UN/LOCODE.
+///
+/// Global on purpose: the same INNSA is Nhava Sheva for every tenant, and
+/// duplicating it per organization would let two tenants disagree about what a
+/// code means. Growth is by ROWS - new ports are added to the seed, never new
+/// columns.
+model Port {
+  id String @id @default(cuid())
+
+  /// UN/LOCODE: two-letter country plus a three-character location code,
+  /// e.g. INNSA, AEJEA. The canonical identity of a port worldwide.
+  locode String @db.Char(5)
+
+  name        String
+  countryCode String @db.Char(2)
+
+  /// Which modes can actually call here. A rate quoted AIR against a seaport
+  /// is a data error, and this is what lets validation say so.
+  modes ShipmentMode[]
+
+  /// Retired rather than deleted: a port that closes still appears in
+  /// historical scenarios, so the row must survive.
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  freightOrigins       FreightRate[]  @relation("FreightOriginPort")
+  freightDestinations  FreightRate[]  @relation("FreightDestinationPort")
+  scenarioOrigins      CostScenario[] @relation("ScenarioOriginPort")
+  scenarioDestinations CostScenario[] @relation("ScenarioDestinationPort")
+
+  @@unique([locode])
+  @@index([countryCode])
+  @@index([isActive])
+}
+
+/// An ISO shipping container standard.
+///
+/// Global for the same reason as Port: 40HC means the same thing everywhere.
+/// Capacity is carried because PER_CONTAINER freight and container-count
+/// planning need it; external dimensions are not, because nothing in the
+/// calculation consumes them.
+model ContainerType {
+  id String @id @default(cuid())
+
+  /// ISO-style short code, e.g. 20GP, 40HC.
+  code String @db.VarChar(8)
+  name String
+
+  /// Twenty-foot equivalent units - 1 for a 20ft box, 2 for a 40ft.
+  teu Decimal @db.Decimal(4, 2)
+
+  /// Maximum cargo weight and usable internal volume. Both optional: an LCL
+  /// pseudo-container has neither, and inventing a figure would be worse than
+  /// admitting there isn't one.
+  maxPayloadKg      Decimal? @db.Decimal(10, 2)
+  internalVolumeCbm Decimal? @db.Decimal(10, 3)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  freightRates  FreightRate[]
+  costScenarios CostScenario[]
+
+  @@unique([code])
+  @@index([isActive])
+}
+
+/// A negotiated freight rate for one corridor, mode and container standard.
+///
+/// Organization-scoped and never global: this is a commercial term, not a fact
+/// about the world. Four database constraints carry rules the service must not
+/// be the only thing enforcing - see the migration for the SQL:
+///
+///   - a route from a port to itself is refused
+///   - SEA_FCL requires a container type; SEA_LCL, AIR, ROAD and RAIL forbid
+///     one, so nothing ever invents a placeholder container id
+///   - effectiveTo must be after effectiveFrom
+///   - no two live rates for the same corridor may overlap in time, so V3.4's
+///     selection on a given date is deterministic rather than ambiguous
+model FreightRate {
+  id             String @id @default(cuid())
+  organizationId String
+
+  originPortId      String
+  destinationPortId String
+
+  mode ShipmentMode
+
+  /// Required for SEA_FCL, forbidden for the non-containerised modes, optional
+  /// for MULTIMODAL. Enforced by a CHECK constraint, not by convention.
+  containerTypeId String?
+
+  amount   Decimal @db.Decimal(18, 4)
+  currency String  @db.Char(3)
+
+  /// Where the figure came from, e.g. "Maersk Q3 contract". Free text on
+  /// purpose: a FreightProvider relation is a V4 concern, and this is the
+  /// smallest thing that lets a user tell two rates apart today.
+  source String?
+  notes  String?
+
+  effectiveFrom DateTime
+  /// Open-ended when null - the rate applies until superseded.
+  effectiveTo   DateTime?
+
+  createdById String
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  originPort      Port           @relation("FreightOriginPort", fields: [originPortId], references: [id], onDelete: Restrict)
+  destinationPort Port           @relation("FreightDestinationPort", fields: [destinationPortId], references: [id], onDelete: Restrict)
+  containerType   ContainerType? @relation(fields: [containerTypeId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, originPortId, destinationPortId, mode])
+  @@index([organizationId, effectiveFrom, effectiveTo])
+  @@index([originPortId])
+  @@index([destinationPortId])
+  @@index([containerTypeId])
 }

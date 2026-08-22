@@ -16,7 +16,7 @@ import { z } from 'zod'
  * there is ONE definition of what a valid monetary value is. A second copy in
  * this file would drift from the kernel the first time either changed.
  */
-const decimalString = (opts: { positive?: boolean; nonNegative?: boolean } = {}) =>
+export const decimalString = (opts: { positive?: boolean; nonNegative?: boolean } = {}) =>
   z
     .string()
     .trim()
@@ -40,7 +40,7 @@ const decimalString = (opts: { positive?: boolean; nonNegative?: boolean } = {})
       }
     })
 
-const iso4217 = z.string().trim().length(3).toUpperCase()
+export const iso4217 = z.string().trim().length(3).toUpperCase()
 const iso3166 = z.string().trim().length(2).toUpperCase()
 /** UN/LOCODE: two-letter country plus a three-character location code. */
 const locode = z

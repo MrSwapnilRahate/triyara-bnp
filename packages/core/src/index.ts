@@ -128,6 +128,13 @@ export {
   type DocumentServiceDeps,
 } from './document/document.service'
 export {
+  createFreightRateService,
+  createLogisticsReferenceService,
+  type FreightRateService,
+  type LogisticsCtx,
+  type LogisticsReferenceService,
+} from './logistics/freight-rate.service'
+export {
   generateNotifications,
   type NotificationGenDeps,
   type OrgUserLookup,

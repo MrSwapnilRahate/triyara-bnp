@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 import { seedCatalog } from './seed-catalog'
+import { seedLogistics } from './seed-logistics'
 import { seedQuotations } from './seed-quotation'
 import { seedRfqs } from './seed-rfq'
 import { seedSuppliers } from './seed-supplier'
@@ -48,6 +49,8 @@ async function main() {
   const suppliers = await seedSuppliers(prisma, org.id)
   const rfqs = await seedRfqs(prisma, org.id)
   const quotations = await seedQuotations(prisma, org.id)
+  // Global reference data: no organization id, because a port is not owned.
+  const logistics = await seedLogistics(prisma)
 
   /* eslint-disable no-console */
   console.log('Seeded org, roles, and admin (admin@triyaraexports.com / ChangeMe!123)')
@@ -57,6 +60,9 @@ async function main() {
   )
   console.log(`Seeded suppliers: ${suppliers.suppliers}`)
   console.log(`Seeded RFQs: ${rfqs.rfqs}`)
+  console.log(
+    `Seeded logistics: ${logistics.ports} ports, ${logistics.containerTypes} container types`,
+  )
   console.log(
     `Seeded quotations: ${quotations.quotations} quotations, ${quotations.options} sourcing options, ` +
       `${quotations.paymentTerms} payment terms, ${quotations.exchangeRates} exchange rates`,
