@@ -1,5 +1,9 @@
 import { createCostScenarioService } from '@triyara/core'
-import { costScenarioRepository } from '@triyara/db'
+import {
+  costScenarioRepository,
+  freightRateRepository,
+  logisticsReferenceRepository,
+} from '@triyara/db'
 
 import { eventBus } from './event-bus'
 
@@ -9,4 +13,8 @@ import { eventBus } from './event-bus'
 export const costScenarioService = createCostScenarioService({
   repo: costScenarioRepository,
   events: eventBus,
+  // V3.4: freight lookup and LOCODE resolution. Injected here for the same
+  // reason as the repository - the route depends only on the service.
+  freightRates: freightRateRepository,
+  logistics: logisticsReferenceRepository,
 })

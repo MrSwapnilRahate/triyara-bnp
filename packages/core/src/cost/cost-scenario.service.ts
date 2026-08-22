@@ -3,6 +3,8 @@ import type {
   CostScenarioListResult,
   CostScenarioRecord,
   CostScenarioRepository,
+  FreightRateRepository,
+  LogisticsReferenceRepository,
   MutationCtx,
 } from '@triyara/db'
 import { type EventBus, makeEvent } from '@triyara/events'
@@ -12,6 +14,8 @@ import type {
   ListCostScenariosQuery,
   UpdateCostScenarioDto,
 } from '@triyara/validation'
+
+import { type FreightRateResolution, resolveFreightRate } from '../logistics/freight-rate-resolver'
 
 // Cost scenario service (V3, ADR-0012).
 //
@@ -38,6 +42,13 @@ export type CostScenarioCtx = AuthContext & { requestId?: string }
 export interface CostScenarioServiceDeps {
   repo: CostScenarioRepository
   events: EventBus
+  /**
+   * Freight lookup (V3.4). Optional so every existing construction of this
+   * service keeps working unchanged; without them `resolveFreight` reports
+   * that lookup is unavailable rather than throwing.
+   */
+  freightRates?: FreightRateRepository
+  logistics?: LogisticsReferenceRepository
 }
 
 function mutationCtx(ctx: CostScenarioCtx): MutationCtx {
@@ -61,7 +72,43 @@ function assertFxCoherent(currency?: string, baseCurrency?: string, fxRate?: str
   }
 }
 
-export function createCostScenarioService({ repo, events }: CostScenarioServiceDeps) {
+/**
+ * Turns a LOCODE into a Port id, when a curated port carries that code.
+ *
+ * An id the caller supplied always wins - resolution never overwrites a choice
+ * that was made explicitly. An unknown LOCODE is left exactly as it is: V3.3
+ * kept the code columns precisely so a corridor whose port is not yet curated
+ * still works, and rejecting it here would break scenarios that predate V3.3.
+ */
+async function resolvePortIds(
+  logistics: LogisticsReferenceRepository | undefined,
+  dto: {
+    originPortId?: string | null
+    destinationPortId?: string | null
+    originLocode?: string | null
+    destinationLocode?: string | null
+  },
+): Promise<{ originPortId?: string; destinationPortId?: string }> {
+  if (!logistics) return {}
+  const out: { originPortId?: string; destinationPortId?: string } = {}
+
+  if (!dto.originPortId && dto.originLocode) {
+    const port = await logistics.findPortByLocode(dto.originLocode)
+    if (port) out.originPortId = port.id
+  }
+  if (!dto.destinationPortId && dto.destinationLocode) {
+    const port = await logistics.findPortByLocode(dto.destinationLocode)
+    if (port) out.destinationPortId = port.id
+  }
+  return out
+}
+
+export function createCostScenarioService({
+  repo,
+  events,
+  freightRates,
+  logistics,
+}: CostScenarioServiceDeps) {
   async function emit(ctx: CostScenarioCtx, type: string, data: Record<string, unknown>) {
     await events.emit(
       makeEvent({ type, organizationId: ctx.organizationId, actorId: ctx.user.id, data }),
@@ -106,6 +153,9 @@ export function createCostScenarioService({ repo, events }: CostScenarioServiceD
         // The repository's tenant-reference check treats null and undefined
         // alike; normalising here keeps the optional-buyer contract explicit.
         buyerId: dto.buyerId ?? null,
+        // Fills a Port id from a LOCODE where one is known; an explicit id is
+        // never replaced, and an unknown code is left alone.
+        ...(await resolvePortIds(logistics, dto)),
       })
       await emit(ctx, 'cost_scenario.created', {
         costScenarioId: scenario.id,
@@ -133,9 +183,40 @@ export function createCostScenarioService({ repo, events }: CostScenarioServiceD
         dto.fxRate ?? (current.fxRate === null ? undefined : String(current.fxRate)),
       )
 
-      const scenario = await repo.update(mutationCtx(ctx), id, expectedVersion, dto)
+      const scenario = await repo.update(mutationCtx(ctx), id, expectedVersion, {
+        ...dto,
+        ...(await resolvePortIds(logistics, dto)),
+      })
       await emit(ctx, 'cost_scenario.updated', { costScenarioId: id })
       return scenario
+    },
+
+    /**
+     * The freight rate that applies to this scenario, or why none does.
+     *
+     * READ-ONLY by design (ADR-0012): a rate is reference data, and turning one
+     * into a charge stays an explicit decision the user makes. Nothing here
+     * writes a CostScenarioCharge, so a manually entered freight figure is
+     * never silently replaced.
+     */
+    async resolveFreight(ctx: CostScenarioCtx, id: string): Promise<FreightRateResolution> {
+      // Reading a rate is reading a rate, whichever screen asks for it.
+      assertAbility(ctx, 'read', 'CostScenario')
+      assertAbility(ctx, 'read', 'FreightRate')
+
+      const scenario = await repo.findById(ctx.organizationId, id)
+      if (!scenario) throw new NotFoundError('Cost scenario not found.')
+      if (!freightRates) return { status: 'UNRESOLVED', reason: 'NO_RATE' }
+
+      return resolveFreightRate(freightRates, {
+        // The scenario's own tenant, never a parameter a caller could supply.
+        organizationId: ctx.organizationId,
+        originPortId: scenario.originPortId,
+        destinationPortId: scenario.destinationPortId,
+        mode: scenario.mode,
+        containerTypeId: scenario.containerTypeId,
+        effectiveAt: scenario.ratesEffectiveOn,
+      })
     },
 
     async remove(

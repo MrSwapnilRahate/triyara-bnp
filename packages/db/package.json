@@ -30,6 +30,7 @@
     "@triyara/lib": "workspace:*"
   },
   "devDependencies": {
+    "@triyara/core": "workspace:*",
     "@triyara/money": "workspace:*",
     "@types/node": "^22.10.5",
     "bcryptjs": "^2.4.3",

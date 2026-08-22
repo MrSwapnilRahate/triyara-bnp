@@ -40,12 +40,14 @@ const record = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
+/** Parameters are declared so `mock.calls[n][i]` is typed - the V3.4 tests read them. */
 function repoStub() {
+  type Data = Record<string, unknown>
   return {
-    create: vi.fn(async () => record()),
-    findById: vi.fn(async () => record()),
-    list: vi.fn(async () => ({ items: [], nextCursor: null, hasMore: false })),
-    update: vi.fn(async () => record()),
+    create: vi.fn(async (_ctx?: Data, _data?: Data) => record()),
+    findById: vi.fn(async (_org?: string, _id?: string, _opts?: Data) => record()),
+    list: vi.fn(async (_p?: Data) => ({ items: [], nextCursor: null, hasMore: false })),
+    update: vi.fn(async (_ctx?: Data, _id?: string, _v?: number, _data?: Data) => record()),
     softDelete: vi.fn(async () => record({ deletedAt: new Date() })),
     restore: vi.fn(async () => record()),
   }
@@ -244,5 +246,163 @@ describe('an exchange rate is required when currencies differ', () => {
       svc(repo).update(ctxFor(['ADMIN']) as never, 's1', 2, { currency: 'USD' } as never),
     ).rejects.toThrow(/exchange rate is required/i)
     expect(repo.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('freight resolution on a scenario (V3.4)', () => {
+  const port = { id: 'p-in', locode: 'INNSA', name: 'Nhava Sheva', countryCode: 'IN', modes: [] }
+
+  function deps(over: Record<string, unknown> = {}) {
+    const repo = repoStub()
+    const freightRates = {
+      list: vi.fn(async (_p?: Record<string, unknown>) => ({
+        items: [{ id: 'f1', amount: '1850.0000', containerTypeId: 'c-20' }],
+        nextCursor: null,
+        hasMore: false,
+      })),
+    }
+    const logistics = {
+      findPortByLocode: vi.fn(async (_code: string) => port),
+      listPorts: vi.fn(async () => [port]),
+      listContainerTypes: vi.fn(async () => []),
+    }
+    return { repo, freightRates, logistics, ...over }
+  }
+
+  const build = (d: ReturnType<typeof deps>) =>
+    createCostScenarioService({
+      repo: d.repo as never,
+      events: fakeEvents(),
+      freightRates: d.freightRates as never,
+      logistics: d.logistics as never,
+    })
+
+  const resolvable = {
+    originPortId: 'p-in',
+    destinationPortId: 'p-ae',
+    mode: 'SEA_FCL',
+    containerTypeId: 'c-20',
+    ratesEffectiveOn: new Date('2027-03-01'),
+  }
+
+  it('resolves the rate for a fully specified scenario', async () => {
+    const d = deps()
+    d.repo.findById.mockResolvedValue(record(resolvable))
+    const result = await build(d).resolveFreight(ctxFor(['ADMIN']) as never, 's1')
+    expect(result).toMatchObject({ status: 'RESOLVED' })
+  })
+
+  it('looks the rate up in the CALLER organization, never one carried on the row', async () => {
+    // The scenario is fetched tenant-scoped, so the two agree - but the lookup
+    // must be keyed by the caller's context, which is the value a request can
+    // be trusted to have authenticated.
+    const d = deps()
+    d.repo.findById.mockResolvedValue(record(resolvable))
+    await build(d).resolveFreight(ctxFor(['ADMIN']) as never, 's1')
+    expect(d.freightRates.list.mock.calls[0]![0]!.organizationId).toBe('org1')
+    // ...and the scenario itself was read tenant-scoped in the first place.
+    expect(d.repo.findById).toHaveBeenCalledWith('org1', 's1')
+  })
+
+  it.each(ROLES)('%s may resolve - reading a rate is reading a rate', async (role) => {
+    const d = deps()
+    d.repo.findById.mockResolvedValue(record(resolvable))
+    await expect(build(d).resolveFreight(ctxFor([role]) as never, 's1')).resolves.toBeDefined()
+  })
+
+  it('needs BOTH read CostScenario and read FreightRate', async () => {
+    const holding = (subject: Subject) =>
+      ({
+        can: (_a: Action, s: Subject) => s === subject,
+      }) as unknown as AppAbility
+    const user = { id: 'u1', organizationId: 'org1', email: 'a@b.com', name: 'A', roles: [] }
+
+    for (const subject of ['CostScenario', 'FreightRate'] as Subject[]) {
+      const d = deps()
+      d.repo.findById.mockResolvedValue(record(resolvable))
+      await expect(
+        build(d).resolveFreight(
+          { user, organizationId: 'org1', ability: holding(subject) } as never,
+          's1',
+        ),
+      ).rejects.toThrow(NOT_PERMITTED)
+    }
+  })
+
+  it('reports why, rather than returning nothing, when the scenario is incomplete', async () => {
+    const d = deps()
+    d.repo.findById.mockResolvedValue(record({ ...resolvable, ratesEffectiveOn: null }))
+    expect(await build(d).resolveFreight(ctxFor(['ADMIN']) as never, 's1')).toEqual({
+      status: 'UNRESOLVED',
+      reason: 'MISSING_EFFECTIVE_DATE',
+    })
+  })
+
+  it('never writes a charge - a rate is reference data (ADR-0012)', async () => {
+    const d = deps()
+    d.repo.findById.mockResolvedValue(record(resolvable))
+    await build(d).resolveFreight(ctxFor(['ADMIN']) as never, 's1')
+    expect(d.repo.update).not.toHaveBeenCalled()
+    expect(d.repo.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('LOCODE to Port resolution (V3.4)', () => {
+  const port = {
+    id: 'p-resolved',
+    locode: 'INNSA',
+    name: 'Nhava Sheva',
+    countryCode: 'IN',
+    modes: [],
+  }
+
+  function build(findPortByLocode: ReturnType<typeof vi.fn>) {
+    const repo = repoStub()
+    const logistics = { findPortByLocode, listPorts: vi.fn(), listContainerTypes: vi.fn() }
+    const svc = createCostScenarioService({
+      repo: repo as never,
+      events: fakeEvents(),
+      logistics: logistics as never,
+    })
+    return { repo, svc, logistics }
+  }
+
+  it('fills a Port id from a LOCODE when one is curated', async () => {
+    const { repo, svc } = build(vi.fn(async () => port))
+    await svc.create(ctxFor(['ADMIN']) as never, { ...dto, originLocode: 'INNSA' } as never)
+    expect(repo.create.mock.calls[0]![1]!.originPortId).toBe('p-resolved')
+  })
+
+  it('NEVER overwrites a Port id the caller supplied', async () => {
+    // An explicit choice wins over a code that happens to be present.
+    const findPort = vi.fn(async () => port)
+    const { repo, svc } = build(findPort)
+    await svc.create(
+      ctxFor(['ADMIN']) as never,
+      {
+        ...dto,
+        originLocode: 'INNSA',
+        originPortId: 'chosen-by-caller',
+      } as never,
+    )
+    expect(repo.create.mock.calls[0]![1]!.originPortId).toBe('chosen-by-caller')
+    expect(findPort).not.toHaveBeenCalled()
+  })
+
+  it('leaves an unknown LOCODE alone rather than rejecting it', async () => {
+    // V3.3 kept the code columns precisely so an uncurated corridor still works.
+    const { repo, svc } = build(vi.fn(async () => null))
+    await svc.create(ctxFor(['ADMIN']) as never, { ...dto, originLocode: 'ZZZZZ' } as never)
+    expect(repo.create.mock.calls[0]![1]!.originPortId).toBeUndefined()
+    expect(repo.create).toHaveBeenCalled()
+  })
+
+  it('resolves on update too, and still respects an explicit id', async () => {
+    const findPort = vi.fn(async () => port)
+    const { repo, svc } = build(findPort)
+    await svc.update(ctxFor(['ADMIN']) as never, 's1', 2, {
+      destinationLocode: 'INNSA',
+    } as never)
+    expect(repo.update.mock.calls[0]![3]!.destinationPortId).toBe('p-resolved')
   })
 })

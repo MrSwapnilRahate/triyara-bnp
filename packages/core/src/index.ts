@@ -135,6 +135,13 @@ export {
   type LogisticsReferenceService,
 } from './logistics/freight-rate.service'
 export {
+  FREIGHT_RATE_UNRESOLVED_MESSAGE,
+  type FreightRateResolution,
+  type FreightRateUnresolvedReason,
+  resolveFreightRate,
+  type ResolveFreightRateInput,
+} from './logistics/freight-rate-resolver'
+export {
   generateNotifications,
   type NotificationGenDeps,
   type OrgUserLookup,

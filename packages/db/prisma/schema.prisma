@@ -3111,10 +3111,20 @@ model CostScenario {
   /// than replacing them. Additive on purpose: no existing row is invalidated,
   /// and a corridor whose port is not yet curated still works through the
   /// LOCODE fallback.
-  originPortId       String?
-  destinationPortId  String?
-  containerTypeId    String?
-  destinationCountry String? @db.Char(2)
+  originPortId      String?
+  destinationPortId String?
+  containerTypeId   String?
+
+  /// The date rate selection is judged against (V3.4).
+  ///
+  /// FreightRate carries effective windows, and CostScenario had no business
+  /// date at all - only an FX freeze date and audit timestamps. Resolving
+  /// against `now()` would make the same scenario silently pick a different
+  /// rate as rates roll over, so a figure shown last month could never be
+  /// reproduced. Nullable: when unset, resolution reports the date is missing
+  /// rather than guessing one.
+  ratesEffectiveOn   DateTime?
+  destinationCountry String?   @db.Char(2)
 
   mode ShipmentMode?
 

@@ -40,6 +40,10 @@ const detailSelect = {
   originLocode: true,
   destinationLocode: true,
   destinationCountry: true,
+  originPortId: true,
+  destinationPortId: true,
+  containerTypeId: true,
+  ratesEffectiveOn: true,
   mode: true,
   grossWeightKg: true,
   volumeCbm: true,
@@ -55,6 +59,11 @@ const detailSelect = {
   createdAt: true,
   updatedAt: true,
   deletedAt: true,
+  originPort: { select: { id: true, locode: true, name: true, countryCode: true, modes: true } },
+  destinationPort: {
+    select: { id: true, locode: true, name: true, countryCode: true, modes: true },
+  },
+  containerType: { select: { id: true, code: true, name: true, teu: true } },
   charges: {
     where: { deletedAt: null },
     orderBy: { sequence: 'asc' },
@@ -110,6 +119,10 @@ export interface CreateCostScenarioData {
   incoterm: Prisma.CostScenarioCreateInput['incoterm']
   originLocode?: string | null
   destinationLocode?: string | null
+  originPortId?: string | null
+  destinationPortId?: string | null
+  containerTypeId?: string | null
+  ratesEffectiveOn?: Date | null
   destinationCountry?: string | null
   mode?: Prisma.CostScenarioCreateInput['mode']
   grossWeightKg?: string | null

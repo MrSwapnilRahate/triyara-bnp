@@ -249,6 +249,9 @@ importers:
         specifier: workspace:*
         version: link:../lib
     devDependencies:
+      '@triyara/core':
+        specifier: workspace:*
+        version: link:../core
       '@triyara/money':
         specifier: workspace:*
         version: link:../money

@@ -124,6 +124,19 @@ const scenarioShape = {
   incoterm: incotermSchema,
   originLocode: locode.optional(),
   destinationLocode: locode.optional(),
+
+  /**
+   * Structured references (V3.3 columns, wired in V3.4). Both forms are
+   * accepted: an id when the caller knows the port, a LOCODE otherwise. The
+   * service resolves a LOCODE to an id when one exists and never overwrites an
+   * id the caller supplied.
+   */
+  originPortId: z.string().min(1).nullable().optional(),
+  destinationPortId: z.string().min(1).nullable().optional(),
+  containerTypeId: z.string().min(1).nullable().optional(),
+
+  /** The date freight rate selection is judged against. Never defaulted. */
+  ratesEffectiveOn: z.coerce.date().nullable().optional(),
   destinationCountry: iso3166.optional(),
   mode: shipmentModeSchema.optional(),
 
