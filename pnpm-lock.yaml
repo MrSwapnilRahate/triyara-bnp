@@ -309,6 +309,22 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)(jsdom@25.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(terser@5.49.2)
 
+  packages/money:
+    dependencies:
+      '@triyara/lib':
+        specifier: workspace:*
+        version: link:../lib
+      decimal.js:
+        specifier: ^10.6.0
+        version: 10.6.0
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(jsdom@25.0.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(terser@5.49.2)
+
   packages/storage:
     dependencies:
       '@aws-sdk/client-s3':
