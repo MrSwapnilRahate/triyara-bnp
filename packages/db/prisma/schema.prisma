@@ -4,7 +4,7 @@
 // with their own modules. Account is the aggregate root every future module extends.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // Vercel builds and runs on Amazon Linux 2023 (OpenSSL 3.0), which Prisma
   // calls rhel-openssl-3.0.x. "native" alone resolves to the build host, so
   // the engine that ships is whatever the builder happened to be - correct on
@@ -67,8 +67,8 @@ model Organization {
   dateFormat      String  @default("DD/MM/YYYY")
   language        String  @default("en")
 
-  users    User[]
-  accounts Account[]
+  users               User[]
+  accounts            Account[]
   adminAccessRequests AdminAccessRequest[]
 
   // Product Catalog (TRY-BNP-CATALOG-S1) back-relations. ORM-side only:
@@ -80,6 +80,7 @@ model Organization {
   quotations      Quotation[]
   paymentTerms    PaymentTerm[]
   exchangeRates   ExchangeRate[]
+  costScenarios   CostScenario[]
   specDefinitions ProductSpecificationDefinition[]
   tags            Tag[]
 }
@@ -96,16 +97,16 @@ model User {
   // Personal presentation (TRY-BNP-ADMIN-01). `preferences` is free-form JSON
   // on purpose: it holds UI choices the server never interprets, so adding one
   // must not need a migration. Anything the server acts on gets a column.
-  avatarUrl      String?
-  preferences    Json?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  avatarUrl   String?
+  preferences Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  roles         UserRole[]
-  resetTokens   PasswordResetToken[]
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roles               UserRole[]
+  resetTokens         PasswordResetToken[]
   adminAccessRequests AdminAccessRequest[]
-  ownedAccounts Account[]            @relation("AccountOwner")
+  ownedAccounts       Account[]            @relation("AccountOwner")
 
   // Auth extension (TRY-BNP-AUTH-02) back-relations. ORM-side only: these add
   // NO columns to the User table and leave TRY-BNP-AUTH-01 unmodified.
@@ -184,13 +185,13 @@ model Account {
   /// checked by us, and the review queue treats it accordingly.
   isSelfRegistered Boolean   @default(false)
   submittedAt      DateTime?
-  createdById        String
-  updatedById        String
-  deletedById        String?
-  version            Int                @default(1)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  deletedAt          DateTime?
+  createdById      String
+  updatedById      String
+  deletedById      String?
+  version          Int       @default(1)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
 
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner           User?            @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -198,6 +199,7 @@ model Account {
   buyerProfile    BuyerProfile?
   rfqs            RFQ[]
   quotations      Quotation[]
+  costScenarios   CostScenario[]
   approvals       BuyerApproval[]
   contacts        BuyerContact[]
 
@@ -918,6 +920,7 @@ model Product {
   documents      ProductDocument[]
   prices         ProductPrice[]
   tags           ProductTag[]
+  costScenarios  CostScenario[]
 
   @@unique([organizationId, sku])
   @@unique([organizationId, slug])
@@ -1408,7 +1411,7 @@ model Supplier {
   tags                   SupplierTag[]
   notes                  SupplierNote[]
   rfqParticipations      RFQSupplier[]
-  awardedRfqs            RFQ[]                   @relation("RFQAwardedSupplier")
+  awardedRfqs            RFQ[]                     @relation("RFQAwardedSupplier")
   quotationSourceOptions QuotationSourceOption[]
 
   @@unique([organizationId, supplierCode])
@@ -1954,16 +1957,16 @@ model RFQ {
   /// No foreign key, matching AuditLog.actorId: sentinel actors are permitted.
   awardedById       String?
 
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  buyer           Account?     @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  awardedSupplier Supplier?    @relation("RFQAwardedSupplier", fields: [awardedSupplierId], references: [id], onDelete: Restrict)
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  buyer           Account?        @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  awardedSupplier Supplier?       @relation("RFQAwardedSupplier", fields: [awardedSupplierId], references: [id], onDelete: Restrict)
   items           RFQItem[]
-  suppliers    RFQSupplier[]
-  attachments  RFQAttachment[]
-  comments     RFQComment[]
-  revisions    RFQRevision[]
-  approvals    RFQApproval[]
-  quotations   Quotation[]
+  suppliers       RFQSupplier[]
+  attachments     RFQAttachment[]
+  comments        RFQComment[]
+  revisions       RFQRevision[]
+  approvals       RFQApproval[]
+  quotations      Quotation[]
 
   @@unique([organizationId, rfqNumber])
   @@index([organizationId, status, deletedAt])
@@ -3042,4 +3045,151 @@ enum AdminAccessRequestStatus {
   /// request; the person may submit a fresh one, and the partial unique index
   /// only covers PENDING so nothing blocks that.
   REVOKED
+}
+
+// ===========================================================================
+// EXPORT COST INTELLIGENCE (V3, ADR-0012)
+//
+// A CostScenario is PRE-COMMERCIAL: a working calculation workspace, not a
+// document anyone is sent. That is the whole reason it is not a Quotation - no
+// number, no buyer requirement, no approval or send lifecycle - so a user can
+// model six alternatives without creating six commercial records.
+//
+// Every enum here is reused from the quotation domain rather than duplicated:
+// Incoterm, ChargeType and ChargeCalculationBasis already describe exactly the
+// vocabulary this needs. Conventions follow the rest of the schema - uniqueness
+// is tenant-scoped, money is always Decimal, deletes are soft.
+//
+// Calculated RESULTS are deliberately absent. ADR-0012 requires that
+// recalculation never overwrites history, which makes results an append-only
+// entity of their own carrying the engineVersion that produced them - built in
+// the phase that adds the engine, because until then nothing would write it.
+// ===========================================================================
+
+/// How the cargo moves. No existing enum described this; freight rates and
+/// per-container charges are meaningless without it.
+enum ShipmentMode {
+  SEA_FCL
+  SEA_LCL
+  AIR
+  ROAD
+  RAIL
+  MULTIMODAL
+}
+
+/// One costed export alternative.
+model CostScenario {
+  id             String @id @default(cuid())
+  organizationId String
+
+  /// How the user tells alternatives apart - "FOB Nhava Sheva" vs "CIF Jebel Ali".
+  name        String
+  description String? @db.Text
+
+  /// What is being costed. Required: a scenario with no product costs nothing.
+  productId String
+  quantity  Decimal @db.Decimal(18, 4)
+  /// UoM the quantity and unit cost are expressed in, e.g. "MT", "KG".
+  unit      String
+
+  /// Optional by design (ADR-0012): a scenario may explore a corridor before
+  /// any buyer exists, and must never be permanently bound to one.
+  /// References Account, matching RFQ.buyerId and Quotation.buyerId.
+  buyerId String?
+
+  incoterm Incoterm
+
+  /// UN/LOCODE. The structured Port table arrives with the reference-data
+  /// phase; storing the code now means that migration adds a foreign key
+  /// rather than cleaning up free text, which is the trap V2's `port String?`
+  /// fields fell into.
+  originLocode       String? @db.Char(5)
+  destinationLocode  String? @db.Char(5)
+  destinationCountry String? @db.Char(2)
+
+  mode ShipmentMode?
+
+  /// Cargo dimensions, needed by PER_WEIGHT and PER_CONTAINER charges. Held on
+  /// the scenario rather than derived from Product: the same product ships in
+  /// different packing configurations.
+  grossWeightKg  Decimal? @db.Decimal(18, 4)
+  volumeCbm      Decimal? @db.Decimal(18, 4)
+  containerCount Int?
+
+  /// SNAPSHOT, not a live lookup. ProductPrice changes; a scenario costed last
+  /// month must still explain the figure it showed.
+  unitCost Decimal @db.Decimal(18, 4)
+
+  /// Quoting currency and the tenant's reporting currency, with the rate frozen
+  /// at the moment it was chosen - the same treatment Quotation gives fx.
+  currency     String    @db.Char(3)
+  baseCurrency String    @db.Char(3)
+  fxRate       Decimal?  @db.Decimal(18, 8)
+  fxRateDate   DateTime?
+
+  /// What the seller intends to charge, for margin. Optional: cost analysis is
+  /// useful before a price exists.
+  sellingPricePerUnit Decimal? @db.Decimal(18, 4)
+
+  createdById String
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  buyer        Account?             @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  charges      CostScenarioCharge[]
+
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, productId])
+  @@index([organizationId, buyerId])
+  @@index([organizationId, incoterm])
+  @@index([organizationId, createdAt])
+  @@index([productId])
+  @@index([buyerId])
+}
+
+/// One cost component on a scenario.
+///
+/// Normalised rather than JSON: money must stay Decimal (the schema rule), the
+/// enums must stay enforced by the database, and "which scenarios carry freight
+/// over X" has to remain a query. Mirrors QuotationCharge, minus the line scope
+/// a single-product scenario has no use for.
+model CostScenarioCharge {
+  id             String @id @default(cuid())
+  scenarioId     String
+  organizationId String
+
+  type  ChargeType
+  basis ChargeCalculationBasis @default(FIXED_AMOUNT)
+  label String?
+
+  /// Percentage when basis is PERCENTAGE, else the per-unit, per-kg or
+  /// per-container figure. `amount` carries a pre-resolved FIXED_AMOUNT.
+  rate     Decimal? @db.Decimal(12, 6)
+  amount   Decimal  @db.Decimal(18, 4)
+  currency String   @db.Char(3)
+
+  /// A discount is a charge that subtracts, not a separate concept - the same
+  /// modelling QuotationCharge uses.
+  isDeduction Boolean @default(false)
+  /// Significant: charges resolve as ordered conditions, each against a base
+  /// that may already include earlier ones.
+  sequence    Int     @default(0)
+
+  notes String?
+
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  scenario CostScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioId, sequence])
+  @@index([organizationId, type])
+  @@index([scenarioId, deletedAt])
 }

@@ -78,6 +78,17 @@ export {
   type ListCategoriesParams,
   type UpdateCategoryData,
 } from './repositories/category.repository'
+export {
+  type CostScenarioChargeInput,
+  type CostScenarioListItem,
+  type CostScenarioListResult,
+  type CostScenarioRecord,
+  type CostScenarioRepository,
+  costScenarioRepository,
+  type CreateCostScenarioData,
+  type ListCostScenariosParams,
+  type UpdateCostScenarioData,
+} from './repositories/cost-scenario.repository'
 export type { DashboardRepository, DashboardSummary } from './repositories/dashboard.repository'
 export { dashboardRepository } from './repositories/dashboard.repository'
 export {

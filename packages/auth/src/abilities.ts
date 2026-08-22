@@ -66,6 +66,15 @@ export const SUBJECTS = [
   // subject starts with nothing. The grant below restores it deliberately -
   // see the role rules.
   'Supplier',
+  // Pre-commercial export cost scenarios (V3, ADR-0012). NOT authorized as
+  // `Quotation`: reusing it would give scenario access to everyone holding
+  // quotation rights and the reverse, conflating a private cost exploration
+  // with a document a buyer has been sent.
+  //
+  // Like `Supplier`, a new subject starts with nothing, so the grant below is
+  // deliberate rather than inherited - and it is the only place in this file
+  // that V3 adds. No existing subject's grant is touched.
+  'CostScenario',
 ] as const
 export type Subject = (typeof SUBJECTS)[number]
 
@@ -110,8 +119,17 @@ export function buildAbilityFor(roles: Role[]): AppAbility {
         // `manage` and `delete` stay absent, so approving and removing a
         // supplier remain ADMIN's, exactly as before.
         'Supplier',
+        // A cost scenario is a working document, not a commercial commitment,
+        // so an export manager owns its whole life - including deletion, which
+        // is why `delete` is granted separately just below. That is the one
+        // place this subject departs from the RFQ and Quotation rule above,
+        // and it is deliberate: withdrawing a quotation a buyer has seen is an
+        // administrative act, discarding your own draft calculation is not.
+        'CostScenario',
       ],
     )
+    // Restore rides on `update`, matching RFQ, Supplier, Product and Category.
+    can('delete', 'CostScenario')
   }
 
   if (has('VERIFIER')) {

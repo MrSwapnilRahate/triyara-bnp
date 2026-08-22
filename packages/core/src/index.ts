@@ -116,6 +116,12 @@ export {
   type ProductServiceDeps,
 } from './catalog/product.service'
 export {
+  type CostScenarioCtx,
+  type CostScenarioService,
+  type CostScenarioServiceDeps,
+  createCostScenarioService,
+} from './cost/cost-scenario.service'
+export {
   createDocumentService,
   type DocumentService,
   type DocumentServiceCtx,
