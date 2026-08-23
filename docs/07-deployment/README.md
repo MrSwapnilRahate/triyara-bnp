@@ -4,48 +4,88 @@ Index for the `07-deployment` documentation folder (see TRY-BNP-DOCS-01 for scop
 
 ## The production pipeline
 
-`.github/workflows/deploy.yml` runs on every push to `main`. It pulls the
-production configuration from Vercel, refuses to continue if any required
-variable is absent, applies database migrations, builds, deploys, and checks
-that the deployment answers.
+Two systems release production, and they have **separate, non-overlapping
+jobs**:
+
+| System                     | Responsibility                                   |
+| -------------------------- | ------------------------------------------------ |
+| **Vercel Git integration** | Builds and deploys the application. Only Vercel. |
+| **GitHub Actions**         | Applies database migrations, then checks health. |
 
 ```
 push to main
-  └─ vercel pull ............ project settings + production env
-     └─ preflight ........... required variables present, provider is s3/r2
-        └─ migrate deploy ... schema first, so code never leads the database
-           └─ vercel build
-              └─ vercel deploy --prod
-                 └─ GET /api/health must return 200
+  ├─ GitHub Actions (.github/workflows/deploy.yml)
+  │    └─ prisma migrate deploy .... DIRECT_DATABASE_URL, step-scoped
+  │       └─ migrate status ........ nothing left pending
+  │          └─ wait, then GET https://portal.triyaraexports.com/api/health
+  │
+  └─ Vercel Git integration  (independent, ~2 min)
+       └─ builds this commit with the REAL production environment
+          └─ promotes it to portal.triyaraexports.com
 ```
 
-Configuration lives in **Vercel**, not in GitHub. The only things GitHub holds
-are the three values needed to reach Vercel. That way there is one place to
-change a database URL or rotate a storage key, and no chance of the two
-drifting apart.
+GitHub Actions **does not deploy the application**, and must not be made to.
+The only credential it holds for production is `DIRECT_DATABASE_URL`, scoped to
+the migration step.
 
-### The deploy is off until you turn it on
+### Why GitHub Actions no longer deploys
 
-The job is gated on `vars.DEPLOY_ENABLED == 'true'`. Until that repository
-variable exists, merging to `main` deploys nothing — which is the correct
-state while secrets are still missing, and is why merging the pipeline itself
-is safe. Setting it to `true` is the go-live action.
+It used to. On **23 August 2026** that took production down.
+
+The workflow ran `vercel pull --environment=production`, then `vercel build
+--prod`, then `vercel deploy --prebuilt --prod`. What nobody had noticed is that
+**`vercel pull` does not return the values of variables marked _Sensitive_** in
+the Vercel project. It writes the literal string `[SENSITIVE]`:
+
+```
+DATABASE_URL="[SENSITIVE]"
+AUTH_SECRET="[SENSITIVE]"
+STORAGE_BUCKET="[SENSITIVE]"
+```
+
+The build consumed that file, the prebuilt artefact shipped, and the deployment
+came up with an unusable database configuration. `/api/health` answered `503`
+with `"database":"unreachable"` until the previous deployment was rolled back.
+
+The preflight step did not catch it because it asserted each variable was
+**present**, and `DATABASE_URL="[SENSITIVE]"` is present. The comment in that
+step even recorded the assumption that failed — _"the real value is still
+available to the deployed application"_ — which is true of a Git-integration
+deploy and false of a prebuilt one.
+
+Vercel's own Git integration injects the real values at build and at runtime, so
+it never had this problem. The same commit deployed both ways is the clearest
+evidence: the Git build took ~2 minutes and was healthy; the prebuilt upload
+took 18 seconds and could not reach the database.
+
+**Therefore `vercel pull`, `vercel build` and `vercel deploy --prebuilt` must
+never return to this workflow.** A stricter preflight is not the fix; not
+building from CI is.
 
 ### What must be configured
 
 **GitHub → Settings → Secrets and variables → Actions → Secrets**
 
-| Secret              | Where it comes from                                         |
-| ------------------- | ----------------------------------------------------------- |
-| `VERCEL_TOKEN`      | Vercel → Account Settings → Tokens                          |
-| `VERCEL_ORG_ID`     | `.vercel/project.json` after `vercel link`, or project page |
-| `VERCEL_PROJECT_ID` | same                                                        |
+| Secret                | Where it comes from                                                 |
+| --------------------- | ------------------------------------------------------------------- |
+| `DIRECT_DATABASE_URL` | Neon → the **direct** endpoint, i.e. the host **without** `-pooler` |
 
-**GitHub → … → Variables**
+That is the only secret the release workflow needs. `DIRECT_DATABASE_URL` must
+be the direct endpoint: `prisma migrate deploy` takes a session-level advisory
+lock, and PgBouncer's transaction pooling cannot hold one, so migrating over the
+pooled runtime URL hangs or fails.
 
-| Variable         | Value                          |
-| ---------------- | ------------------------------ |
-| `DEPLOY_ENABLED` | `true` — set this one **last** |
+`VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are **no longer used by
+this workflow** — nothing in CI talks to Vercel any more. They may still exist
+for local tooling; the release path does not read them.
+
+There is no `DEPLOY_ENABLED` variable and there must not be one. An off switch
+in front of a migration job is how a schema change gets silently skipped while
+the code that needs it ships anyway — which is exactly what happened when the
+QuoteRequest migration did not run and every public submission answered `500`
+for seventeen minutes. The job is safe to run unconditionally: `migrate deploy`
+applies only what has not been applied, and does nothing when there is nothing
+to do.
 
 **Vercel → Project → Settings → Environment Variables → Production**
 
@@ -62,52 +102,89 @@ is safe. Setting it to `true` is the go-live action.
 | `STORAGE_REGION`               | real region for S3; `auto` for R2                     |
 | `STORAGE_ENDPOINT`             | R2 only, and required there                           |
 
-The preflight step asserts the presence of all of these except
-`AUTH_TRUST_HOST`, `STORAGE_REGION` and `STORAGE_ENDPOINT` (the last is
-required only when the provider is `r2`). It reads names, never values.
+These are read by the running application. Nothing in CI reads them, so nothing
+in CI can corrupt them.
 
 ### Migrations
 
-`prisma migrate deploy` runs **before** the deploy, against the production
-database, using the `DATABASE_URL` pulled from Vercel. Two consequences worth
-understanding:
+`prisma migrate deploy` runs in GitHub Actions against the production database,
+using `DIRECT_DATABASE_URL`. Three consequences worth understanding:
 
 - The GitHub runner must be able to reach the production database. A managed
   Postgres with IP allowlisting will reject it; allow the runner or move this
   step to a self-hosted runner inside the network.
-- Migrations must be **additive** (expand/contract). If a deploy fails after a
-  successful migration, the previous code keeps serving against a schema that
-  has gained columns — harmless. A migration that drops or renames instead
-  takes production down at exactly that moment. Add the new shape, ship code
-  that writes both, remove the old shape in a later release.
+- Migrations must be **additive** (expand/contract). Add the new shape, ship
+  code that writes both, remove the old shape in a later release.
+- Additive is not a style preference here — it is what makes the race below
+  survivable. A migration that drops or renames a column breaks the property the
+  whole arrangement depends on.
 
-### Avoiding a double deploy
+### The race we did not close
 
-Vercel's own Git integration builds preview deployments per pull request, which
-is wanted. If that integration is _also_ set to deploy production on pushes to
-`main`, every merge deploys twice — once by Vercel directly, once by this
-workflow, and the one that lands last wins with no ordering guarantee against
-the migration step.
+Vercel's Git integration keeps deploying production on every push to `main`, and
+that is now the intended state. It is also independent of GitHub Actions:
+**nothing sequences the migration against the deployment.**
 
-Turn production deploys off on Vercel's side (Project → Settings → Git →
-Production Branch / Ignored Build Step), keeping previews on. This repository
-does not ship a `vercel.json`, because in a monorepo Vercel reads it from the
-project's configured Root Directory and putting it in the wrong place silently
-does nothing — the dashboard setting is unambiguous.
+In practice the migration wins comfortably. Vercel starts building about two
+seconds after the push and takes roughly two minutes; `migrate deploy` takes
+about four seconds. But "comfortably" is not "guaranteed", and this is a real
+limitation rather than an oversight:
+
+> **A failed migration does not stop Vercel from deploying the code.**
+
+What makes that acceptable is the additive rule. If a migration fails or lands
+late, the new code meets a schema that is missing only the _new_ shape, so the
+**new feature** returns errors while the rest of the portal keeps serving. That
+is precisely what happened on 23 August: `QuoteRequest` had no table yet, so
+`POST /api/v1/public/quote-requests` answered `500` and nothing else was
+affected.
+
+The options for closing it properly were considered and rejected, and it is
+worth knowing why so nobody re-opens them casually:
+
+- **Deploy from CI after migrating.** This is what caused the outage. See above.
+- **Disable Vercel production deploys and promote a preview from CI.** Preview
+  deployments build with the _Preview_ environment. Only `DATABASE_URL` and
+  `AUTH_SECRET` are scoped to Preview in this project; the other fourteen
+  variables are Production-only, so a promoted preview would boot without
+  storage or email configuration.
+- **Gate the Vercel build on migration state via an Ignored Build Step.** That
+  command runs inside Vercel's build environment and would need production
+  database credentials there, widening the blast radius to solve an ordering
+  problem that the additive rule already contains.
 
 ### Going live, in order
 
 1. Create the production database and run `prisma migrate deploy` against it
-   once, by hand, so the first automated deploy is not also the first migration.
+   once, by hand, so the first automated release is not also the first migration.
 2. Create the bucket (see Production storage below) and its credentials.
 3. Set every Vercel production variable in the table above.
-4. Set `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` as GitHub secrets.
-5. Disable production deploys in Vercel's Git integration.
-6. Set `DEPLOY_ENABLED=true`.
-7. Trigger **Actions → Deploy → Run workflow** rather than waiting for a merge,
-   so the first production deploy is one you are watching.
-8. Create the first administrator (see below) — until then nobody can sign in.
-9. Work through the post-deploy checks below.
+4. Set `DIRECT_DATABASE_URL` as a GitHub secret — the direct Neon endpoint, not
+   the pooled one.
+5. **Leave production deploys ENABLED in Vercel's Git integration.** Vercel is
+   the only deployer. (An earlier version of this document said to disable them,
+   because the workflow used to deploy as well. It no longer does, and disabling
+   them now would mean nothing deploys at all.)
+6. Create the first administrator (see below) — until then nobody can sign in.
+7. Work through the post-deploy checks below.
+
+### Releasing a database migration safely
+
+For a future engineer shipping a schema change, in order:
+
+1. Write the migration so it is **additive**. If the change is fundamentally a
+   drop or a rename, split it across two releases: add the new shape now, ship
+   code that writes both, remove the old shape in a later release once nothing
+   reads it.
+2. Let CI prove it before merge. `ci.yml` already replays every migration from an
+   empty database, fails on schema drift, seeds, and runs the integration tests.
+   A migration that cannot replay cleanly never reaches `main`.
+3. Merge to `main`. The release workflow applies the migration; Vercel builds and
+   deploys the same commit independently.
+4. Watch **Actions → Release**. The migration job is authoritative for the
+   schema; the health job tells you whether production is serving afterwards.
+5. If the health check is red, roll the **deployment** back (below). Do not roll
+   the database back.
 
 ### The first administrator
 
@@ -182,12 +259,48 @@ These are the checks that do, and they need a human:
 5. **Redeploy, then download that document again.** This is the only check that
    distinguishes real object storage from a filesystem that is about to vanish.
 
+### The health check
+
+The second job in the release workflow waits two minutes for Vercel to build and
+promote, then polls **`https://portal.triyaraexports.com/api/health`** — the
+stable public domain — up to ten times, asserting both `"status":"ok"` and
+`"database":"ok"`. Both, because `/api/health` is a readiness check: it answers
+`503` with `"degraded"` when the database is unreachable, so a bare status
+assertion would pass a deployment that cannot serve.
+
+Three things it deliberately does **not** do:
+
+- **It does not target a raw deployment URL.** Those sit behind Deployment
+  Protection and need a token to read, and more importantly they tell you
+  whether one deployment answers — not whether the domain users actually hit
+  does.
+- **It does not gate the release.** By the time it runs, Vercel has already
+  promoted the commit on its own schedule. A red check means "production is
+  unhealthy, go look".
+- **It does not roll back automatically, and must not be made to.** An automatic
+  rollback fired by a transient blip is a second outage, not a recovery. It
+  performs no mutation of production of any kind.
+
+There is one honest gap: because the domain serves the _previous_ deployment
+until Vercel finishes, an early poll can pass against code this workflow never
+released. The initial wait makes that unlikely; the check does not claim to
+prove which commit is live.
+
 ### Rolling back
 
-Roll the deployment back in Vercel (Deployments → the previous production
-deployment → Promote). Do **not** roll the database back; additive migrations
-are compatible with the previous release, which is the point of the discipline
-above. If a migration itself is the problem, write a new forward migration.
+Roll the **deployment** back, never the database:
+
+```bash
+vercel rollback <previous-deployment-url>
+```
+
+or in the dashboard, Deployments → the previous production deployment → Promote.
+
+Do **not** roll the database back. Additive migrations are compatible with the
+previous release, which is the entire point of the discipline above — it is what
+let the 23 August rollback restore service in about two seconds while migration
+`0022_quote_request_intake` stayed applied. If a migration itself is the problem,
+write a new forward migration.
 
 ## Email delivery
 

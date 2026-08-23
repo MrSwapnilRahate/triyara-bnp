@@ -1,30 +1,53 @@
-name: Deploy
+name: Release
+
+# Production release: database migrations, then a health check.
+#
+# THIS WORKFLOW DOES NOT DEPLOY THE APPLICATION. Vercel's Git integration
+# builds and deploys every push to `main` on its own, and it is the only thing
+# that does.
+#
+# It used to deploy. On 23 Aug 2026 that took production down, and the reason is
+# worth keeping written here because the failure looked like a success at every
+# step that checked:
+#
+#   `vercel pull --environment=production` returns REDACTED values for every
+#   variable marked Sensitive in the Vercel project - the literal string
+#   "[SENSITIVE]", not the secret. `vercel build --prod` then built against that
+#   file, `vercel deploy --prebuilt` shipped the result, and the deployment came
+#   up with an unusable DATABASE_URL. /api/health answered 503 "database
+#   unreachable" until the previous deployment was rolled back.
+#
+#   The preflight did not catch it because it asserted that each variable was
+#   PRESENT. `DATABASE_URL="[SENSITIVE]"` is present.
+#
+# Vercel's own Git integration never has this problem: it injects the real
+# values at build and at runtime. So the fix is not a better preflight - it is
+# to stop building and deploying from CI at all. `vercel pull`, `vercel build`
+# and `vercel deploy --prebuilt` must not come back to this file.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-# A deploy must never be cancelled part-way. Between `migrate deploy` and the
-# Vercel deploy the database is ahead of the running code; cancelling there
+# A migration must never be cancelled part-way. Between `migrate deploy` and the
+# Vercel deployment the database is ahead of the running code; cancelling there
 # leaves that state with nothing reporting it.
 concurrency:
-  group: deploy-production
+  group: release-production
   cancel-in-progress: false
 
 jobs:
-  production:
-    name: Production deploy
+  migrate:
+    name: Production migration
     runs-on: ubuntu-latest
-    # Deliberate off switch. Every merge to main is a no-op until the
-    # DEPLOY_ENABLED repository variable is set to 'true', which is the
-    # go-live action once the secrets and Vercel variables below exist.
-    # See docs/07-deployment/README.md.
-    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
-    env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    # No DEPLOY_ENABLED gate, deliberately. An off switch on a migration job is
+    # how a schema change gets silently skipped while the code that needs it
+    # ships anyway - which is exactly what happened when the QuoteRequest
+    # migration did not run and every public submission answered 500 for
+    # seventeen minutes. This job is safe to run on every merge: `migrate
+    # deploy` applies only migrations that have not been applied, and does
+    # nothing at all when there are none.
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -35,82 +58,20 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Pinned to a major: an unpinned CLI turns an upstream release into a
-      # failed production deploy on an unrelated day.
-      - name: Install Vercel CLI
-        run: npm install --global vercel@58
-
-      - name: Pull the production environment from Vercel
-        # Vercel holds the runtime configuration; this is the single source of
-        # truth for it. Nothing is duplicated into GitHub secrets except the
-        # three values needed to reach Vercel in the first place.
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-
-      - name: Require every runtime variable before deploying
-        # Names only - no value is printed. Without this the build succeeds and
-        # the failure surfaces as a 500 on a supplier's first upload instead.
-        run: |
-          set -euo pipefail
-          # The CLI's output path has moved between major versions; resolve it
-          # rather than assume, so a CLI upgrade fails loudly here instead of
-          # skipping the checks below.
-          env_file=""
-          for candidate in .vercel/.env.production.local .env.production.local; do
-            if [ -f "$candidate" ]; then
-              env_file="$candidate"
-              break
-            fi
-          done
-          if [ -z "$env_file" ]; then
-            echo "::error::vercel pull produced no production environment file."
-            echo "Looked for .vercel/.env.production.local and .env.production.local."
-            exit 1
-          fi
-          if [ -n "${GITHUB_ENV:-}" ]; then
-            echo "PRODUCTION_ENV_FILE=$env_file" >> "$GITHUB_ENV"
-          fi
-
-          missing=""
-          # RESEND_API_KEY and EMAIL_FROM are here for the same reason as the
-          # storage keys: the app refuses to serve production without them, so
-          # omitting them would pass preflight and then fail to boot.
-          for key in DATABASE_URL AUTH_SECRET PUBLIC_REGISTRATION_ORG_SLUG \
-                     STORAGE_PROVIDER STORAGE_BUCKET \
-                     STORAGE_ACCESS_KEY_ID STORAGE_SECRET_ACCESS_KEY \
-                     RESEND_API_KEY EMAIL_FROM; do
-            grep -q "^${key}=" "$env_file" || missing="$missing $key"
-          done
-          if [ -n "$missing" ]; then
-            echo "::error::Missing from the Vercel production environment:$missing"
-            echo "Set them in the Vercel project (Settings, Environment Variables, Production)."
-            exit 1
-          fi
-
-          # Vercel may redact sensitive runtime values when pulling the
-          # production environment. Validate presence, not the value itself.
-          # The real value is still available to the deployed application.
-          if ! grep -q '^STORAGE_ENDPOINT=' "$env_file"; then
-            echo "::error::STORAGE_ENDPOINT is missing from the Vercel production environment."
-            exit 1
-          fi
-
       - name: Apply database migrations
-        # Before the deploy, never after: new code must not reach traffic ahead
-        # of the schema it expects. Migrations are additive by convention
-        # (expand/contract), so if the deploy then fails, the old code keeps
-        # running against a superset schema rather than a broken one.
-        #
-        # This step used to source the whole Vercel environment, which meant
-        # migrating over the POOLED endpoint the application runs on. The
-        # migration engine takes a session-level advisory lock, and PgBouncer's
-        # transaction pooling cannot hold one - so that would hang or fail on
-        # the first real deploy. It never surfaced only because DEPLOY_ENABLED
-        # has never been true.
+        # Runs as early as possible. Vercel starts building this same commit
+        # within a couple of seconds of the push and takes roughly two minutes;
+        # this step takes about four. The migration therefore lands first in
+        # practice - but the two pipelines are INDEPENDENT and nothing here
+        # enforces that ordering. See "the race we did not close" in
+        # docs/07-deployment/README.md. It is survivable only because migrations
+        # are additive by convention.
         env:
-          # Step-scoped deliberately. The direct endpoint exists for the
-          # migration engine and must not leak into `vercel build` or
-          # `vercel deploy` below, which take their configuration from Vercel
-          # and must keep using the pooled URL the runtime needs.
+          # Step-scoped deliberately, and the only step that sees it. The direct
+          # endpoint exists for the migration engine: Prisma takes a
+          # session-level advisory lock, and PgBouncer's transaction pooling
+          # cannot hold one, so migrating over the pooled runtime URL would hang
+          # or fail.
           #
           # Named DATABASE_URL because that is what the datasource reads; the
           # schema declares no `directUrl`, so the split lives here rather than
@@ -118,80 +79,80 @@ jobs:
           DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
         run: |
           set -euo pipefail
-          # Fails before `vercel build` and `vercel deploy`, so a missing
-          # secret costs nothing and cannot half-deploy.
           if [ -z "${DATABASE_URL:-}" ]; then
             echo "::error::DIRECT_DATABASE_URL is not set."
             echo "Migrations require the Neon DIRECT endpoint - the host WITHOUT '-pooler'."
-            echo "The pooled URL in Vercel cannot hold the advisory lock the migration engine takes."
+            echo "The pooled URL cannot hold the advisory lock the migration engine takes."
             echo "Add it under Settings, Secrets and variables, Actions, repository secrets."
             exit 1
           fi
           pnpm --filter @triyara/db db:deploy
 
-      - name: Build
-        run: vercel build --prod --token="$VERCEL_TOKEN"
-
-      - name: Deploy
-        id: deploy
-        run: |
-          set -euo pipefail
-          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "Deployed: $url"
-
-      - name: Smoke check the deployment
-        # /api/health is a readiness check, not a liveness one: it runs
-        # `SELECT 1` and answers 503 when the database is unreachable. So the
-        # `"status":"ok"` assertion below proves the deployment boots AND that
-        # it can reach the database through the pooled runtime URL - which is
-        # exactly the half the migration step above does not exercise.
-        #
-        # Storage is still not covered here; the post-deploy checks in
-        # docs/07-deployment/README.md handle that, and they are not automatable
-        # without writing rows to production.
+      - name: Verify no migration is left pending
+        # `migrate deploy` exits non-zero on failure, so this is a second,
+        # independent assertion rather than the primary check: it re-reads
+        # _prisma_migrations and fails if anything is still unapplied. Cheap, and
+        # it turns a partially-applied state into a red build instead of a
+        # surprise at runtime.
         env:
-          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+          DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
         run: |
           set -euo pipefail
-          # `vercel curl` rather than plain curl. Deployment Protection answers
-          # an unauthenticated request with a 302 to the Vercel login page, so
-          # the old check failed on the redirect and never reached the app. The
-          # CLI carries the same token used to deploy and bypasses protection
-          # for this request only - nothing about the deployment's protection
-          # settings changes, and the endpoint stays private.
+          status=$(pnpm --filter @triyara/db exec prisma migrate status 2>&1) || true
+          echo "$status"
+          if echo "$status" | grep -qiE 'following migrations? have not yet been applied|not yet been applied'; then
+            echo "::error::Migrations are still pending after migrate deploy."
+            exit 1
+          fi
+
+  health:
+    name: Production health check
+    needs: migrate
+    runs-on: ubuntu-latest
+    # A MONITOR, NOT A GATE. By the time this runs, Vercel has already built and
+    # promoted the commit on its own schedule - nothing here approved that, and
+    # nothing here can undo it. A red check means "production is unhealthy, go
+    # look", and the response is a human running `vercel rollback`.
+    #
+    # It deliberately performs no automatic rollback and no automatic mutation of
+    # production. An automated rollback triggered by a transient health blip is a
+    # second outage, not a recovery.
+    steps:
+      - name: Wait for the Vercel deployment, then check production health
+        env:
+          # The STABLE PUBLIC DOMAIN, never a raw deployment URL. Two reasons:
+          # a deployment URL sits behind Deployment Protection and needs a
+          # token to read, and more importantly it tells you whether ONE
+          # deployment answers - not whether the domain your users hit does.
+          HEALTH_URL: https://portal.triyaraexports.com/api/health
+        run: |
+          set -euo pipefail
+
+          # Vercel's build is asynchronous and typically takes about two
+          # minutes. Until it finishes, this domain still serves the PREVIOUS
+          # deployment - which is healthy, so an early poll can pass against
+          # code this workflow never released. The initial wait is there to make
+          # that far less likely; it is not a guarantee, and this check does not
+          # claim to prove which commit is live.
+          echo "Waiting 120s for the Vercel Git deployment to build and promote…"
+          sleep 120
+
           health=""
-          for _ in 1 2 3 4 5 6; do
-            health=$(vercel curl "$DEPLOY_URL/api/health" --token="$VERCEL_TOKEN" --yes 2>/dev/null || true)
-            echo "$health" | grep -q '"status":"ok"' && break
-            sleep 5
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            health=$(curl -fsS --max-time 20 "$HEALTH_URL" 2>/dev/null || true)
+            if echo "$health" | grep -q '"status":"ok"' && echo "$health" | grep -q '"database":"ok"'; then
+              echo "Healthy on attempt ${attempt}: $health"
+              exit 0
+            fi
+            echo "attempt ${attempt}: ${health:-<no response>}"
+            sleep 15
           done
 
-          if ! echo "$health" | grep -q '"status":"ok"'; then
-            echo "::error::Health check failed for $DEPLOY_URL/api/health"
-            echo "$health"
-            exit 1
-          fi
-
-          # Asserted separately from status: the endpoint answers 503 with
-          # status "degraded" when the database is unreachable, so a bare
-          # status check would pass on a deployment that cannot serve.
-          if ! echo "$health" | grep -q '"database":"ok"'; then
-            echo "::error::Health check returned status ok but the database is not ok."
-            echo "$health"
-            exit 1
-          fi
-
-          echo "Health check passed: $DEPLOY_URL/api/health"
-
-      - name: Summary
-        if: always()
-        env:
-          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
-        run: |
-          {
-            echo "### Production deploy"
-            echo
-            echo "- commit: \`${GITHUB_SHA}\`"
-            echo "- deployment: ${DEPLOY_URL:-not created}"
-          } >> "$GITHUB_STEP_SUMMARY"
+          # Asserted on BOTH fields. /api/health is a readiness check: it answers
+          # 503 with status "degraded" when the database is unreachable, so a
+          # bare status check would pass a deployment that cannot serve.
+          echo "::error::Production is unhealthy at ${HEALTH_URL}"
+          echo "$health"
+          echo "No automatic rollback has been attempted."
+          echo "To roll back: vercel rollback <previous-deployment-url>"
+          exit 1
