@@ -44,3 +44,48 @@ export function assertAbility(ctx: AuthContext, action: Action, subject: Subject
   }
   return ctx
 }
+
+/**
+ * An external party's own account, proven present.
+ *
+ * `accountId` is `string` here, never `string | null | undefined`. That is the
+ * entire point of the type: it is what a query may be narrowed by.
+ */
+export interface ExternalAccountContext {
+  readonly accountId: string
+}
+
+/**
+ * Narrows a request to the account an external party may act within, or refuses.
+ *
+ * `AuthUser.accountId` is optional, and every production path fills it in - but
+ * the type still admits `undefined`, and `undefined` is the dangerous one.
+ * Prisma OMITS a `where` key whose value is `undefined`, so
+ * `where: { accountId: ctx.accountId }` silently becomes an unscoped query that
+ * returns every account's rows. `null` is safe by comparison: it compiles to
+ * `IS NULL` and matches nothing. Undefined fails open; null fails closed.
+ *
+ * So this is the sanctioned way to reach an account scope, and it returns a
+ * `string` or throws. Nothing external should read `ctx.accountId` directly.
+ *
+ * The role is checked as well as the value. An internal user may hold no
+ * account, but they also must not be handed one: staff act across the tenant
+ * through CASL, and a member of staff arriving here means a route or service
+ * meant for external parties has been reached by someone it was not written
+ * for. That is worth refusing rather than interpreting.
+ */
+export function requireExternalAccountContext(ctx: AuthContext): ExternalAccountContext {
+  if (!ctx.user.roles.includes('EXTERNAL_PARTY')) {
+    throw new ForbiddenError('Not an external party.')
+  }
+
+  const accountId = ctx.accountId
+  // Covers null, undefined and '' in one condition, deliberately: an empty
+  // string is not a real identifier either, and `where: { accountId: '' }`
+  // would be a query that quietly matches nothing while looking scoped.
+  if (typeof accountId !== 'string' || accountId.length === 0) {
+    throw new ForbiddenError('No account is linked to this login.')
+  }
+
+  return { accountId }
+}

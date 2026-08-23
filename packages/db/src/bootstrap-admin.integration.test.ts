@@ -65,6 +65,7 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
     expect(roles.map((r) => r.name).sort()).toEqual([
       'ADMIN',
       'EXPORT_MANAGER',
+      'EXTERNAL_PARTY',
       'READ_ONLY',
       'VERIFIER',
     ])
@@ -75,7 +76,10 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
     // invitation fails with a 404 that reads "this record no longer exists".
     await bootstrapAdmin(prisma, config(`resolve-${randomUUID().slice(0, 8)}@example.com`))
 
-    for (const name of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+    // EXTERNAL_PARTY included: external provisioning performs the same lookup,
+    // and the row missing is what would make it fail at runtime on a value the
+    // type system calls valid.
+    for (const name of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY', 'EXTERNAL_PARTY'] as const) {
       const role = await prisma.role.findFirst({ where: { name }, select: { id: true } })
       expect(role, `${name} must be resolvable`).not.toBeNull()
     }
@@ -88,7 +92,7 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
     await bootstrapAdmin(prisma, config(`dup2-${randomUUID().slice(0, 8)}@example.com`))
 
     expect(await prisma.role.count()).toBe(before)
-    expect(before).toBe(4)
+    expect(before).toBe(5)
   })
 
   it('creates the user, the ADMIN role link, and an ACTIVE account', async () => {

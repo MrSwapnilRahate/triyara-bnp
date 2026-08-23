@@ -5,6 +5,14 @@ export {
   type BulkResult,
   createAccountService,
 } from './account/account.service'
+export {
+  type AccountLookup,
+  createExternalProvisioningService,
+  type ExternalProvisioningCtx,
+  type ExternalProvisioningDeps,
+  type ExternalProvisioningService,
+  type ProvisionOutcome,
+} from './account/external-provisioning.service'
 export { mapEventToActivity } from './activity/activity.mapper'
 export {
   type ActivityService,

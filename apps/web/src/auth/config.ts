@@ -1,4 +1,5 @@
 import type { Role } from '@triyara/auth'
+import { NextResponse } from 'next/server'
 import type { NextAuthConfig } from 'next-auth'
 
 // Public pages that never require a session.
@@ -20,6 +21,14 @@ const PUBLIC_PATHS = [
   '/privacy',
   '/terms',
 ]
+
+/**
+ * Where each audience lives. Named so the policy below reads as two namespaces
+ * rather than two string literals, and so a rename cannot update one mention
+ * and miss the other.
+ */
+const PORTAL_HOME = '/portal'
+const INTERNAL_HOME = '/dashboard'
 
 // Edge-safe base config (no Node-only deps). Used by middleware and extended by the
 // Node instance in ./index.ts which adds the Credentials provider.
@@ -78,19 +87,59 @@ export const authConfig = {
       return session
     },
 
+    /**
+     * Which namespace a signed-in identity belongs to.
+     *
+     * This used to end in `return true` - authenticated meant allowed anywhere
+     * outside /admin. That was correct while every user was internal staff. It
+     * stopped being correct the moment EXTERNAL_PARTY could sign in: a buyer
+     * would have rendered the internal application shell, because
+     * `(app)/layout.tsx` asks only for a session. Their data calls would have
+     * failed on CASL, so nothing would have leaked, but "the page loads and
+     * every panel errors" is not a security boundary.
+     *
+     * So the rule is an allow-list per namespace, and the fallthrough denies.
+     * Route separation is deliberately NOT a CASL question - ADMIN holds
+     * `manage all` and is still refused /portal, because the portal is a
+     * different audience rather than a higher privilege.
+     */
     authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user
       const { pathname } = nextUrl
 
       if (PUBLIC_PATHS.includes(pathname)) return true
-      if (!isLoggedIn) return false // -> redirect to signIn page
 
-      // Admin-only area (route protection by role).
-      if (pathname.startsWith('/admin')) {
-        // `?? []` rather than a bare access: a token without the claim must
-        // refuse the route, not crash the middleware for every visitor.
-        return (auth.user.roles ?? []).includes('ADMIN')
+      const user = auth?.user
+      if (!user) return false // -> redirect to signIn page
+
+      // `?? []` rather than a bare access: a token without the claim must
+      // refuse the route, not crash the middleware for every visitor.
+      const roles = user.roles ?? []
+
+      // Checked before any namespace routing, not after. Signed in holding no
+      // role at all - a token whose claims were stripped because the user was
+      // deleted, or one minted before roles existed - belongs to no namespace,
+      // so it gets none. Left until the end, this session was redirected to
+      // /dashboard on its way to being refused there, which is a redirect
+      // issued on behalf of an identity that should already have been turned
+      // away.
+      if (roles.length === 0) return false
+
+      const isExternal = roles.includes('EXTERNAL_PARTY')
+      const isPortal = pathname === PORTAL_HOME || pathname.startsWith(`${PORTAL_HOME}/`)
+
+      if (isExternal) {
+        // An external party lives in /portal and nowhere else. Redirected
+        // rather than refused: they are signed in, so bouncing them to /login
+        // would show a login form to somebody already logged in, and returning
+        // false does exactly that.
+        return isPortal ? true : NextResponse.redirect(new URL(PORTAL_HOME, nextUrl))
       }
+
+      // Internal staff, kept out of the portal for the mirror-image reason.
+      if (isPortal) return NextResponse.redirect(new URL(INTERNAL_HOME, nextUrl))
+
+      if (pathname.startsWith('/admin')) return roles.includes('ADMIN')
+
       return true
     },
   },
