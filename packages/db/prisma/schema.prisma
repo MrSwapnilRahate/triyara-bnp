@@ -31,6 +31,21 @@ enum RoleName {
   EXPORT_MANAGER
   VERIFIER
   READ_ONLY
+
+  /// An authenticated Buyer or Supplier (TRY-BNP-EXT-IDENTITY).
+  ///
+  /// ONE member, not BUYER and SUPPLIER. Which party someone is is already
+  /// recorded on their Account, by whether it carries a buyerProfile or a
+  /// supplierProfile - both optional, and an Account may have either or both.
+  /// A second role would state that fact in a second place and let the two
+  /// disagree.
+  ///
+  /// Holds NO abilities. `buildAbilityFor` has no branch for it, deliberately,
+  /// and it is absent from ASSIGNABLE_ROLES and GRANTABLE_ROLES so no
+  /// administrator can hand it out through the UI. Record-level authorization
+  /// for external parties is a later batch; until it exists, an external login
+  /// can authenticate and reach nothing.
+  EXTERNAL_PARTY
 }
 
 enum RelationshipStatus {
@@ -104,11 +119,30 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  /// The external party this login belongs to (TRY-BNP-EXT-IDENTITY).
+  ///
+  /// NULL for every internal member of staff, which is every existing user -
+  /// nothing is backfilled and no current row changes meaning.
+  ///
+  /// Deliberately NOT unique. `Supplier.accountId` is unique because it is a
+  /// 1:1 seam between two records describing the same company; this is
+  /// many-to-one, because a buyer has more than one person. BuyerContact
+  /// already models exactly that, with isPrimary and sortOrder.
+  ///
+  /// Carrying this claim does not grant anything on its own. It is the
+  /// identifier a later batch will scope records by; today nothing reads it for
+  /// an authorization decision.
+  accountId String?
+
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   roles               UserRole[]
   resetTokens         PasswordResetToken[]
   adminAccessRequests AdminAccessRequest[]
   ownedAccounts       Account[]            @relation("AccountOwner")
+  /// Named, because `Account.owner` already occupies the default User relation:
+  /// staff OWN accounts, external users BELONG TO one, and they are different
+  /// facts about different people.
+  account             Account?             @relation("AccountUsers", fields: [accountId], references: [id], onDelete: SetNull)
 
   // Auth extension (TRY-BNP-AUTH-02) back-relations. ORM-side only: these add
   // NO columns to the User table and leave TRY-BNP-AUTH-01 unmodified.
@@ -118,6 +152,9 @@ model User {
   scopedRoles             ScopedRoleAssignment[]
 
   @@index([organizationId])
+  /// Mirrors Supplier's own @@index([accountId]): the query this exists for is
+  /// "every login belonging to this account".
+  @@index([accountId])
 }
 
 model Role {
@@ -203,6 +240,9 @@ model Account {
   quotations      Quotation[]
   approvals       BuyerApproval[]
   contacts        BuyerContact[]
+  /// Logins belonging to this external party (TRY-BNP-EXT-IDENTITY).
+  /// ORM-side only: adds NO column to Account.
+  users           User[]           @relation("AccountUsers")
 
   @@index([organizationId, deletedAt])
   @@index([organizationId, relationshipStatus])

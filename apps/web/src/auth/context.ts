@@ -23,6 +23,7 @@ async function loadContext(): Promise<AuthContext> {
     email: u.email ?? '',
     name: u.name ?? '',
     roles: u.roles,
+    accountId: u.accountId ?? null,
   }
   return resolveContext({ user: authUser })
 }
@@ -49,6 +50,7 @@ export async function currentUser(): Promise<AuthUser | null> {
     email: u.email ?? '',
     name: u.name ?? '',
     roles: u.roles,
+    accountId: u.accountId ?? null,
   }
 }
 

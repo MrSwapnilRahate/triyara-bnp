@@ -439,12 +439,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
         }
 
         expect(res.status).toBe(200)
+        // EXTERNAL_PARTY is listed with no permissions at all. The matrix is
+        // built from ROLES, the same vocabulary the guards use, so a role that
+        // exists and grants nothing should say so rather than be hidden - the
+        // point of this screen is that it cannot disagree with the guards.
         expect(data.roles.map((r) => r.role).sort()).toEqual([
           'ADMIN',
           'EXPORT_MANAGER',
+          'EXTERNAL_PARTY',
           'READ_ONLY',
           'VERIFIER',
         ])
+        expect(data.roles.find((r) => r.role === 'EXTERNAL_PARTY')?.permissions).toEqual({})
         // ADMIN manages everything; READ_ONLY reads and nothing more.
         const admin = data.roles.find((r) => r.role === 'ADMIN')!
         expect(admin.permissions.all).toContain('manage')

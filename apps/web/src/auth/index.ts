@@ -45,6 +45,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           organizationId: user.organizationId,
           roles,
+          // Null for internal staff, which is everyone today.
+          accountId: user.accountId ?? null,
         }
       },
     }),
@@ -67,6 +69,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.organizationId = user.organizationId
         token.roles = user.roles
+        token.accountId = user.accountId ?? null
         return token
       }
 
@@ -76,10 +79,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // The account is gone. Strip the claims rather than leaving a token
           // that still asserts them.
           token.roles = []
+          token.accountId = null
           return token
         }
         token.organizationId = current.organizationId
         token.roles = current.roles.map((r) => r.role.name).filter(isRole)
+        // Refreshed with the rest. Moving someone between accounts, or out of
+        // one, must take effect on the next refresh rather than at expiry -
+        // the same reason roles are re-read here.
+        token.accountId = current.accountId ?? null
       }
       return token
     },

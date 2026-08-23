@@ -72,6 +72,9 @@ export const authConfig = {
       session.user.id = token.sub ?? ''
       session.user.organizationId = (token.organizationId as string | undefined) ?? ''
       session.user.roles = (token.roles as Role[] | undefined) ?? []
+      // Only the identifier. No name, no contact details, no profile - a
+      // session is not a place to cache an Account.
+      session.user.accountId = (token.accountId as string | null | undefined) ?? null
       return session
     },
 

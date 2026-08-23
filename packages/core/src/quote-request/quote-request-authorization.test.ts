@@ -84,6 +84,8 @@ describe('the subject is genuinely separate from RFQ', () => {
       EXPORT_MANAGER: { create: true, manage: false },
       VERIFIER: { create: false, manage: false },
       READ_ONLY: { create: false, manage: false },
+      // Holds nothing at all - see abilities.ts.
+      EXTERNAL_PARTY: { create: false, manage: false },
     }
     for (const role of ROLES) {
       const a = ability(role)

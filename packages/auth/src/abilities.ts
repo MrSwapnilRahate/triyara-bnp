@@ -139,5 +139,16 @@ export function buildAbilityFor(roles: Role[]): AppAbility {
     can('read', 'all')
   }
 
+  // EXTERNAL_PARTY has no branch, and that is the whole of this batch.
+  //
+  // An authenticated Buyer or Supplier can sign in and reach nothing. Every
+  // role above holds `read all`, which inside one tenant is right for internal
+  // staff and catastrophic for an external party - it would hand one buyer the
+  // other buyers, and both the supplier network. Opening anything to them needs
+  // record-level conditions scoped by `AuthContext.accountId`, which is a later
+  // batch; until it exists the correct grant is none.
+  //
+  // Do not "temporarily" give this role a rule to make a screen work.
+
   return build()
 }
