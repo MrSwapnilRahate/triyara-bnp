@@ -150,6 +150,16 @@ export {
   REVIEW_TRANSITIONS,
 } from './onboarding/review-workflow'
 export {
+  createPortalContextService,
+  type PortalAccountLookup,
+  type PortalContextCtx,
+  type PortalContextDeps,
+  type PortalContextService,
+  type PortalPartyContext,
+  type PortalPartyType,
+  type PortalProfileLookup,
+} from './portal/portal-context.service'
+export {
   createQuotationService,
   type QuotationService,
   type QuotationServiceCtx,
