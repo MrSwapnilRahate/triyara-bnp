@@ -162,6 +162,15 @@ export {
   type SourceOptionRecord,
   type TaxData,
 } from './repositories/quotation-sourcing.repository'
+export {
+  type CreateQuoteRequestData,
+  type ListQuoteRequestsParams,
+  type QuoteRequestListResult,
+  type QuoteRequestRecord,
+  type QuoteRequestRepository,
+  quoteRequestRepository,
+  type ReviewQuoteRequestData,
+} from './repositories/quote-request.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
 export {
   type CreateRfqData,

@@ -78,6 +78,14 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   NO_RESPONSE: 'neutral',
   DISCONTINUED: 'neutral',
 
+  // Website enquiry intake (TRY-BNP-QR-01). NEW is `info` rather than `neutral`
+  // deliberately: an unread enquiry from a stranger is the one state on this
+  // queue that needs somebody to act, and neutral reads as "nothing to do".
+  NEW: 'info',
+  IN_REVIEW: 'warning',
+  QUALIFIED: 'success',
+  PROMOTED: 'success',
+
   // In flight
   PENDING_APPROVAL: 'warning',
   PENDING_REVIEW: 'warning',

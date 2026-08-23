@@ -4,7 +4,7 @@
 // with their own modules. Account is the aggregate root every future module extends.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // Vercel builds and runs on Amazon Linux 2023 (OpenSSL 3.0), which Prisma
   // calls rhel-openssl-3.0.x. "native" alone resolves to the build host, so
   // the engine that ships is whatever the builder happened to be - correct on
@@ -67,8 +67,8 @@ model Organization {
   dateFormat      String  @default("DD/MM/YYYY")
   language        String  @default("en")
 
-  users    User[]
-  accounts Account[]
+  users               User[]
+  accounts            Account[]
   adminAccessRequests AdminAccessRequest[]
 
   // Product Catalog (TRY-BNP-CATALOG-S1) back-relations. ORM-side only:
@@ -82,6 +82,9 @@ model Organization {
   exchangeRates   ExchangeRate[]
   specDefinitions ProductSpecificationDefinition[]
   tags            Tag[]
+
+  // Public quote request intake (TRY-BNP-QR-01). ORM-side only, no column.
+  quoteRequests QuoteRequest[]
 }
 
 model User {
@@ -96,16 +99,16 @@ model User {
   // Personal presentation (TRY-BNP-ADMIN-01). `preferences` is free-form JSON
   // on purpose: it holds UI choices the server never interprets, so adding one
   // must not need a migration. Anything the server acts on gets a column.
-  avatarUrl      String?
-  preferences    Json?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  avatarUrl   String?
+  preferences Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  roles         UserRole[]
-  resetTokens   PasswordResetToken[]
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roles               UserRole[]
+  resetTokens         PasswordResetToken[]
   adminAccessRequests AdminAccessRequest[]
-  ownedAccounts Account[]            @relation("AccountOwner")
+  ownedAccounts       Account[]            @relation("AccountOwner")
 
   // Auth extension (TRY-BNP-AUTH-02) back-relations. ORM-side only: these add
   // NO columns to the User table and leave TRY-BNP-AUTH-01 unmodified.
@@ -184,13 +187,13 @@ model Account {
   /// checked by us, and the review queue treats it accordingly.
   isSelfRegistered Boolean   @default(false)
   submittedAt      DateTime?
-  createdById        String
-  updatedById        String
-  deletedById        String?
-  version            Int                @default(1)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  deletedAt          DateTime?
+  createdById      String
+  updatedById      String
+  deletedById      String?
+  version          Int       @default(1)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
 
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner           User?            @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -1408,7 +1411,7 @@ model Supplier {
   tags                   SupplierTag[]
   notes                  SupplierNote[]
   rfqParticipations      RFQSupplier[]
-  awardedRfqs            RFQ[]                   @relation("RFQAwardedSupplier")
+  awardedRfqs            RFQ[]                     @relation("RFQAwardedSupplier")
   quotationSourceOptions QuotationSourceOption[]
 
   @@unique([organizationId, supplierCode])
@@ -1954,16 +1957,16 @@ model RFQ {
   /// No foreign key, matching AuditLog.actorId: sentinel actors are permitted.
   awardedById       String?
 
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  buyer           Account?     @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  awardedSupplier Supplier?    @relation("RFQAwardedSupplier", fields: [awardedSupplierId], references: [id], onDelete: Restrict)
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  buyer           Account?        @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  awardedSupplier Supplier?       @relation("RFQAwardedSupplier", fields: [awardedSupplierId], references: [id], onDelete: Restrict)
   items           RFQItem[]
-  suppliers    RFQSupplier[]
-  attachments  RFQAttachment[]
-  comments     RFQComment[]
-  revisions    RFQRevision[]
-  approvals    RFQApproval[]
-  quotations   Quotation[]
+  suppliers       RFQSupplier[]
+  attachments     RFQAttachment[]
+  comments        RFQComment[]
+  revisions       RFQRevision[]
+  approvals       RFQApproval[]
+  quotations      Quotation[]
 
   @@unique([organizationId, rfqNumber])
   @@index([organizationId, status, deletedAt])
@@ -3042,4 +3045,109 @@ enum AdminAccessRequestStatus {
   /// request; the person may submit a fresh one, and the partial unique index
   /// only covers PENDING so nothing blocks that.
   REVOKED
+}
+
+// ---------------------------------------------------------------------------
+// Public quote request intake (TRY-BNP-QR-01)
+//
+// The record a Request Quote submission from the marketing site becomes. It is
+// an INTAKE record - a lead - and deliberately NOT an RFQ.
+//
+// An RFQ is a qualified internal commercial sourcing document: it carries a
+// tenant-unique rfqNumber, and the `RFQ_buyer_matches_type` CHECK added in
+// migration 0007 requires a BUYER-type RFQ to name a real Account. An anonymous
+// visitor has neither. Relaxing that constraint to admit them would let
+// unqualified traffic - including spam - into the sourcing workflow and burn
+// commercial RFQ numbers on it. So intake gets its own model, and promotion to
+// an RFQ stays an explicit decision a signed-in operator makes.
+//
+// Almost every field is free text on purpose. This endpoint is the first thing
+// a prospective buyer touches, and a submission rejected on a format technicality
+// is a lost enquiry. Structure is imposed later, during qualification, by a human.
+// ---------------------------------------------------------------------------
+
+model QuoteRequest {
+  id             String @id @default(cuid())
+  organizationId String
+
+  /// Human key for the trade desk, e.g. "QR-2026-000042". Drawn from a database
+  /// sequence, never from the submitter. Deliberately its own series: an intake
+  /// record must never consume an RFQ number, because most leads never become one.
+  reference String
+
+  status QuoteRequestStatus @default(NEW)
+
+  /// How the enquiry arrived. A plain string, matching Account.source, so a new
+  /// channel needs no migration.
+  source String @default("PUBLIC_WEBSITE")
+
+  // ---- What they are asking for ----
+  product         String
+  quantity        String
+  monthlyVolume   String?
+  packaging       String?
+  targetPrice     String?
+  destinationPort String?
+  timeline        String?
+  requirements    String? @db.Text
+
+  // ---- Who is asking ----
+  companyName      String?
+  businessType     String?
+  country          String?
+  importExperience String?
+
+  // ---- How to reach them ----
+  /// The one thing an enquiry is useless without: a name and a route back.
+  contactName      String
+  contactEmail     String
+  contactPhone     String?
+  preferredContact String?
+
+  /// Prioritisation hint computed by the submitting form. ADVISORY ONLY - it is
+  /// never read as an authorization input and never shown to the submitter.
+  leadScore String?
+
+  // ---- Qualification, filled in by TRIYARA ----
+  //
+  // Both are plain id columns with no Prisma relation, following the same
+  // "optional seam to a frozen aggregate" pattern Supplier.accountId uses. That
+  // is what keeps this model additive: the Account and RFQ blocks are not
+  // touched at all, and neither gains a back-relation.
+  /// Set once the enquiry is matched to a buyer Account.
+  buyerAccountId String?
+  /// Set once promoted. Unique - one intake record yields at most one RFQ.
+  rfqId          String? @unique
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNotes  String?   @db.Text
+
+  /// The sentinel actor for public submissions - there is no signed-in user.
+  createdById String
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, reference])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, buyerAccountId])
+  @@index([organizationId, createdAt])
+}
+
+/// Intake lifecycle. Separate from RFQStatus: a lead is triaged, not sourced.
+enum QuoteRequestStatus {
+  /// Just arrived, nobody has looked at it.
+  NEW
+  /// An operator has picked it up.
+  IN_REVIEW
+  /// Genuine and worth sourcing, but no RFQ raised yet.
+  QUALIFIED
+  /// An RFQ was raised from it. Terminal; `rfqId` names the RFQ.
+  PROMOTED
+  /// Spam, duplicate, or out of scope. Terminal, and the reason lives in reviewNotes.
+  REJECTED
 }

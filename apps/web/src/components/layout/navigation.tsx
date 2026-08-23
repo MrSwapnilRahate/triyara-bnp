@@ -9,6 +9,7 @@ import {
   FileText,
   FolderTree,
   Gauge,
+  Inbox,
   KeyRound,
   Package,
   Quote,
@@ -48,6 +49,10 @@ export const NAVIGATION: GuardedGroup[] = [
   {
     heading: 'Sourcing',
     items: [
+      // Website enquiries sit ABOVE RFQs deliberately: an intake record is what
+      // arrives first, and an RFQ is what an operator makes of it. The order on
+      // screen is the order of the workflow.
+      { label: 'Website enquiries', href: '/quote-requests', icon: <Inbox /> },
       { label: 'RFQs', href: '/rfqs', icon: <FileSearch /> },
       { label: 'Quotations', href: '/quotations', icon: <Quote /> },
       { label: 'Suppliers', href: '/suppliers', icon: <Truck /> },
