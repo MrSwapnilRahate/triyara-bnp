@@ -66,6 +66,15 @@ export const SUBJECTS = [
   // subject starts with nothing. The grant below restores it deliberately -
   // see the role rules.
   'Supplier',
+  // Public quote request intake (TRY-BNP-QR-01). NOT authorized as `RFQ`, and
+  // the distinction is the point: an intake record is an unqualified lead from
+  // a stranger, an RFQ is a commercial sourcing document. Sharing a subject
+  // would make "may triage website enquiries" and "may raise an RFQ against the
+  // supplier network" the same permission, in both directions.
+  //
+  // Reads come from `read all` as usual, so every internal role can see the
+  // queue. Writes are granted below to ADMIN and EXPORT_MANAGER only.
+  'QuoteRequest',
 ] as const
 export type Subject = (typeof SUBJECTS)[number]
 
@@ -112,6 +121,12 @@ export function buildAbilityFor(roles: Role[]): AppAbility {
         'Supplier',
       ],
     )
+    // Triage of website enquiries. `update` only - `create` is deliberately
+    // absent for every role, because the sole way an intake record comes into
+    // existence is a member of the public submitting one, and `delete` is
+    // absent because a junk enquiry is REJECTED with a reason rather than
+    // erased. ADMIN reaches both through `manage all` if it ever needs to.
+    can('update', 'QuoteRequest')
   }
 
   if (has('VERIFIER')) {

@@ -158,6 +158,15 @@ export {
   round4,
 } from './quotation/quotation-pricing'
 export {
+  createQuoteRequestService,
+  type PublicQuoteRequestCtx,
+  QUOTE_REQUEST_SYSTEM_ACTOR_ID,
+  type QuoteRequestCtx,
+  type QuoteRequestDeps,
+  type QuoteRequestService,
+  type RfqCreator,
+} from './quote-request/quote-request.service'
+export {
   createRfqService,
   type RfqService,
   type RfqServiceCtx,
