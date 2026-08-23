@@ -4,7 +4,7 @@ import type { Instrumentation } from 'next'
 import { sentryOptions } from '@/lib/sentry-options'
 
 /**
- * Starts Sentry once per server runtime.
+ * Starts Sentry, then validates the environment, once per server runtime.
  *
  * Next calls this before anything else runs, in each runtime separately, which
  * is why the SDK needs it here rather than at the top of a module: an `init`
@@ -12,10 +12,31 @@ import { sentryOptions } from '@/lib/sentry-options'
  *
  * Both runtimes share `sentryOptions()`. The edge one gets the same redaction
  * as the Node one, because a policy written twice is a policy that will differ.
+ *
+ * ORDER MATTERS. Sentry initialises first and synchronously, before the first
+ * `await`, so a configuration error thrown below is reported rather than only
+ * printed. Doing it the other way round would lose the one failure this
+ * function exists to surface.
+ *
+ * `@/env` is imported DYNAMICALLY and only under the Node guard. A static
+ * import would be evaluated when this module loads, which happens in the edge
+ * runtime too - the guard would then decide nothing, because the work would
+ * already have been done. That matters less than it used to, now that `@/env`
+ * reaches zod and nothing else through `@triyara/lib/env`, but the shape is the
+ * point: this file must stay cheap to load in every runtime.
+ *
+ * Validation is server-side only and reads no secrets - NODE_ENV and LOG_LEVEL
+ * are all it covers, and both have defaults, so a deployment that sets neither
+ * (which is the case in production today) is unaffected. Only a malformed value
+ * throws.
  */
-export function register(): void {
+export async function register(): Promise<void> {
   const runtime = process.env.NEXT_RUNTIME
   if (runtime === 'nodejs' || runtime === 'edge') Sentry.init(sentryOptions())
+
+  // Module scope in `@/env` runs the schema, and the module cache means it runs
+  // once per runtime process however often this is called.
+  if (runtime === 'nodejs') await import('@/env')
 }
 
 /**
