@@ -6,7 +6,14 @@ export {
   type Subject,
   SUBJECTS,
 } from './abilities'
-export { assertAbility, assertRole, type AuthContext, resolveContext } from './guards'
+export {
+  assertAbility,
+  assertRole,
+  type AuthContext,
+  type ExternalAccountContext,
+  requireExternalAccountContext,
+  resolveContext,
+} from './guards'
 export { hashPassword, verifyPassword } from './password'
 export { createInMemoryRateLimiter, type RateLimiter } from './rate-limit'
 export { isRole, type Role, ROLES } from './roles'

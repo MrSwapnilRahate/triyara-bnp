@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { assertAbility, assertRole, resolveContext } from './guards'
+import { assertAbility, assertRole, requireExternalAccountContext, resolveContext } from './guards'
 import type { AuthUser } from './session'
 
 const user: AuthUser = {
@@ -67,5 +67,66 @@ describe('guards', () => {
     const ctx = resolveContext({ user })
     expect(() => assertAbility(ctx, 'update', 'Account')).not.toThrow()
     expect(() => assertAbility(ctx, 'verify', 'Verification')).toThrowError()
+  })
+})
+
+/**
+ * The account scope an external route may narrow a query by.
+ *
+ * The value these cases are really about is `undefined`. Prisma omits a `where`
+ * key whose value is undefined, so `where: { accountId: ctx.accountId }` with a
+ * missing claim is not a query that finds nothing - it is a query with no filter
+ * at all, returning every account's rows. `null` fails closed by comparison.
+ * That asymmetry is why the guard exists and why both are asserted separately.
+ */
+describe('requireExternalAccountContext', () => {
+  it('returns the account of an external party', () => {
+    const scope = requireExternalAccountContext(resolveContext({ user: externalUser }))
+    expect(scope.accountId).toBe('acct-1')
+  })
+
+  it('refuses an external party whose accountId is null', () => {
+    // Reachable today: the jwt callback sets `accountId = null` when the user
+    // behind a token no longer exists, keeping the role claim from the old
+    // token. Fails closed rather than querying with no scope.
+    const orphan: AuthUser = { ...externalUser, accountId: null }
+    expect(() => requireExternalAccountContext(resolveContext({ user: orphan }))).toThrowError(
+      /No account/,
+    )
+  })
+
+  it('refuses an external party whose accountId is missing entirely', () => {
+    // The dangerous one. `accountId` is optional on AuthUser, so a context built
+    // without it type-checks - and undefined is what silently drops the filter.
+    const { accountId: _omitted, ...withoutAccount } = externalUser
+    expect(() =>
+      requireExternalAccountContext(resolveContext({ user: withoutAccount as AuthUser })),
+    ).toThrowError(/No account/)
+  })
+
+  it('refuses an accountId that is an empty string', () => {
+    // Not null and not undefined, so the obvious `?? throw` would let it past -
+    // and `where: { accountId: '' }` looks scoped while matching nothing.
+    const blank: AuthUser = { ...externalUser, accountId: '' }
+    expect(() => requireExternalAccountContext(resolveContext({ user: blank }))).toThrowError(
+      /No account/,
+    )
+  })
+
+  it('refuses internal staff, even holding an accountId', () => {
+    // Staff act across the tenant through CASL, never through an account scope.
+    // Reaching here at all means an external-only path was entered by someone it
+    // was not written for, which is worth refusing rather than interpreting.
+    const staffWithAccount: AuthUser = { ...user, accountId: 'acct-1' }
+    expect(() =>
+      requireExternalAccountContext(resolveContext({ user: staffWithAccount })),
+    ).toThrowError(/Not an external party/)
+  })
+
+  it('refuses an ADMIN, whose broad abilities are not an account scope', () => {
+    const admin: AuthUser = { ...user, roles: ['ADMIN'], accountId: 'acct-1' }
+    expect(() => requireExternalAccountContext(resolveContext({ user: admin }))).toThrowError(
+      /Not an external party/,
+    )
   })
 })

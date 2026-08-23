@@ -69,6 +69,27 @@ export const listAccountsQuerySchema = paginationQuerySchema.extend({
 })
 export type ListAccountsQuery = z.infer<typeof listAccountsQuerySchema>
 
+/**
+ * Provisioning a portal login for an external party (TRY-BNP-EXT-PROVISION).
+ *
+ * The email is supplied by the administrator, deliberately, and is never derived
+ * from the account's contact records. `BuyerContact.email` is nullable and not
+ * unique, `isPrimary` is an index rather than a constraint, and both
+ * registration forms accept a contact reachable only by phone or WhatsApp - so
+ * an approved account may legitimately carry no email at all, or several. A
+ * guess would be wrong quietly, and the thing being handed out is a credential.
+ *
+ * There is no `role` field. The only role this endpoint can produce is
+ * EXTERNAL_PARTY, and a caller-supplied one would be a second way to choose a
+ * role - which is exactly what ASSIGNABLE_ROLES and GRANTABLE_ROLES exist to
+ * prevent.
+ */
+export const provisionAccountLoginSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  email: z.string().trim().toLowerCase().email().max(254),
+})
+export type ProvisionAccountLoginDto = z.infer<typeof provisionAccountLoginSchema>
+
 const bulkIds = z.array(id).min(1).max(500)
 export const bulkAccountSchema = z.discriminatedUnion('action', [
   z.object({

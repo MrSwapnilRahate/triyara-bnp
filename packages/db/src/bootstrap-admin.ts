@@ -50,18 +50,29 @@ const MIN_PASSWORD_LENGTH = 12
 /**
  * The role catalogue.
  *
- * These four rows are names, not grants: creating them gives nobody anything,
- * and a role only reaches a person through a UserRole row. They are listed here
- * for the same reason the seed lists them - `RoleName` is a Postgres enum, so
- * the type existing says nothing about whether the rows do.
+ * These rows are names, not grants: creating them gives nobody anything, and a
+ * role only reaches a person through a UserRole row. They are listed here for
+ * the same reason the seed lists them - `RoleName` is a Postgres enum, so the
+ * type existing says nothing about whether the rows do.
  *
- * The bootstrap has to create all four rather than only the one it assigns.
- * `createWithInvite` resolves the requested role by name and throws if the row
- * is absent, so a database holding only ADMIN gives an administrator who can
- * sign in and then cannot invite anybody - which is the one thing they need to
- * do next.
+ * The bootstrap has to create the whole catalogue rather than only the one it
+ * assigns. `createWithInvite` resolves the requested role by name and throws if
+ * the row is absent, so a database holding only ADMIN gives an administrator who
+ * can sign in and then cannot invite anybody - which is the one thing they need
+ * to do next.
+ *
+ * EXTERNAL_PARTY is here for that same reason and no other. It holds no CASL
+ * rule and is absent from ASSIGNABLE_ROLES and GRANTABLE_ROLES, so no
+ * administrator can hand it out; only external provisioning names it, and that
+ * path needs the row to exist.
  */
-const ROLE_CATALOGUE: RoleName[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const ROLE_CATALOGUE: RoleName[] = [
+  'ADMIN',
+  'EXPORT_MANAGER',
+  'VERIFIER',
+  'READ_ONLY',
+  'EXTERNAL_PARTY',
+]
 
 /**
  * How long the write is allowed to take, against Prisma's 5s default.

@@ -196,6 +196,9 @@ export const userRepository = {
    * discloses. It exists so the column is not null and so the account cannot
    * be signed into until the invitation is accepted — the invitation is the
    * only route in.
+   *
+   * `accountId` is optional and omitted for colleagues, who belong to no
+   * external party. External provisioning passes one; nothing else does.
    */
   async createWithInvite(
     ctx: { actorId: string; organizationId: string; requestId?: string },
@@ -206,14 +209,24 @@ export const userRepository = {
       roleName: RoleName
       tokenHash: string
       tokenExpiresAt: Date
+      /** The external party this login belongs to. Absent for internal staff. */
+      accountId?: string
     },
   ): Promise<{ id: string; email: string; name: string }> {
+    // Normalised here rather than trusted from the caller. `User.email` is
+    // unique and `findByEmail` lower-cases before looking up, so a row written
+    // with different casing is a row nobody can sign in as - and the duplicate
+    // check below would miss it, letting the same person exist twice. Both
+    // callers do normalise through their DTO; this makes the invariant belong to
+    // the write that depends on it rather than to whoever calls it.
+    const email = data.email.trim().toLowerCase()
+
     return prisma.$transaction(async (tx) => {
       const role = await tx.role.findFirst({ where: { name: data.roleName }, select: { id: true } })
       if (!role) throw new NotFoundError(`Role ${data.roleName} does not exist.`)
 
       const existing = await tx.user.findUnique({
-        where: { email: data.email },
+        where: { email },
         select: { id: true },
       })
       if (existing) {
@@ -223,10 +236,14 @@ export const userRepository = {
       const user = await tx.user.create({
         data: {
           organizationId: ctx.organizationId,
-          email: data.email,
+          email,
           name: data.name,
           passwordHash: data.passwordHash,
           roles: { create: { roleId: role.id } },
+          // Spread rather than `accountId: data.accountId`: Prisma treats an
+          // explicit `undefined` as "leave it out" here, but the conditional
+          // says so at the call site instead of relying on that.
+          ...(data.accountId ? { accountId: data.accountId } : {}),
         },
         select: { id: true, email: true, name: true },
       })
