@@ -1,6 +1,7 @@
 import { buildAbilityFor, type Role } from '@triyara/auth'
 import type { ScopedRoleRepository } from '@triyara/db'
 import type { DomainEvent, EventBus } from '@triyara/events'
+import type { GrantScopedRoleDto } from '@triyara/validation'
 import { describe, expect, it } from 'vitest'
 
 import { createScopedRoleService, type ScopedRoleCtx } from './scoped-role.service'
@@ -42,7 +43,10 @@ function service() {
   })
 }
 
-const grant = (role: Role) => ({
+// Narrowed to the roles a scoped assignment may actually carry. EXTERNAL_PARTY
+// is in `Role` but absent from ASSIGNABLE_ROLES, so the compiler refuses it
+// here - which is the intended contract, not an obstacle to work around.
+const grant = (role: GrantScopedRoleDto['role']) => ({
   userId: 'u2',
   role,
   scopeType: 'ACCOUNT' as const,

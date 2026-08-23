@@ -19,6 +19,8 @@ const EXPECTED: Record<Role, { read: boolean; write: boolean; manage: boolean; d
   EXPORT_MANAGER: { read: true, write: true, manage: false, del: false },
   VERIFIER: { read: true, write: false, manage: false, del: false },
   READ_ONLY: { read: true, write: false, manage: false, del: false },
+  // Holds nothing at all - see abilities.ts.
+  EXTERNAL_PARTY: { read: false, write: false, manage: false, del: false },
 }
 
 const ability = (role: Role): AppAbility => buildAbilityFor([role])

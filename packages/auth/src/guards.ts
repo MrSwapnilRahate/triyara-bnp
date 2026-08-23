@@ -8,13 +8,28 @@ export interface AuthContext {
   readonly user: AuthUser
   readonly organizationId: string
   readonly ability: AppAbility
+  /**
+   * Lifted from `user` for the same reason `organizationId` is: the scope a
+   * query is narrowed by should be reachable without unwrapping the identity.
+   * Null for internal staff, and not consulted by `assertAbility` - external
+   * record scoping arrives in a later batch.
+   *
+   * Optional for the same reason as `AuthUser.accountId`. `resolveContext`
+   * always sets it, so anything built the normal way has it.
+   */
+  readonly accountId?: string | null
 }
 
 // Resolve a full auth context from a session, or throw UnauthenticatedError.
 export function resolveContext(session: SessionLike | null | undefined): AuthContext {
   const user = session?.user
   if (!user) throw new UnauthenticatedError()
-  return { user, organizationId: user.organizationId, ability: buildAbilityFor(user.roles) }
+  return {
+    user,
+    organizationId: user.organizationId,
+    accountId: user.accountId ?? null,
+    ability: buildAbilityFor(user.roles),
+  }
 }
 
 export function assertRole(ctx: AuthContext, ...roles: Role[]): AuthContext {
