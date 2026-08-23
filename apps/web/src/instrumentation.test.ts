@@ -19,12 +19,27 @@ const sentryInit = vi.fn()
 vi.mock('@sentry/nextjs', () => ({ init: sentryInit }))
 vi.mock('@/lib/sentry-options', () => ({ sentryOptions: () => ({ dsn: undefined }) }))
 
+/**
+ * The variables `@/env` requires, supplied by default so a case about runtime
+ * gating does not fail over unrelated configuration. A case may override either,
+ * or pass `undefined` to unset it.
+ *
+ * Fake values. The connection string points nowhere and is never dialled - the
+ * schema only asserts the variable is set.
+ */
+const REQUIRED = {
+  DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
+  AUTH_SECRET: 'test-secret',
+}
+
 /** Fresh module registry, so `@/env` re-runs its schema for every case. */
-async function registerIn(runtime: string, vars: Record<string, string> = {}) {
+async function registerIn(runtime: string, vars: Record<string, string | undefined> = {}) {
   vi.resetModules()
   sentryInit.mockClear()
   vi.stubEnv('NEXT_RUNTIME', runtime)
-  for (const [key, value] of Object.entries(vars)) vi.stubEnv(key, value)
+  for (const [key, value] of Object.entries({ ...REQUIRED, ...vars })) {
+    vi.stubEnv(key, value as string)
+  }
   const { register } = await import('./instrumentation')
   return register()
 }
@@ -54,10 +69,22 @@ describe('the node runtime', () => {
     ).resolves.toBeUndefined()
   })
 
-  it('accepts an environment that sets neither variable', async () => {
-    // Both have defaults, which is why wiring this in cannot break a deployment
-    // that configures neither - and production configures neither today.
-    await expect(registerIn('nodejs')).resolves.toBeUndefined()
+  it('accepts an environment that sets neither NODE_ENV nor LOG_LEVEL', async () => {
+    // Those two have defaults, which is why they cannot break a deployment that
+    // configures neither - and production configures neither today. The two the
+    // schema does require come from `REQUIRED`, because they are present in
+    // every environment this runs in: local, CI, preview and production.
+    await expect(
+      registerIn('nodejs', { NODE_ENV: undefined, LOG_LEVEL: undefined }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('refuses to start when a required variable is missing', async () => {
+    // The reason the schema is loaded here at all: a server about to take
+    // traffic without a database URL should not take traffic.
+    await expect(registerIn('nodejs', { DATABASE_URL: undefined })).rejects.toThrow(
+      /Invalid environment variables.*DATABASE_URL/s,
+    )
   })
 })
 
