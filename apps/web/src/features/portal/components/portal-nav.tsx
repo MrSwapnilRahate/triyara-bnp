@@ -40,6 +40,7 @@ export const PORTAL_NAV_ITEMS: readonly PortalNavItem[] = [
   { label: 'Overview', href: '/portal', exact: true },
   { label: 'Requirements', href: '/portal/requirements' },
   { label: 'Quotations', href: '/portal/quotations' },
+  { label: 'Documents', href: '/portal/documents' },
 ]
 
 /**

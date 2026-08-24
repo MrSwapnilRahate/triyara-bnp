@@ -81,6 +81,8 @@ export {
 export type { DashboardRepository, DashboardSummary } from './repositories/dashboard.repository'
 export { dashboardRepository } from './repositories/dashboard.repository'
 export {
+  type BuyerDocumentItem,
+  type BuyerDocumentListResult,
   type CreateDocumentInput,
   type DocumentListItem,
   type DocumentRecord,

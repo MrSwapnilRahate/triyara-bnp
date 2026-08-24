@@ -1,4 +1,6 @@
 import type {
+  BuyerDocumentItem,
+  BuyerDocumentListResult,
   BuyerQuotationDetail,
   BuyerQuotationItem,
   BuyerQuotationListResult,
@@ -195,6 +197,52 @@ export interface BuyerQuotationDetailView {
   readonly charges: readonly BuyerQuotationChargeView[]
 }
 
+/**
+ * One document on the buyer's own account, as they may read it.
+ *
+ * What they gave us at onboarding, and where it got to. The file is described
+ * but not reachable: `currentStorageKey` and `currentChecksum` are not fetched,
+ * and this batch adds no download - a storage key in a payload is a storage key
+ * in the DOM, whether or not anything renders it.
+ *
+ * No `id`. Nothing yet addresses a single document, and every buyer-facing
+ * projection in this portal has kept row ids out on purpose. Unlike an RFQ or a
+ * quotation a document carries no business identifier at all, so there is not
+ * even a safe alternative to link by - which is why this batch is a list.
+ *
+ * Absent for the same reason as everywhere else: `accountId` and
+ * `organizationId` are scope rather than content, `supplierProfileId` belongs to
+ * the other side of the intermediary, and `createdById`/`updatedById` name the
+ * TRIYARA staff who handled the file.
+ */
+export interface BuyerDocumentView {
+  readonly title: string
+  readonly type: string
+  readonly status: string
+  /** Serialised dates. Null when we were never told. */
+  readonly issuedDate: Date | null
+  readonly expiryDate: Date | null
+  readonly fileName: string
+  readonly fileSize: number
+  readonly mimeType: string
+  readonly uploadedAt: Date
+}
+
+export interface BuyerDocumentList {
+  readonly items: BuyerDocumentView[]
+  /** True when the account holds more documents than this page shows. No cursor. */
+  readonly hasMore: boolean
+}
+
+/** The narrow slice of the document repository this needs. Nothing wider. */
+export interface BuyerDocumentLookup {
+  listDocumentsForBuyer(
+    organizationId: string,
+    accountId: string,
+    limit?: number,
+  ): Promise<BuyerDocumentListResult>
+}
+
 /** The narrow slice of the quotation repository this needs. Nothing wider. */
 export interface BuyerQuotationLookup {
   listQuotationsForBuyer(
@@ -222,6 +270,7 @@ export interface BuyerRfqLookup {
 export interface BuyerPortalDeps {
   rfqs: BuyerRfqLookup
   quotations: BuyerQuotationLookup
+  documents: BuyerDocumentLookup
 }
 
 /**
@@ -287,6 +336,29 @@ function toQuotationLine(row: BuyerQuotationDetail['items'][number]): BuyerQuota
   }
 }
 
+/**
+ * Builds one document, field by field.
+ *
+ * The three `current*` columns are renamed on the way out. Inside the Document
+ * module the prefix distinguishes the live version from the rows in
+ * `DocumentVersion`; a buyer seeing one file has no such distinction to make,
+ * and `currentOriginalFilename` reads like an implementation detail because it
+ * is one.
+ */
+function toDocument(row: BuyerDocumentItem): BuyerDocumentView {
+  return {
+    title: row.title,
+    type: row.type,
+    status: row.status,
+    issuedDate: row.issuedDate,
+    expiryDate: row.expiryDate,
+    fileName: row.currentOriginalFilename,
+    fileSize: row.currentFileSize,
+    mimeType: row.currentMimeType,
+    uploadedAt: row.createdAt,
+  }
+}
+
 /** Builds one visible charge, field by field. */
 function toQuotationCharge(row: BuyerQuotationDetail['charges'][number]): BuyerQuotationChargeView {
   return {
@@ -349,7 +421,7 @@ function toItem(row: BuyerRfqDetail['items'][number]): BuyerRequirementItemView 
   }
 }
 
-export function createBuyerPortalService({ quotations, rfqs }: BuyerPortalDeps) {
+export function createBuyerPortalService({ documents, quotations, rfqs }: BuyerPortalDeps) {
   return {
     /**
      * The requirements this party has raised with us.
@@ -398,6 +470,27 @@ export function createBuyerPortalService({ quotations, rfqs }: BuyerPortalDeps) 
      * in the repository query, not by a caller, so no argument here can widen
      * it to an internal draft.
      */
+    /**
+     * The documents on the buyer's own account.
+     *
+     * One argument, and it is the resolved party. There is no second parameter
+     * through which a caller could name an account, which is the point: the
+     * scope is not validated from input, it is taken from what `resolve` already
+     * proved about this session.
+     *
+     * No refusal path of its own. An account with no documents has an empty
+     * list, which is a true answer; the refusals that matter happened earlier,
+     * in `resolve`, before this was reached.
+     */
+    async listDocuments(party: PortalPartyContext): Promise<BuyerDocumentList> {
+      const { items, hasMore } = await documents.listDocumentsForBuyer(
+        party.organizationId,
+        party.accountId,
+      )
+
+      return { items: items.map(toDocument), hasMore }
+    },
+
     async listQuotations(party: PortalPartyContext): Promise<BuyerQuotationList> {
       const { items, hasMore } = await quotations.listQuotationsForBuyer(
         party.organizationId,

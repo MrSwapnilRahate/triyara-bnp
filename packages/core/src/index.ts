@@ -150,6 +150,9 @@ export {
   REVIEW_TRANSITIONS,
 } from './onboarding/review-workflow'
 export {
+  type BuyerDocumentList,
+  type BuyerDocumentLookup,
+  type BuyerDocumentView,
   type BuyerPortalDeps,
   type BuyerPortalService,
   type BuyerQuotationChargeView,

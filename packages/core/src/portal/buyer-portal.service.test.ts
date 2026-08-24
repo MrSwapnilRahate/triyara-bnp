@@ -1,4 +1,6 @@
 import type {
+  BuyerDocumentItem,
+  BuyerDocumentListResult,
   BuyerQuotationDetail,
   BuyerQuotationItem,
   BuyerQuotationListResult,
@@ -186,14 +188,59 @@ function detailCharge(
   } as BuyerQuotationDetail['charges'][number]
 }
 
+/** A document as `buyerDocumentSelect` returns it, plus the scope columns. */
+interface DocumentRow extends BuyerDocumentItem {
+  organizationId: string
+  accountId: string
+  deletedAt: Date | null
+}
+
+function documentRow(over: Partial<DocumentRow> = {}): DocumentRow {
+  return {
+    organizationId: ORG,
+    accountId: ACCOUNT,
+    deletedAt: null,
+    title: 'GST certificate',
+    type: 'GST',
+    status: 'RECEIVED',
+    issuedDate: new Date('2026-01-15'),
+    expiryDate: new Date('2027-01-15'),
+    currentOriginalFilename: 'gst-certificate.pdf',
+    currentFileSize: 248_512,
+    currentMimeType: 'application/pdf',
+    createdAt: new Date('2026-02-01'),
+    ...over,
+  } as DocumentRow
+}
+
 function harness(
   rows: Row[],
   quotationRows: QuotationRow[] = [],
   detailRows: QuotationDetailRow[] = [],
+  documentRows: DocumentRow[] = [],
 ) {
   const calls: { organizationId: string; buyerId: string }[] = []
 
   const service = createBuyerPortalService({
+    documents: {
+      async listDocumentsForBuyer(
+        organizationId,
+        accountId,
+        limit = 50,
+      ): Promise<BuyerDocumentListResult> {
+        calls.push({ organizationId, buyerId: accountId })
+        const found = documentRows.filter(
+          (d) =>
+            matches(d.organizationId, organizationId) &&
+            matches(d.accountId, accountId) &&
+            d.deletedAt === null,
+        )
+        return {
+          items: found.slice(0, limit) as BuyerDocumentItem[],
+          hasMore: found.length > limit,
+        }
+      },
+    },
     quotations: {
       async findQuotationForBuyer(
         organizationId,
@@ -1084,5 +1131,172 @@ describe('what a quotation detail is allowed to carry', () => {
     ]) {
       expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
     }
+  })
+})
+
+/**
+ * The documents on the buyer's own account.
+ *
+ * The same in-memory table as everywhere else in this file, applying Prisma's
+ * `undefined` semantics: a dropped scope WIDENS the query rather than emptying
+ * it. That is what makes the isolation cases below meaningful - against a fake
+ * that compared strictly they would pass even if the repository had stopped
+ * scoping.
+ */
+describe('the document scope comes from the party, not the caller', () => {
+  it('accepts exactly one argument, so no account can be passed', () => {
+    const { service } = harness([], [], [], [documentRow()])
+    expect(service.listDocuments.length).toBe(1)
+  })
+
+  it('passes the party organization to the repository', async () => {
+    const { service, calls } = harness([], [], [], [documentRow()])
+    await service.listDocuments(party())
+    expect(calls[0]?.organizationId).toBe(ORG)
+  })
+
+  it('passes the party account as the owner', async () => {
+    const { service, calls } = harness([], [], [], [documentRow()])
+    await service.listDocuments(party())
+    expect(calls[0]?.buyerId).toBe(ACCOUNT)
+  })
+
+  it('follows the signed-in party when it changes, never a stored value', async () => {
+    const { service, calls } = harness([], [], [], [documentRow()])
+    await service.listDocuments(party({ organizationId: 'org9', accountId: 'acct-9' }))
+    expect(calls[0]).toEqual({ organizationId: 'org9', buyerId: 'acct-9' })
+  })
+})
+
+describe('isolation for documents', () => {
+  it('never returns another organization&rsquo;s documents', async () => {
+    const { service } = harness([], [], [], [documentRow({ organizationId: 'org2' })])
+    expect((await service.listDocuments(party())).items).toEqual([])
+  })
+
+  it('never returns another account&rsquo;s documents in the same organization', async () => {
+    const { service } = harness([], [], [], [documentRow({ accountId: 'acct-2' })])
+    expect((await service.listDocuments(party())).items).toEqual([])
+  })
+
+  it('never returns a soft-deleted document', async () => {
+    const { service } = harness([], [], [], [documentRow({ deletedAt: new Date() })])
+    expect((await service.listDocuments(party())).items).toEqual([])
+  })
+
+  it('returns an empty list for an account with nothing, rather than refusing', async () => {
+    // An account with no documents is a true answer, not an error. The refusals
+    // that matter happened in `resolve`, before this was reached.
+    const { service } = harness([], [], [], [])
+    expect(await service.listDocuments(party())).toEqual({ items: [], hasMore: false })
+  })
+
+  it('returns every document the account does own', async () => {
+    const { service } = harness(
+      [],
+      [],
+      [],
+      [documentRow(), documentRow({ title: 'IEC certificate', type: 'IEC' })],
+    )
+    expect((await service.listDocuments(party())).items).toHaveLength(2)
+  })
+})
+
+describe('what a document is allowed to carry', () => {
+  it('returns exactly the approved keys', async () => {
+    const { service } = harness([], [], [], [documentRow()])
+    const [doc] = (await service.listDocuments(party())).items
+
+    expect(Object.keys(doc!).sort()).toEqual([
+      'expiryDate',
+      'fileName',
+      'fileSize',
+      'issuedDate',
+      'mimeType',
+      'status',
+      'title',
+      'type',
+      'uploadedAt',
+    ])
+  })
+
+  it.each([
+    'id',
+    'organizationId',
+    'accountId',
+    'supplierProfileId',
+    'currentStorageKey',
+    'currentChecksum',
+    'currentOriginalFilename',
+    'currentFileSize',
+    'currentMimeType',
+    'currentFileVersion',
+    'createdById',
+    'updatedById',
+    'deletedById',
+    'version',
+    'deletedAt',
+    'createdAt',
+    'updatedAt',
+  ])('never carries %s', async (key) => {
+    const { service } = harness([], [], [], [documentRow()])
+    const [doc] = (await service.listDocuments(party())).items
+    expect(doc).not.toHaveProperty(key)
+  })
+
+  it('carries no storage key, checksum or staff name even when the row holds some', async () => {
+    // The storage key is the one that matters most: it is the path that would
+    // fetch the file, and a key in a payload is a key in the DOM.
+    const polluted = {
+      ...documentRow(),
+      id: 'doc-internal-id',
+      supplierProfileId: 'sp-internal-1',
+      currentStorageKey: 'org1/acct-1/9111111/gst-certificate.pdf',
+      currentChecksum: 'sha256-7777777777',
+      createdById: 'staff-1',
+      updatedById: 'staff-2',
+      deletedById: 'staff-3',
+      version: 7,
+    } as unknown as DocumentRow
+
+    const { service } = harness([], [], [], [polluted])
+    const serialized = JSON.stringify((await service.listDocuments(party())).items)
+
+    for (const leak of [
+      'doc-internal-id',
+      'sp-internal-1',
+      '9111111/gst-certificate.pdf',
+      'sha256-7777777777',
+      'staff-1',
+      'staff-2',
+      'staff-3',
+    ]) {
+      expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
+    }
+  })
+
+  it('renames the current* columns to buyer-facing names', async () => {
+    const { service } = harness([], [], [], [documentRow()])
+    const [doc] = (await service.listDocuments(party())).items
+    expect(doc?.fileName).toBe('gst-certificate.pdf')
+    expect(doc?.fileSize).toBe(248_512)
+    expect(doc?.mimeType).toBe('application/pdf')
+    expect(doc?.uploadedAt).toEqual(new Date('2026-02-01'))
+  })
+
+  it.each(['PENDING', 'RECEIVED', 'VERIFIED', 'EXPIRED', 'REJECTED'])(
+    'preserves the %s status it was given',
+    async (status) => {
+      const { service } = harness([], [], [], [documentRow({ status: status as never })])
+      const [doc] = (await service.listDocuments(party())).items
+      expect(doc?.status).toBe(status)
+    },
+  )
+
+  it('keeps a missing date null rather than inventing one', async () => {
+    const { service } = harness([], [], [], [documentRow({ issuedDate: null, expiryDate: null })])
+    const [doc] = (await service.listDocuments(party())).items
+    expect(doc?.issuedDate).toBeNull()
+    expect(doc?.expiryDate).toBeNull()
   })
 })

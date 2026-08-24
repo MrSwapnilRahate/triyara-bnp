@@ -68,6 +68,9 @@ function fakeDocs(doc: DocumentRecord | null): DocumentRepository {
     create: async () => doc!,
     findById: async () => doc,
     list: async () => ({ items: [], nextCursor: null, hasMore: false }),
+    // Present only to satisfy `DocumentRepository`. Verification never reads a
+    // buyer-scoped list; the portal does, through its own service.
+    listDocumentsForBuyer: async () => ({ items: [], hasMore: false }),
     mutate: async () => doc!,
     softDelete: async () => doc!,
     restore: async () => doc!,
