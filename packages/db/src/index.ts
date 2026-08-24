@@ -173,6 +173,8 @@ export {
 } from './repositories/quote-request.repository'
 export { type ReviewerOption, reviewerRepository } from './repositories/reviewer.repository'
 export {
+  type BuyerRfqListItem,
+  type BuyerRfqListResult,
   type CreateRfqData,
   type ListRfqsParams,
   OPEN_RFQ_STATUSES,

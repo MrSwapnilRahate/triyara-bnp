@@ -150,6 +150,14 @@ export {
   REVIEW_TRANSITIONS,
 } from './onboarding/review-workflow'
 export {
+  type BuyerPortalDeps,
+  type BuyerPortalService,
+  type BuyerRequirementList,
+  type BuyerRequirementView,
+  type BuyerRfqLookup,
+  createBuyerPortalService,
+} from './portal/buyer-portal.service'
+export {
   createPortalContextService,
   type PortalAccountLookup,
   type PortalContextCtx,

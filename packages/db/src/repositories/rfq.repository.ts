@@ -150,6 +150,44 @@ export interface RfqListResult {
   nextCursor: string | null
 }
 
+/**
+ * What a buyer may be told about their own RFQ.
+ *
+ * A separate select from `listSelect`, which is an internal projection and
+ * carries `awardedSupplierId` - the identity of the supplier who won the round -
+ * along with `awardedById`, `organizationId`, `version` and `deletedAt`. Reusing
+ * it and trusting each caller to drop those is how one of them eventually will
+ * not, and the first field in that list is the one TRIYARA exists to keep
+ * between the two sides.
+ *
+ * Selected at the database rather than filtered afterwards, so the columns never
+ * enter the process.
+ */
+const buyerListSelect = {
+  rfqNumber: true,
+  title: true,
+  status: true,
+  priority: true,
+  currency: true,
+  incoterm: true,
+  destinationCountry: true,
+  destinationPort: true,
+  expectedShipmentDate: true,
+  quotationDeadline: true,
+  createdAt: true,
+} satisfies Prisma.RFQSelect
+
+export type BuyerRfqListItem = Prisma.RFQGetPayload<{ select: typeof buyerListSelect }>
+
+export interface BuyerRfqListResult {
+  items: BuyerRfqListItem[]
+  /** Whether the account owns more RFQs than were returned. Carries no cursor. */
+  hasMore: boolean
+}
+
+/** How many of a buyer's RFQs one portal page shows. */
+const DEFAULT_BUYER_RFQ_LIMIT = 50
+
 function conflictOnUnique(error: unknown): never {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
     throw new ConflictError('An RFQ with that number already exists.')
@@ -248,6 +286,50 @@ export const rfqRepository = {
 
   findByNumber(organizationId: string, rfqNumber: string): Promise<RfqRecord | null> {
     return prisma.rFQ.findFirst({ where: { organizationId, rfqNumber }, select: detailSelect })
+  },
+
+  /**
+   * The RFQs one buyer account owns (TRY-BNP-PORTAL-RFQ).
+   *
+   * Separate from `list` rather than another parameter on it, and the reason is
+   * the shape of the filter rather than tidiness. `list` applies its buyer as
+   * `...(params.buyerId ? { buyerId: params.buyerId } : {})` - an optional
+   * filter, correct for an internal screen that may or may not be narrowing by
+   * customer. Read by an external party it becomes the wrong default: a falsy
+   * buyer omits the clause entirely and returns every RFQ in the tenant.
+   *
+   * Here both scopes are required positional arguments and both are written
+   * unconditionally into the `where`. There is no branch in which one of them is
+   * absent, so no value a caller can pass makes this query wider than one
+   * account.
+   *
+   * `buyerId` doubles as the type filter: INTERNAL RFQs carry no buyer, so
+   * matching on an account excludes them without naming `type` at all.
+   *
+   * Returns `hasMore` rather than a cursor, deliberately. `encodeCursor` is
+   * base64url of the row id and nothing else, so handing one to the browser
+   * would hand over an RFQ id - which the buyer-facing projection excludes.
+   * Paging belongs with the detail view, where an identifier is needed anyway.
+   */
+  async listForBuyer(
+    organizationId: string,
+    buyerId: string,
+    limit = DEFAULT_BUYER_RFQ_LIMIT,
+  ): Promise<BuyerRfqListResult> {
+    const rows = await prisma.rFQ.findMany({
+      where: {
+        organizationId,
+        buyerId,
+        deletedAt: null,
+      },
+      select: buyerListSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      // One more than asked for, so "is there another page" is answered without
+      // a second count query - the same trick `list` uses for its cursor.
+      take: limit + 1,
+    })
+
+    return { items: rows.slice(0, limit), hasMore: rows.length > limit }
   },
 
   async list(params: ListRfqsParams): Promise<RfqListResult> {
