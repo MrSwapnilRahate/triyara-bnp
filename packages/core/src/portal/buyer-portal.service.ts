@@ -1,4 +1,5 @@
 import type {
+  BuyerQuotationDetail,
   BuyerQuotationItem,
   BuyerQuotationListResult,
   BuyerRfqDetail,
@@ -113,6 +114,87 @@ export interface BuyerQuotationList {
   readonly hasMore: boolean
 }
 
+/**
+ * One line of an offer, as the buyer may read it.
+ *
+ * `unitPrice` and `lineSubtotal` are what we quoted. The line's `unitCost` and
+ * `marginPercent` are what it cost us, the schema marks both INTERNAL, and
+ * neither is fetched. `lineTotal` is absent for a different reason: it folds in
+ * line-scoped charges and taxes that the header totals already carry, so
+ * showing it beside them would count the same money twice.
+ */
+export interface BuyerQuotationLineView {
+  readonly lineNumber: number
+  /** Catalogue name when the line names a product, the free-text name otherwise. */
+  readonly productName: string | null
+  readonly quantity: string
+  readonly unit: string
+  readonly unitPrice: string
+  readonly lineSubtotal: string
+  readonly packaging: string | null
+  readonly hsCode: string | null
+  readonly countryOfOrigin: string | null
+  readonly requiredCertifications: readonly string[]
+  readonly leadTimeDays: number | null
+}
+
+/**
+ * A charge we told the buyer about.
+ *
+ * Only charges we marked `isVisibleToCustomer` reach here. The flag is the
+ * schema's own record of what a customer sees broken out rather than absorbed
+ * into a unit price, so it is the decision, not a heuristic.
+ */
+export interface BuyerQuotationChargeView {
+  readonly type: string
+  readonly label: string | null
+  readonly amount: string
+  readonly currency: string
+  /** True for a discount or other deduction: the amount is subtracted. */
+  readonly isDeduction: boolean
+}
+
+/**
+ * One offer in full, as the buyer we made it to may read it.
+ *
+ * The money reconciles in the open:
+ *
+ *   subtotal + chargesTotal - discountTotal + taxTotal = grandTotal
+ *
+ * and every one of those is a component of our price to them. What we paid to
+ * source it - `costTotal`, `marginPercent`, and per line `unitCost` - is not
+ * here, is not fetched, and is what separates a quotation a buyer may read from
+ * the internal record of the same offer.
+ */
+export interface BuyerQuotationDetailView {
+  readonly quotationNumber: string
+  readonly revisionNumber: number
+  readonly type: string
+  readonly status: string
+  readonly title: string | null
+  readonly currency: string
+  readonly subtotal: string | null
+  readonly chargesTotal: string | null
+  readonly discountTotal: string | null
+  readonly taxTotal: string | null
+  readonly grandTotal: string | null
+  readonly incoterm: string | null
+  readonly namedPlace: string | null
+  readonly destinationCountry: string | null
+  readonly destinationPort: string | null
+  readonly paymentTermsText: string | null
+  readonly leadTimeDays: number | null
+  readonly packingSummary: string | null
+  readonly samplingTerms: string | null
+  readonly sentAt: Date | null
+  readonly validFrom: Date | null
+  readonly validUntil: Date | null
+  readonly acceptedAt: Date | null
+  readonly rejectedAt: Date | null
+  readonly lines: readonly BuyerQuotationLineView[]
+  readonly charges: readonly BuyerQuotationChargeView[]
+}
+
 /** The narrow slice of the quotation repository this needs. Nothing wider. */
 export interface BuyerQuotationLookup {
   listQuotationsForBuyer(
@@ -120,6 +202,11 @@ export interface BuyerQuotationLookup {
     buyerId: string,
     limit?: number,
   ): Promise<BuyerQuotationListResult>
+  findQuotationForBuyer(
+    organizationId: string,
+    buyerId: string,
+    quotationNumber: string,
+  ): Promise<BuyerQuotationDetail | null>
 }
 
 /** The narrow slice of the RFQ repository this needs. Nothing wider. */
@@ -180,6 +267,73 @@ function toQuotation(row: BuyerQuotationItem): BuyerQuotationView {
     grandTotal: row.grandTotal?.toString() ?? null,
     sentAt: row.sentAt,
     validUntil: row.validUntil,
+  }
+}
+
+/** Builds one quoted line, field by field. `Decimal` never leaves as an object. */
+function toQuotationLine(row: BuyerQuotationDetail['items'][number]): BuyerQuotationLineView {
+  return {
+    lineNumber: row.lineNumber,
+    productName: row.product?.name ?? row.customProductName,
+    quantity: row.quantity.toString(),
+    unit: row.unit,
+    unitPrice: row.unitPrice.toString(),
+    lineSubtotal: row.lineSubtotal.toString(),
+    packaging: row.packaging,
+    hsCode: row.hsCode,
+    countryOfOrigin: row.countryOfOrigin,
+    requiredCertifications: row.requiredCertifications,
+    leadTimeDays: row.leadTimeDays,
+  }
+}
+
+/** Builds one visible charge, field by field. */
+function toQuotationCharge(row: BuyerQuotationDetail['charges'][number]): BuyerQuotationChargeView {
+  return {
+    type: row.type,
+    label: row.label,
+    amount: row.amount.toString(),
+    currency: row.currency,
+    isDeduction: row.isDeduction,
+  }
+}
+
+/**
+ * Builds the offer, field by field, relations included.
+ *
+ * Not a spread of the row and not a spread of `toQuotation(row)` either. The
+ * list view and the detail view answer different questions and only happen to
+ * overlap on seven fields; chaining them would make the detail inherit whatever
+ * the list is changed to carry next.
+ */
+function toQuotationDetail(row: BuyerQuotationDetail): BuyerQuotationDetailView {
+  return {
+    quotationNumber: row.quotationNumber,
+    revisionNumber: row.revisionNumber,
+    type: row.type,
+    status: row.status,
+    title: row.title,
+    currency: row.currency,
+    subtotal: row.subtotal?.toString() ?? null,
+    chargesTotal: row.chargesTotal?.toString() ?? null,
+    discountTotal: row.discountTotal?.toString() ?? null,
+    taxTotal: row.taxTotal?.toString() ?? null,
+    grandTotal: row.grandTotal?.toString() ?? null,
+    incoterm: row.incoterm,
+    namedPlace: row.namedPlace,
+    destinationCountry: row.destinationCountry,
+    destinationPort: row.destinationPort,
+    paymentTermsText: row.paymentTermsText,
+    leadTimeDays: row.leadTimeDays,
+    packingSummary: row.packingSummary,
+    samplingTerms: row.samplingTerms,
+    sentAt: row.sentAt,
+    validFrom: row.validFrom,
+    validUntil: row.validUntil,
+    acceptedAt: row.acceptedAt,
+    rejectedAt: row.rejectedAt,
+    lines: row.items.map(toQuotationLine),
+    charges: row.charges.map(toQuotationCharge),
   }
 }
 
@@ -251,6 +405,35 @@ export function createBuyerPortalService({ quotations, rfqs }: BuyerPortalDeps) 
       )
 
       return { items: items.map(toQuotation), hasMore }
+    },
+
+    /**
+     * One of the buyer's own offers, by the number they can already see.
+     *
+     * Two arguments, and neither of them widens anything. `quotationNumber` is
+     * matched inside a query already narrowed to this organization, this
+     * account, the buyer-visible statuses and the undeleted rows, so a guessed
+     * or edited number can only fail to match. Organization and account come
+     * from the resolved party, never from the caller.
+     *
+     * A miss is the same `ForbiddenError` as every other portal refusal, because
+     * the repository returns one `null` for five different reasons and the
+     * difference between them - does this number exist, is it somebody else's,
+     * did we withdraw it - is itself information about a buyer who is not this
+     * one.
+     */
+    async getQuotation(
+      party: PortalPartyContext,
+      quotationNumber: string,
+    ): Promise<BuyerQuotationDetailView> {
+      const found = await quotations.findQuotationForBuyer(
+        party.organizationId,
+        party.accountId,
+        quotationNumber,
+      )
+      if (!found) throw new ForbiddenError(REFUSED)
+
+      return toQuotationDetail(found)
     },
   }
 }

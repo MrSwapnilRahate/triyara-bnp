@@ -1,4 +1,5 @@
 import type {
+  BuyerQuotationDetail,
   BuyerQuotationItem,
   BuyerQuotationListResult,
   BuyerRfqDetail,
@@ -110,11 +111,108 @@ function quotationRow(over: Partial<QuotationRow> = {}): QuotationRow {
   } as QuotationRow
 }
 
-function harness(rows: Row[], quotationRows: QuotationRow[] = []) {
+/** One offer as `buyerQuotationDetailSelect` returns it, plus the scope columns. */
+interface QuotationDetailRow extends BuyerQuotationDetail {
+  organizationId: string
+  buyerId: string
+  deletedAt: Date | null
+}
+
+function detailRow(over: Partial<QuotationDetailRow> = {}): QuotationDetailRow {
+  return {
+    organizationId: ORG,
+    buyerId: ACCOUNT,
+    deletedAt: null,
+    quotationNumber: 'QT-0001',
+    revisionNumber: 2,
+    type: 'FIRM',
+    status: 'SENT',
+    title: 'Basmati rice, 25t FOB Nhava Sheva',
+    currency: 'USD',
+    subtotal: '11000.0000' as unknown as never,
+    chargesTotal: '1200.0000' as unknown as never,
+    discountTotal: '200.0000' as unknown as never,
+    taxTotal: '500.0000' as unknown as never,
+    grandTotal: '12500.0000' as unknown as never,
+    incoterm: 'FOB',
+    namedPlace: 'Nhava Sheva',
+    destinationCountry: 'GB',
+    destinationPort: 'Felixstowe',
+    paymentTermsText: '30% advance, balance against BL copy',
+    leadTimeDays: 45,
+    packingSummary: '25kg PP bags, 40 per pallet',
+    samplingTerms: 'Pre-shipment sample on request',
+    sentAt: new Date('2026-08-10'),
+    validFrom: new Date('2026-08-10'),
+    validUntil: new Date('2026-10-10'),
+    acceptedAt: null,
+    rejectedAt: null,
+    items: [detailLine()],
+    charges: [detailCharge()],
+    ...over,
+  } as QuotationDetailRow
+}
+
+function detailLine(
+  over: Partial<BuyerQuotationDetail['items'][number]> = {},
+): BuyerQuotationDetail['items'][number] {
+  return {
+    lineNumber: 1,
+    customProductName: null,
+    product: { name: 'Sona Masoori, unpolished' },
+    quantity: '25' as unknown as never,
+    unit: 'MT',
+    unitPrice: '440.0000' as unknown as never,
+    lineSubtotal: '11000.0000' as unknown as never,
+    packaging: '25kg PP bags',
+    hsCode: '10063020',
+    countryOfOrigin: 'IN',
+    requiredCertifications: ['ORGANIC'],
+    leadTimeDays: 45,
+    ...over,
+  } as BuyerQuotationDetail['items'][number]
+}
+
+function detailCharge(
+  over: Partial<BuyerQuotationDetail['charges'][number]> = {},
+): BuyerQuotationDetail['charges'][number] {
+  return {
+    type: 'FREIGHT',
+    label: 'Ocean freight',
+    amount: '1200.0000' as unknown as never,
+    currency: 'USD',
+    isDeduction: false,
+    ...over,
+  } as BuyerQuotationDetail['charges'][number]
+}
+
+function harness(
+  rows: Row[],
+  quotationRows: QuotationRow[] = [],
+  detailRows: QuotationDetailRow[] = [],
+) {
   const calls: { organizationId: string; buyerId: string }[] = []
 
   const service = createBuyerPortalService({
     quotations: {
+      async findQuotationForBuyer(
+        organizationId,
+        buyerId,
+        quotationNumber,
+      ): Promise<BuyerQuotationDetail | null> {
+        calls.push({ organizationId, buyerId })
+        // Newest revision first, as the real query orders it.
+        const found = detailRows
+          .filter(
+            (q) =>
+              matches(q.organizationId, organizationId) &&
+              matches(q.buyerId, buyerId) &&
+              matches(q.quotationNumber, quotationNumber) &&
+              q.deletedAt === null,
+          )
+          .sort((a, b) => b.revisionNumber - a.revisionNumber)
+        return (found[0] as BuyerQuotationDetail | undefined) ?? null
+      },
       async listQuotationsForBuyer(
         organizationId,
         buyerId,
@@ -621,6 +719,367 @@ describe('what a quotation is allowed to carry', () => {
       'staff-1',
       '9111.1111',
       '777.7777',
+      '6.6666',
+    ]) {
+      expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
+    }
+  })
+})
+
+/**
+ * One offer, opened by the buyer we made it to.
+ *
+ * The same fake table as above, keyed by number rather than listed, and applying
+ * Prisma's `undefined` semantics for the same reason: a dropped scope must widen
+ * the query in the fake exactly as it would in the database, or these tests pass
+ * against a repository that has stopped scoping.
+ */
+describe('the quotation detail scope comes from the party, not the caller', () => {
+  it('accepts exactly two arguments, so no account can be passed', () => {
+    const { service } = harness([], [], [detailRow()])
+    expect(service.getQuotation.length).toBe(2)
+  })
+
+  it('passes the party organization to the repository', async () => {
+    const { service, calls } = harness([], [], [detailRow()])
+    await service.getQuotation(party(), 'QT-0001')
+    expect(calls[0]?.organizationId).toBe(ORG)
+  })
+
+  it('passes the party account as the buyer', async () => {
+    const { service, calls } = harness([], [], [detailRow()])
+    await service.getQuotation(party(), 'QT-0001')
+    expect(calls[0]?.buyerId).toBe(ACCOUNT)
+  })
+
+  it('follows the signed-in party when it changes, never a stored value', async () => {
+    const { service, calls } = harness([], [], [detailRow()])
+    await service
+      .getQuotation(party({ organizationId: 'org9', accountId: 'acct-9' }), 'QT-0001')
+      .catch(() => null)
+    expect(calls[0]).toEqual({ organizationId: 'org9', buyerId: 'acct-9' })
+  })
+})
+
+describe('isolation for one quotation', () => {
+  it('refuses another organization&rsquo;s offer', async () => {
+    const { service } = harness([], [], [detailRow({ organizationId: 'org2' })])
+    await expect(service.getQuotation(party(), 'QT-0001')).rejects.toThrow(
+      /not available for your account/,
+    )
+  })
+
+  it('refuses another buyer&rsquo;s offer in the same organization', async () => {
+    const { service } = harness([], [], [detailRow({ buyerId: 'acct-2' })])
+    await expect(service.getQuotation(party(), 'QT-0001')).rejects.toThrow(
+      /not available for your account/,
+    )
+  })
+
+  it('refuses a soft-deleted offer', async () => {
+    const { service } = harness([], [], [detailRow({ deletedAt: new Date() })])
+    await expect(service.getQuotation(party(), 'QT-0001')).rejects.toThrow(
+      /not available for your account/,
+    )
+  })
+
+  it('refuses a number that does not exist', async () => {
+    const { service } = harness([], [], [detailRow()])
+    await expect(service.getQuotation(party(), 'QT-9999')).rejects.toThrow(
+      /not available for your account/,
+    )
+  })
+
+  it('refuses with the same message in every case', async () => {
+    // The point of the refusal, not an incidental detail: four different
+    // reasons, one sentence, so the answer never says whether somebody else's
+    // offer exists.
+    const cases = [
+      harness([], [], [detailRow({ organizationId: 'org2' })]),
+      harness([], [], [detailRow({ buyerId: 'acct-2' })]),
+      harness([], [], [detailRow({ deletedAt: new Date() })]),
+      harness([], [], []),
+    ]
+
+    const messages: string[] = []
+    for (const { service } of cases) {
+      await service.getQuotation(party(), 'QT-0001').catch((e: Error) => messages.push(e.message))
+    }
+
+    expect(messages).toHaveLength(4)
+    expect(new Set(messages).size).toBe(1)
+  })
+
+  it('refuses with the same message the requirement detail uses', async () => {
+    // One portal, one refusal. If these ever diverge, the pair of messages
+    // becomes a way to tell the two lookups apart.
+    const quotation = harness([], [], [])
+    const requirement = harness([], [], [])
+
+    const a = await quotation.service
+      .getQuotation(party(), 'QT-0001')
+      .catch((e: Error) => e.message)
+    const b = await requirement.service
+      .getRequirement(party(), 'RFQ-0001')
+      .catch((e: Error) => e.message)
+
+    expect(a).toBe(b)
+  })
+})
+
+describe('which revision the buyer is shown', () => {
+  it('returns the newest revision when more than one is visible', async () => {
+    // `quotationNumber` is unique only WITH `revisionNumber`, so the order is
+    // part of the contract rather than an accident of insertion.
+    const { service } = harness(
+      [],
+      [],
+      [detailRow({ revisionNumber: 2 }), detailRow({ revisionNumber: 5 })],
+    )
+    expect((await service.getQuotation(party(), 'QT-0001')).revisionNumber).toBe(5)
+  })
+
+  it('does not cross to another number', async () => {
+    const { service } = harness(
+      [],
+      [],
+      [detailRow(), detailRow({ quotationNumber: 'QT-0002', revisionNumber: 9 })],
+    )
+    expect((await service.getQuotation(party(), 'QT-0001')).quotationNumber).toBe('QT-0001')
+  })
+})
+
+describe('what a quotation detail is allowed to carry', () => {
+  it('returns exactly the approved header keys', async () => {
+    const { service } = harness([], [], [detailRow()])
+    const detail = await service.getQuotation(party(), 'QT-0001')
+
+    expect(Object.keys(detail).sort()).toEqual([
+      'acceptedAt',
+      'charges',
+      'chargesTotal',
+      'currency',
+      'destinationCountry',
+      'destinationPort',
+      'discountTotal',
+      'grandTotal',
+      'incoterm',
+      'leadTimeDays',
+      'lines',
+      'namedPlace',
+      'packingSummary',
+      'paymentTermsText',
+      'quotationNumber',
+      'rejectedAt',
+      'revisionNumber',
+      'samplingTerms',
+      'sentAt',
+      'status',
+      'subtotal',
+      'taxTotal',
+      'title',
+      'type',
+      'validFrom',
+      'validUntil',
+    ])
+  })
+
+  it('returns exactly the approved line keys', async () => {
+    const { service } = harness([], [], [detailRow()])
+    const [line] = (await service.getQuotation(party(), 'QT-0001')).lines
+
+    expect(Object.keys(line!).sort()).toEqual([
+      'countryOfOrigin',
+      'hsCode',
+      'leadTimeDays',
+      'lineNumber',
+      'lineSubtotal',
+      'packaging',
+      'productName',
+      'quantity',
+      'requiredCertifications',
+      'unit',
+      'unitPrice',
+    ])
+  })
+
+  it('returns exactly the approved charge keys', async () => {
+    const { service } = harness([], [], [detailRow()])
+    const [charge] = (await service.getQuotation(party(), 'QT-0001')).charges
+
+    expect(Object.keys(charge!).sort()).toEqual([
+      'amount',
+      'currency',
+      'isDeduction',
+      'label',
+      'type',
+    ])
+  })
+
+  it.each([
+    'id',
+    'organizationId',
+    'buyerId',
+    'primaryRfqId',
+    'previousRevisionId',
+    'supersededAt',
+    'description',
+    'baseCurrency',
+    'fxRate',
+    'fxRateDate',
+    'paymentTermId',
+    'costTotal',
+    'marginPercent',
+    'rejectionReason',
+    'createdById',
+    'updatedById',
+    'deletedById',
+    'version',
+    'createdAt',
+    'updatedAt',
+    'deletedAt',
+    'items',
+  ])('never carries %s at the header', async (key) => {
+    const { service } = harness([], [], [detailRow()])
+    expect(await service.getQuotation(party(), 'QT-0001')).not.toHaveProperty(key)
+  })
+
+  it.each([
+    'id',
+    'quotationId',
+    'organizationId',
+    'productId',
+    'rfqItemId',
+    'description',
+    'unitCost',
+    'marginPercent',
+    'lineTotal',
+    'remarks',
+    'version',
+    'deletedAt',
+    'product',
+    'sourceOptions',
+    'charges',
+    'taxes',
+  ])('never carries %s on a line', async (key) => {
+    const { service } = harness([], [], [detailRow()])
+    const [line] = (await service.getQuotation(party(), 'QT-0001')).lines
+    expect(line).not.toHaveProperty(key)
+  })
+
+  it('serialises every money field as a string, never a Decimal object', async () => {
+    const { service } = harness([], [], [detailRow()])
+    const detail = await service.getQuotation(party(), 'QT-0001')
+
+    for (const key of [
+      'subtotal',
+      'chargesTotal',
+      'discountTotal',
+      'taxTotal',
+      'grandTotal',
+    ] as const) {
+      expect(typeof detail[key], key).toBe('string')
+    }
+    expect(typeof detail.lines[0]!.unitPrice).toBe('string')
+    expect(typeof detail.lines[0]!.lineSubtotal).toBe('string')
+    expect(typeof detail.lines[0]!.quantity).toBe('string')
+    expect(typeof detail.charges[0]!.amount).toBe('string')
+  })
+
+  it('keeps a null total null rather than inventing a zero', async () => {
+    const { service } = harness([], [], [detailRow({ grandTotal: null as unknown as never })])
+    expect((await service.getQuotation(party(), 'QT-0001')).grandTotal).toBeNull()
+  })
+
+  it('names a line by its catalogue product when it has one', async () => {
+    const { service } = harness([], [], [detailRow()])
+    expect((await service.getQuotation(party(), 'QT-0001')).lines[0]?.productName).toBe(
+      'Sona Masoori, unpolished',
+    )
+  })
+
+  it('falls back to the free-text name when the line names no product', async () => {
+    const { service } = harness(
+      [],
+      [],
+      [
+        detailRow({
+          items: [
+            detailLine({ product: null, customProductName: 'Unlisted parboiled rice' }),
+          ] as unknown as BuyerQuotationDetail['items'],
+        }),
+      ],
+    )
+    expect((await service.getQuotation(party(), 'QT-0001')).lines[0]?.productName).toBe(
+      'Unlisted parboiled rice',
+    )
+  })
+
+  it('carries an offer with no lines rather than refusing it', async () => {
+    const { service } = harness(
+      [],
+      [],
+      [detailRow({ items: [] as unknown as BuyerQuotationDetail['items'] })],
+    )
+    expect((await service.getQuotation(party(), 'QT-0001')).lines).toEqual([])
+  })
+
+  it('carries an offer with no visible charges', async () => {
+    const { service } = harness(
+      [],
+      [],
+      [detailRow({ charges: [] as unknown as BuyerQuotationDetail['charges'] })],
+    )
+    expect((await service.getQuotation(party(), 'QT-0001')).charges).toEqual([])
+  })
+
+  it('carries no supplier, sourcing or internal value even when the row holds some', async () => {
+    // The money sentinels share no digits with any legitimate total on this
+    // fixture - 11000.0000, 1200.0000, 200.0000, 500.0000, 12500.0000,
+    // 440.0000 - because a rounder decoy would sit inside one as a substring
+    // and fail the scan on a number we are supposed to show.
+    const polluted = {
+      ...detailRow(),
+      id: 'qt-internal-id',
+      primaryRfqId: 'rfq-internal-id',
+      createdById: 'staff-1',
+      costTotal: '9111.1111',
+      marginPercent: '27.7777',
+      rejectionReason: 'internal rejection note',
+      items: [
+        {
+          ...detailLine(),
+          id: 'qti-internal-id',
+          rfqItemId: 'rfqi-internal-id',
+          unitCost: '333.3333',
+          marginPercent: '18.8888',
+          lineTotal: '66666.6666',
+          remarks: 'operator remark that must not be mapped',
+          sourceOptions: [
+            { supplierId: 'sup-99', companyName: 'Acme Rice Mills', landedUnitCost: '6.6666' },
+          ],
+        },
+      ],
+    } as unknown as QuotationDetailRow
+
+    const { service } = harness([], [], [polluted])
+    const serialized = JSON.stringify(await service.getQuotation(party(), 'QT-0001'))
+
+    for (const leak of [
+      'qt-internal-id',
+      'rfq-internal-id',
+      'qti-internal-id',
+      'rfqi-internal-id',
+      'staff-1',
+      '9111.1111',
+      '27.7777',
+      '333.3333',
+      '18.8888',
+      '66666.6666',
+      'internal rejection note',
+      'operator remark',
+      'sup-99',
+      'Acme Rice Mills',
       '6.6666',
     ]) {
       expect(serialized, `must not disclose ${leak}`).not.toContain(leak)

@@ -127,7 +127,41 @@ describe('the list is read-only, because accepting an offer is a conversation', 
   it('renders no control that would act on a quotation', () => {
     renderList()
     expect(screen.queryAllByRole('button')).toHaveLength(0)
-    expect(screen.queryAllByRole('link')).toHaveLength(0)
+  })
+})
+
+describe('each quotation links to its own detail', () => {
+  it('links by quotationNumber, which the DTO already carries', () => {
+    // Not by row id: Batch G deliberately keeps the database id out of every
+    // buyer-facing projection, and linking must not reopen that.
+    renderList()
+    expect(screen.getByRole('link', { name: 'QT-0001' })).toHaveAttribute(
+      'href',
+      '/portal/quotations/QT-0001',
+    )
+  })
+
+  it('encodes a number that needs escaping', () => {
+    renderList({ items: [{ ...ITEM, quotationNumber: 'QT/2026 001' }] })
+    expect(screen.getByRole('link', { name: 'QT/2026 001' })).toHaveAttribute(
+      'href',
+      '/portal/quotations/QT%2F2026%20001',
+    )
+  })
+
+  it('links one revision per row without widening the DTO', () => {
+    // Two revisions of one number both link to the same place: the detail
+    // resolves whichever revision is currently standing, so no revision number
+    // and no id needs to enter the URL.
+    renderList({ items: [ITEM, { ...ITEM, revisionNumber: 3 }] })
+    for (const link of screen.getAllByRole('link', { name: 'QT-0001' })) {
+      expect(link).toHaveAttribute('href', '/portal/quotations/QT-0001')
+    }
+  })
+
+  it('still carries no database id on any row', () => {
+    renderList()
+    expect(Object.keys(ITEM)).not.toContain('id')
   })
 })
 

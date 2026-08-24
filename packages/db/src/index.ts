@@ -134,6 +134,7 @@ export {
 } from './repositories/product.repository'
 export {
   BUYER_VISIBLE_QUOTATION_STATUSES,
+  type BuyerQuotationDetail,
   type BuyerQuotationItem,
   type BuyerQuotationListResult,
   type CreateQuotationData,

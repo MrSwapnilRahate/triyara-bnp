@@ -269,6 +269,110 @@ export interface BuyerQuotationListResult {
   hasMore: boolean
 }
 
+/**
+ * One offer, in the detail the buyer we made it to is allowed to read.
+ *
+ * A superset of `buyerQuotationSelect` on the header and nothing like
+ * `detailSelect` anywhere else. `detailSelect` is the internal projection and
+ * carries `costTotal`, `marginPercent`, `createdById`, `primaryRfqId`,
+ * `rejectionReason`, every row id, and - on each line - `unitCost` and
+ * `marginPercent`, which the schema itself marks INTERNAL and never to be
+ * rendered to the customer.
+ *
+ * The money here is the arithmetic of OUR price, not of our cost:
+ *
+ *   subtotal + chargesTotal - discountTotal + taxTotal = grandTotal
+ *
+ * Batch G withheld the four components on the list, where a single figure per
+ * row is the whole point. A detail page is where a commercial offer is expected
+ * to show its working, and none of the four says anything about what we paid;
+ * `costTotal` and `marginPercent` are the numbers that would, and they stay out.
+ *
+ * Line money is `lineSubtotal` - quantity x unitPrice - and deliberately NOT
+ * `lineTotal`. `subtotal` is the sum of the line SUBTOTALS, while `lineTotal` is
+ * a line after its own charges and taxes, and those same amounts are already
+ * inside `chargesTotal` and `taxTotal` above. Showing both would present the
+ * same money twice and reconcile against nothing.
+ *
+ * Relations are entered three times and each is pinned to the minimum:
+ *
+ *   items          -> never `sourceOptions`, which is supplier identity, supplier
+ *                     price and landed cost: the wall this portal exists to keep.
+ *                     Never `rfqItem` either, which is internal provenance.
+ *   items.product  -> `name` alone. Not `id`, not `sku`.
+ *   charges        -> only those we marked `isVisibleToCustomer`, which is the
+ *                     schema's own record of what the customer sees broken out
+ *                     rather than absorbed into a unit price. Both scopes, since
+ *                     `chargesTotal` spans both and a header-only list would
+ *                     reconcile short.
+ *
+ * Taxes are summarised by `taxTotal` and not itemised. `QuotationTax` carries no
+ * customer-visibility flag, and inferring one from a charge's flag would be a
+ * guess about disclosure rather than a decision.
+ */
+const buyerQuotationDetailSelect = {
+  quotationNumber: true,
+  revisionNumber: true,
+  type: true,
+  status: true,
+  title: true,
+  currency: true,
+  subtotal: true,
+  chargesTotal: true,
+  discountTotal: true,
+  taxTotal: true,
+  grandTotal: true,
+  incoterm: true,
+  namedPlace: true,
+  destinationCountry: true,
+  destinationPort: true,
+  paymentTermsText: true,
+  leadTimeDays: true,
+  packingSummary: true,
+  samplingTerms: true,
+  sentAt: true,
+  validFrom: true,
+  validUntil: true,
+  acceptedAt: true,
+  rejectedAt: true,
+  items: {
+    where: { deletedAt: null },
+    orderBy: { lineNumber: 'asc' },
+    select: {
+      lineNumber: true,
+      // Catalogue name when the line names a product, and the free-text name
+      // otherwise - `customProductName` is documented as used only when
+      // `productId` is null. Same pairing as the requirement detail.
+      customProductName: true,
+      product: { select: { name: true } },
+      quantity: true,
+      unit: true,
+      unitPrice: true,
+      lineSubtotal: true,
+      packaging: true,
+      hsCode: true,
+      countryOfOrigin: true,
+      requiredCertifications: true,
+      leadTimeDays: true,
+    },
+  },
+  charges: {
+    where: { deletedAt: null, isVisibleToCustomer: true },
+    orderBy: { sequence: 'asc' },
+    select: {
+      type: true,
+      label: true,
+      amount: true,
+      currency: true,
+      isDeduction: true,
+    },
+  },
+} satisfies Prisma.QuotationSelect
+
+export type BuyerQuotationDetail = Prisma.QuotationGetPayload<{
+  select: typeof buyerQuotationDetailSelect
+}>
+
 /** How many of a buyer's quotations one portal page shows. */
 const DEFAULT_BUYER_QUOTATION_LIMIT = 50
 
@@ -455,6 +559,48 @@ export const quotationRepository = {
     })
 
     return { items: rows.slice(0, limit), hasMore: rows.length > limit }
+  },
+
+  /**
+   * One offer, by the number the buyer can see, scoped to the buyer we made it to.
+   *
+   * Not `findCurrentByNumber`, which is the closest existing method and unsafe
+   * here twice over: it carries no `buyerId`, so it returns another buyer's
+   * quotation in the same tenant, and no status filter, so it returns DRAFT and
+   * PENDING_APPROVAL - a price we have priced but never offered. Not `findById`
+   * either: the buyer holds no row id, and it returns the internal projection.
+   *
+   * All five clauses are required arguments or constants written unconditionally
+   * into the `where`, so every refusal is the same refusal. The service cannot
+   * tell "no such number" from "not yours" from "deleted" from "not sent yet"
+   * even if it wanted to, because all four collapse into one `null`.
+   *
+   * `quotationNumber` is NOT unique on its own, and not per organization either:
+   * the constraint is `@@unique([organizationId, quotationNumber, revisionNumber])`
+   * and the table holds one row PER REVISION. In practice at most one revision is
+   * ever buyer-visible - `revise()` marks the previous row SUPERSEDED and opens
+   * the next as DRAFT, and neither status is in the visible set - but that is a
+   * convention of the write path, not a constraint the database enforces, and
+   * `UpdateQuotationData` can rename a `quotationNumber`. So the order is
+   * explicit rather than assumed: newest revision wins, which is the offer
+   * currently standing under that number.
+   */
+  findQuotationForBuyer(
+    organizationId: string,
+    buyerId: string,
+    quotationNumber: string,
+  ): Promise<BuyerQuotationDetail | null> {
+    return prisma.quotation.findFirst({
+      where: {
+        organizationId,
+        buyerId,
+        quotationNumber,
+        status: { in: BUYER_VISIBLE_QUOTATION_STATUSES },
+        deletedAt: null,
+      },
+      select: buyerQuotationDetailSelect,
+      orderBy: [{ revisionNumber: 'desc' }],
+    })
   },
 
   async list(params: ListQuotationsParams): Promise<QuotationListResult> {
