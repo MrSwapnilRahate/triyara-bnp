@@ -161,10 +161,10 @@ describe('base role membership routes', () => {
 
     it('url-decodes the role segment', async () => {
       await revokeRole(
-        req('/api/v1/admin/users/u1/roles/EXPORT_MANAGER', { method: 'DELETE' }),
-        params('u1', 'EXPORT_MANAGER'),
+        req('/api/v1/admin/users/u1/roles/EXPORTER', { method: 'DELETE' }),
+        params('u1', 'EXPORTER'),
       )
-      expect(userRoleService.revoke).toHaveBeenCalledWith(expect.anything(), 'u1', 'EXPORT_MANAGER')
+      expect(userRoleService.revoke).toHaveBeenCalledWith(expect.anything(), 'u1', 'EXPORTER')
     })
 
     it('translates the last-administrator refusal into 409', async () => {
@@ -204,7 +204,7 @@ describe('base role membership routes', () => {
     })
 
     it('serves any signed-in role, because it carries no tenant data', async () => {
-      for (const role of ['READ_ONLY', 'VERIFIER', 'EXPORT_MANAGER'] as Role[]) {
+      for (const role of ['READ_ONLY', 'VERIFIER', 'EXPORTER'] as Role[]) {
         authState.roles = [role]
         const res = await getMatrix(req('/api/v1/auth/permission-matrix'))
         expect(res.status).toBe(200)

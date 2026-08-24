@@ -171,7 +171,7 @@ describe.skipIf(!process.env.DATABASE_URL)('admin API (integration, real Postgre
 
     it('is refused to every role below ADMIN', async () => {
       await writeAuditRow()
-      for (const role of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[]) {
+      for (const role of ['EXPORTER', 'VERIFIER', 'READ_ONLY'] as Role[]) {
         authState.roles = [role]
         const res = await listAudit(req('/api/v1/audit'))
         // `read all` is not enough: the trail is more revealing than any single

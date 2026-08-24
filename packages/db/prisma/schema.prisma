@@ -28,7 +28,7 @@ enum UserStatus {
 
 enum RoleName {
   ADMIN
-  EXPORT_MANAGER
+  EXPORTER
   VERIFIER
   READ_ONLY
 

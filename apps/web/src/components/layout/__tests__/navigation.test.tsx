@@ -16,8 +16,8 @@ describe('visibleNavigation', () => {
     expect(groups.map((g) => g.heading)).toContain('Administration')
   })
 
-  it('hides Administration from an EXPORT_MANAGER', () => {
-    const groups = visibleNavigation(buildAbilityFor(['EXPORT_MANAGER']))
+  it('hides Administration from an EXPORTER', () => {
+    const groups = visibleNavigation(buildAbilityFor(['EXPORTER']))
     expect(groups.map((g) => g.heading)).not.toContain('Administration')
   })
 
@@ -60,7 +60,7 @@ describe('visibleNavigation', () => {
     expect(href(auditor)).not.toContain('/admin/organization')
   })
 
-  it.each(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const)(
+  it.each(['EXPORTER', 'VERIFIER', 'READ_ONLY'] as const)(
     'keeps the audit entry hidden from %s',
     (role) => {
       // Unchanged by the subject move: `read all` covers AuditLog, so the entry
@@ -116,7 +116,7 @@ describe('visibleNavigation', () => {
     // ADMIN sees the most, but an entry with no `requires` is shown to everyone
     // - which is what made the two catalog entries reachable by READ_ONLY.
     const appDir = join(process.cwd(), 'src/app/(app)')
-    for (const role of ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+    for (const role of ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'] as const) {
       const missing = visibleNavigation(buildAbilityFor([role]))
         .flatMap((g) => g.items)
         .map((i) => i.href)

@@ -18,7 +18,7 @@ const request = (over: Record<string, unknown> = {}) => ({
   userId: 'u2',
   requesterName: 'Priya Nair',
   requesterEmail: 'priya@triyara.test',
-  currentRole: 'EXPORT_MANAGER',
+  currentRole: 'EXPORTER',
   reason: 'I action the supplier review queue every day and need approval rights.',
   status: 'PENDING',
   decidedById: null,
@@ -48,7 +48,7 @@ describe('RequestAccessCard', () => {
 
   it('is offered to a non-admin who has never asked', async () => {
     server.use(mine(null))
-    renderWithProviders(<RequestAccessCard />, { roles: ['EXPORT_MANAGER'] })
+    renderWithProviders(<RequestAccessCard />, { roles: ['EXPORTER'] })
     expect(await screen.findByRole('button', { name: /request admin access/i })).toBeInTheDocument()
   })
 

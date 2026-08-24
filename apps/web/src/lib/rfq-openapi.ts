@@ -118,7 +118,7 @@ export const rfqOpenApiDocument = {
       'the existence of records the caller may not see.',
       '',
       'Authorization uses the `Account` CASL subject: read is open to every role,',
-      'create/update/delete require ADMIN or EXPORT_MANAGER, and `manage` (ADMIN',
+      'create/update/delete require ADMIN or EXPORTER, and `manage` (ADMIN',
       'only) is required to reopen a stopped RFQ.',
       '',
       'The sourcing lifecycle is:',

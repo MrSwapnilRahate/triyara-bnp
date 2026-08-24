@@ -54,16 +54,13 @@ describe('admin users - invite authorization', () => {
     })
   })
 
-  it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']] as const)(
-    'refuses a %s',
-    async (role) => {
-      // `manage User` is ADMIN alone. Anyone who can invite can grant ADMIN,
-      // so this gate is the whole privilege boundary.
-      const { service, createWithInvite } = deps()
-      await expect(service.invite(ctxFor([role as Role]), DTO)).rejects.toThrow()
-      expect(createWithInvite).not.toHaveBeenCalled()
-    },
-  )
+  it.each([['EXPORTER'], ['VERIFIER'], ['READ_ONLY']] as const)('refuses a %s', async (role) => {
+    // `manage User` is ADMIN alone. Anyone who can invite can grant ADMIN,
+    // so this gate is the whole privilege boundary.
+    const { service, createWithInvite } = deps()
+    await expect(service.invite(ctxFor([role as Role]), DTO)).rejects.toThrow()
+    expect(createWithInvite).not.toHaveBeenCalled()
+  })
 })
 
 describe('admin users - invite behaviour', () => {
@@ -99,8 +96,8 @@ describe('admin users - invite behaviour', () => {
 
   it('passes the chosen role through', async () => {
     const { service, createWithInvite } = deps()
-    await service.invite(ctxFor(['ADMIN']), { ...DTO, role: 'EXPORT_MANAGER' })
-    expect(createWithInvite.mock.calls[0]![1]).toMatchObject({ roleName: 'EXPORT_MANAGER' })
+    await service.invite(ctxFor(['ADMIN']), { ...DTO, role: 'EXPORTER' })
+    expect(createWithInvite.mock.calls[0]![1]).toMatchObject({ roleName: 'EXPORTER' })
   })
 
   it('refuses to invite anyone straight to ADMIN', async () => {

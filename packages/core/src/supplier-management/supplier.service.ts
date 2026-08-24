@@ -28,7 +28,7 @@ import { resolveTransition } from '../onboarding/review-workflow'
 // Authorization uses the `Supplier` subject - the standalone master record,
 // distinct from the `SupplierProfile` attached to an Account:
 //   read   Supplier -> every role
-//   create/update          -> ADMIN and EXPORT_MANAGER
+//   create/update          -> ADMIN and EXPORTER
 //   manage                 -> ADMIN only, used for approval decisions
 
 export type SupplierMasterCtx = AuthContext & { requestId?: string }

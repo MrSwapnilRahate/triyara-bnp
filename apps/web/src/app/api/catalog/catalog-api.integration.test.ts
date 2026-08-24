@@ -316,7 +316,7 @@ describe.skipIf(!process.env.DATABASE_URL)('catalog API (integration, real Postg
   })
 
   it('refuses a write from a non-admin with 403 but still allows the read', async () => {
-    authState.roles = ['EXPORT_MANAGER']
+    authState.roles = ['EXPORTER']
     try {
       const denied = await createProduct(
         req('/api/catalog/products', {

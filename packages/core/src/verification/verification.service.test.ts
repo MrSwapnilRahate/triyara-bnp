@@ -154,7 +154,7 @@ describe('verification service (state machine)', () => {
   })
 
   it('assign rejects a non-verifier reviewer', async () => {
-    const s = svc(vrec({ status: 'PENDING_REVIEW' }), false, doc(), reviewers(['EXPORT_MANAGER']))
+    const s = svc(vrec({ status: 'PENDING_REVIEW' }), false, doc(), reviewers(['EXPORTER']))
     await expect(s.assign(ctxFor(['ADMIN']), 'v1', { reviewerId: 'r1' }, 1)).rejects.toThrow(
       /Verifier or Admin/i,
     )
@@ -164,7 +164,7 @@ describe('verification service (state machine)', () => {
     // manager lacks verify ability
     await expect(
       svc(vrec({ status: 'IN_REVIEW' })).approve(
-        ctxFor(['EXPORT_MANAGER']),
+        ctxFor(['EXPORTER']),
         'v1',
         { expiresInDays: 365 },
         1,

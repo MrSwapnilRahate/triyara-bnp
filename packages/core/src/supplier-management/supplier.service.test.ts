@@ -71,10 +71,10 @@ function fakeRepo(over: Partial<SupplierRepository> = {}): SupplierRepository {
 }
 
 describe('supplier master service', () => {
-  it('lets an EXPORT_MANAGER onboard a supplier', async () => {
+  it('lets an EXPORTER onboard a supplier', async () => {
     const sink: DomainEvent[] = []
     const svc = createSupplierMasterService({ repo: fakeRepo(), events: fakeEvents(sink) })
-    const s = await svc.create(ctxFor(['EXPORT_MANAGER']), {
+    const s = await svc.create(ctxFor(['EXPORTER']), {
       supplierCode: 'SUP-000001',
       companyName: 'X',
       legalName: 'X Ltd',
@@ -96,13 +96,13 @@ describe('supplier master service', () => {
     ).rejects.toThrow(/not permitted/i)
   })
 
-  it('separates onboarding from approval: EXPORT_MANAGER may create but not approve', async () => {
+  it('separates onboarding from approval: EXPORTER may create but not approve', async () => {
     const svc = createSupplierMasterService({
       repo: fakeRepo({ findById: async () => makeSupplier({ status: 'PENDING_REVIEW' }) }),
       events: fakeEvents(),
     })
     await expect(
-      svc.decide(ctxFor(['EXPORT_MANAGER']), 's1', 1, { decision: 'APPROVED' }),
+      svc.decide(ctxFor(['EXPORTER']), 's1', 1, { decision: 'APPROVED' }),
     ).rejects.toThrow(/not permitted/i)
   })
 

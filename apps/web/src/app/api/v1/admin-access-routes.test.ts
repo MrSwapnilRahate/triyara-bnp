@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // the HTTP contract - envelope, status, If-Match, validation, delegation.
 
 const authState = {
-  roles: ['EXPORT_MANAGER'] as Role[],
+  roles: ['EXPORTER'] as Role[],
   organizationId: 'org1',
   userId: 'u1',
   email: 'staff@triyara.test',
@@ -69,7 +69,7 @@ const record = (over: Record<string, unknown> = {}) => ({
   userId: 'u1',
   requesterName: 'A Person',
   requesterEmail: 'staff@triyara.test',
-  currentRole: 'EXPORT_MANAGER',
+  currentRole: 'EXPORTER',
   reason: 'I action the supplier review queue every day and need approvals.',
   status: 'PENDING',
   decidedById: null,
@@ -87,7 +87,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   emailService.adminAccessRequested.mockResolvedValue({ status: 'sent', id: 'e1', attempts: 1 })
   notifyAdminAccessDecision.mockResolvedValue('sent')
-  authState.roles = ['EXPORT_MANAGER']
+  authState.roles = ['EXPORTER']
 })
 
 describe('POST /api/v1/admin-access-requests', () => {
@@ -116,7 +116,7 @@ describe('POST /api/v1/admin-access-requests', () => {
     expect(emailService.adminAccessRequested).toHaveBeenCalledWith(
       expect.objectContaining({
         requesterEmail: 'staff@triyara.test',
-        currentRole: 'EXPORT_MANAGER',
+        currentRole: 'EXPORTER',
       }),
     )
   })

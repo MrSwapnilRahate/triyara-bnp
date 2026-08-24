@@ -174,7 +174,7 @@ describe('AuditLog', () => {
 
   it('refuses a non-admin and explains why, rather than showing an empty table', async () => {
     server.use(...handlers())
-    renderWithProviders(<AuditLog />, { roles: ['EXPORT_MANAGER'] })
+    renderWithProviders(<AuditLog />, { roles: ['EXPORTER'] })
 
     expect(
       await screen.findByText(/only administrators can read the audit log/i),
@@ -257,7 +257,7 @@ describe('OrganizationSettings', () => {
 
   it('disables every control for a role that cannot manage the organization', async () => {
     server.use(...handlers())
-    renderWithProviders(<OrganizationSettings />, { roles: ['EXPORT_MANAGER'] })
+    renderWithProviders(<OrganizationSettings />, { roles: ['EXPORTER'] })
 
     expect(await screen.findByText(/see these settings but not change them/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/company name/i)).toBeDisabled()

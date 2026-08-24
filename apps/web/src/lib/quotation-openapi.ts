@@ -151,7 +151,7 @@ export const quotationOpenApiDocument = {
       '   (ADMIN). This is enforced in the service, so no endpoint can leak them.',
       '',
       'Authorization uses the `Account` CASL subject: read is open to every role,',
-      'create/update/delete require ADMIN or EXPORT_MANAGER. Approving a',
+      'create/update/delete require ADMIN or EXPORTER. Approving a',
       'quotation at or above the value threshold, or below the margin floor,',
       'additionally requires ADMIN.',
       '',

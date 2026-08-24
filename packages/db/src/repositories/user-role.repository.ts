@@ -40,7 +40,7 @@ export const userRoleRepository = {
    * The roles a user holds, scoped by organization.
    *
    * `RoleName` is a PostgreSQL enum, so ordering by it is declaration order -
-   * ADMIN, EXPORT_MANAGER, VERIFIER, READ_ONLY - not alphabetical. That reads
+   * ADMIN, EXPORTER, VERIFIER, READ_ONLY - not alphabetical. That reads
    * as roughly descending privilege, which is the useful order here, and every
    * caller gets the same one.
    */

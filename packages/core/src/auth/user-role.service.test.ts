@@ -28,7 +28,7 @@ function deps(
     sink?: DomainEvent[]
   } = {},
 ) {
-  const assign = vi.fn(async () => [{ name: 'EXPORT_MANAGER' }])
+  const assign = vi.fn(async () => [{ name: 'EXPORTER' }])
   const revoke = vi.fn(async () => ({ roles: [], lastAdmin: false }))
   const repo = {
     listForUser: async () => [],
@@ -86,7 +86,7 @@ describe('direct ADMIN assignment is blocked', () => {
     )
   })
 
-  it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']])(
+  it.each([['EXPORTER'], ['VERIFIER'], ['READ_ONLY']])(
     'still assigns %s normally',
     async (role) => {
       const { service, assign } = deps()

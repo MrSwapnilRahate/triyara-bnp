@@ -157,7 +157,7 @@ describe('the supplier constraint survives the subject change', () => {
 describe('every real role keeps the access it had', () => {
   // `read all` covers RFQ and Quotation as it covered SupplierProfile, so no
   // configured role gains or loses this endpoint.
-  it.each(['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[])(
+  it.each(['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'] as Role[])(
     '%s can still read both histories',
     async (role) => {
       const ability = buildAbilityFor([role])

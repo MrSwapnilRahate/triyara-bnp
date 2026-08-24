@@ -116,11 +116,11 @@ describe('SupplierList', () => {
   })
 
   describe('authorization', () => {
-    it('shows New supplier to an EXPORT_MANAGER - suppliers are SupplierProfile', async () => {
+    it('shows New supplier to an EXPORTER - suppliers are SupplierProfile', async () => {
       server.use(...handlers())
-      renderWithProviders(<SupplierList />, { roles: ['EXPORT_MANAGER'] })
+      renderWithProviders(<SupplierList />, { roles: ['EXPORTER'] })
       await screen.findByRole('table')
-      // Unlike the catalog, an export manager CAN create a supplier.
+      // Unlike the catalog, an exporter CAN create a supplier.
       expect(screen.getByRole('link', { name: 'New supplier' })).toBeInTheDocument()
     })
 

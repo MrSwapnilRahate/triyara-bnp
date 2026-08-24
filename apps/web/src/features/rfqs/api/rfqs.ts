@@ -109,7 +109,7 @@ export function useDeleteRfq() {
 }
 
 /**
- * Undoes a soft delete. `update RFQ`, so ADMIN and EXPORT_MANAGER both
+ * Undoes a soft delete. `update RFQ`, so ADMIN and EXPORTER both
  * reach it - the same pair that may edit an RFQ.
  *
  * Sends If-Match with the version from the deleted record, so a stale tab

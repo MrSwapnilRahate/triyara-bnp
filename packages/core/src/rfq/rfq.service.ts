@@ -17,7 +17,7 @@ import type {
 // same permission, and deleting an RFQ required the right to delete the
 // customer. Who may do what is unchanged:
 //   read   RFQ -> every role
-//   create/update -> ADMIN and EXPORT_MANAGER
+//   create/update -> ADMIN and EXPORTER
 //   manage        -> ADMIN only, used for approval decisions
 //   delete        -> ADMIN only
 

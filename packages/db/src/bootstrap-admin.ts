@@ -66,13 +66,7 @@ const MIN_PASSWORD_LENGTH = 12
  * administrator can hand it out; only external provisioning names it, and that
  * path needs the row to exist.
  */
-const ROLE_CATALOGUE: RoleName[] = [
-  'ADMIN',
-  'EXPORT_MANAGER',
-  'VERIFIER',
-  'READ_ONLY',
-  'EXTERNAL_PARTY',
-]
+const ROLE_CATALOGUE: RoleName[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY', 'EXTERNAL_PARTY']
 
 /**
  * How long the write is allowed to take, against Prisma's 5s default.

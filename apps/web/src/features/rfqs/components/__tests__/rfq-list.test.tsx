@@ -98,7 +98,7 @@ describe('RfqList', () => {
 
   it('offers New RFQ to a role that can', async () => {
     server.use(...handlers({ items: [] }))
-    renderWithProviders(<RfqList />, { roles: ['EXPORT_MANAGER'] })
+    renderWithProviders(<RfqList />, { roles: ['EXPORTER'] })
 
     expect(await screen.findAllByRole('link', { name: /new rfq/i })).not.toHaveLength(0)
   })

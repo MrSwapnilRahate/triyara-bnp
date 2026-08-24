@@ -88,7 +88,7 @@ export function useUpdateSupplier(id: string) {
 }
 
 /**
- * Undoes a soft delete. `update Supplier`, so ADMIN and EXPORT_MANAGER both
+ * Undoes a soft delete. `update Supplier`, so ADMIN and EXPORTER both
  * reach it - the same pair that maintains the supplier master.
  */
 export function useRestoreSupplier() {

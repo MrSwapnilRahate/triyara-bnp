@@ -38,7 +38,7 @@ export type LoginOutcomeName = z.infer<typeof loginOutcomeSchema>
 // Mirrors the frozen RoleName enum in @triyara/db. This is the full vocabulary:
 // what a role may be CALLED. Reading, filtering and revoking all need ADMIN in
 // it - you must be able to list the administrators and to take the role away.
-export const ASSIGNABLE_ROLES = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const
+export const ASSIGNABLE_ROLES = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'] as const
 export const assignableRoleSchema = z.enum(ASSIGNABLE_ROLES)
 
 /**
@@ -57,7 +57,7 @@ export const assignableRoleSchema = z.enum(ASSIGNABLE_ROLES)
  * this schema, which is precisely the defence in depth worth keeping. The type
  * stays wide; only the runtime narrows.
  */
-export const GRANTABLE_ROLES = ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const
+export const GRANTABLE_ROLES = ['EXPORTER', 'VERIFIER', 'READ_ONLY'] as const
 export const grantableRoleSchema = assignableRoleSchema.refine(
   // Annotated `: boolean` on purpose. Left bare, `role !== 'ADMIN'` is inferred
   // as a type predicate, Zod picks its narrowing `refine` overload, and the DTO

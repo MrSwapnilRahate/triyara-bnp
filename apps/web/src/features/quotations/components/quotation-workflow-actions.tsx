@@ -197,7 +197,7 @@ export function QuotationWorkflowActions({
         </Can>
       ) : null}
 
-      {/* Withdraw needs `delete`, so it is invisible to EXPORT_MANAGER. */}
+      {/* Withdraw needs `delete`, so it is invisible to EXPORTER. */}
       {canMoveTo(status, 'WITHDRAWN') && ability.can('delete', 'Quotation') ? (
         <Button
           variant="ghost"

@@ -171,7 +171,7 @@ export function RfqWorkflowActions({ rfq, version }: { rfq: Rfq; version: number
         </Can>
       ) : null}
 
-      {/* Reopen needs `manage`, so it is invisible to EXPORT_MANAGER. */}
+      {/* Reopen needs `manage`, so it is invisible to EXPORTER. */}
       {canReopen(rfq.status) ? (
         <Can action="manage" subject="RFQ">
           <Button

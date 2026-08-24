@@ -102,7 +102,7 @@ describe('POST /v1/accounts/:id/approval', () => {
   })
 
   it('refuses a reviewer who may edit accounts but not decide them', async () => {
-    authState.roles = ['EXPORT_MANAGER']
+    authState.roles = ['EXPORTER']
     buyerRegistrationService.decide.mockRejectedValue(new ForbiddenError())
     const res = await decide(
       req({ decision: 'APPROVED' }, { 'If-Match': 'W/"v2"' }),

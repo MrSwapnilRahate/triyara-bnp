@@ -21,12 +21,12 @@ import { createAdminService } from './admin.service'
  *
  * The level stays at `manage`, and that is the load-bearing part. Every role
  * holds `read all`, so `read AuditLog` would have quietly handed both trails
- * to EXPORT_MANAGER, VERIFIER and READ_ONLY. The tests below pin the level as
+ * to EXPORTER, VERIFIER and READ_ONLY. The tests below pin the level as
  * firmly as the subject.
  */
 
-const ROLES: Role[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
-const BELOW_ADMIN: Role[] = ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const ROLES: Role[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY']
+const BELOW_ADMIN: Role[] = ['EXPORTER', 'VERIFIER', 'READ_ONLY']
 
 describe('the AuditLog subject grants exactly what Organization used to', () => {
   it.each(ROLES)('gives %s the same answer on manage as `manage Organization` did', (role) => {
@@ -90,7 +90,7 @@ describe('the two subjects are genuinely separate', () => {
   it('leaves the subjects the other work established alone', () => {
     // G5.2 (RFQ/Quotation), G5.3 (Product/Category), G5.4 (supplier history)
     // and G4 (security metadata) must all be unaffected.
-    const em = buildAbilityFor(['EXPORT_MANAGER'])
+    const em = buildAbilityFor(['EXPORTER'])
     expect(em.can('create', 'RFQ')).toBe(true)
     expect(em.can('create', 'Quotation')).toBe(true)
     expect(em.can('create', 'Product')).toBe(false)

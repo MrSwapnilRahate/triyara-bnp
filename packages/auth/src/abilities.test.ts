@@ -9,8 +9,8 @@ describe('buildAbilityFor', () => {
     expect(a.can('delete', 'User')).toBe(true)
   })
 
-  it('EXPORT_MANAGER can edit accounts but not approve verification or manage users', () => {
-    const a = buildAbilityFor(['EXPORT_MANAGER'])
+  it('EXPORTER can edit accounts but not approve verification or manage users', () => {
+    const a = buildAbilityFor(['EXPORTER'])
     expect(a.can('update', 'Account')).toBe(true)
     expect(a.can('read', 'Verification')).toBe(true)
     expect(a.can('verify', 'Verification')).toBe(false)
@@ -42,9 +42,9 @@ describe('buildAbilityFor', () => {
     // before. A regression here would mean the new role leaked into a shared
     // rule rather than standing alone.
     expect(buildAbilityFor(['ADMIN']).can('manage', 'all')).toBe(true)
-    expect(buildAbilityFor(['EXPORT_MANAGER']).can('read', 'all')).toBe(true)
-    expect(buildAbilityFor(['EXPORT_MANAGER']).can('update', 'Account')).toBe(true)
-    expect(buildAbilityFor(['EXPORT_MANAGER']).can('manage', 'all')).toBe(false)
+    expect(buildAbilityFor(['EXPORTER']).can('read', 'all')).toBe(true)
+    expect(buildAbilityFor(['EXPORTER']).can('update', 'Account')).toBe(true)
+    expect(buildAbilityFor(['EXPORTER']).can('manage', 'all')).toBe(false)
     expect(buildAbilityFor(['VERIFIER']).can('verify', 'Verification')).toBe(true)
     expect(buildAbilityFor(['VERIFIER']).can('update', 'Account')).toBe(false)
     expect(buildAbilityFor(['READ_ONLY']).can('read', 'all')).toBe(true)

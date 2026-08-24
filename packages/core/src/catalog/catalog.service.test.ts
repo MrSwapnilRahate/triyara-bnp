@@ -125,7 +125,7 @@ describe('product service', () => {
     const svc = createProductService({ repo: fakeProductRepo(), events: fakeEvents() })
 
     await expect(
-      svc.create(ctxFor(['EXPORT_MANAGER']), {
+      svc.create(ctxFor(['EXPORTER']), {
         sku: 'X',
         name: 'X',
         categoryId: 'cat1',

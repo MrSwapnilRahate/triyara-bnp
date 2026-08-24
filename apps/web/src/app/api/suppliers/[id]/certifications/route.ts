@@ -27,7 +27,7 @@ export function GET(req: Request, { params }: Ctx) {
   })
 }
 
-// POST /api/suppliers/:id/certifications - record one (ADMIN, EXPORT_MANAGER).
+// POST /api/suppliers/:id/certifications - record one (ADMIN, EXPORTER).
 //
 // No If-Match: this creates a row rather than replacing one, so there is no
 // version to be stale against. The mutations on :certificationId require it.

@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
  * the API at all.
  */
 
-const ROLES: Role[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const ROLES: Role[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY']
 
 const ability = (role: Role): AppAbility => buildAbilityFor([role])
 
@@ -26,7 +26,7 @@ describe('reading the intake queue', () => {
 describe('triaging an enquiry', () => {
   it.each([
     ['ADMIN', true],
-    ['EXPORT_MANAGER', true],
+    ['EXPORTER', true],
     ['VERIFIER', false],
     ['READ_ONLY', false],
   ] as const)('%s update -> %s', (role, allowed) => {
@@ -81,7 +81,7 @@ describe('the subject is genuinely separate from RFQ', () => {
     // on RFQ, that would be a permission change smuggled in by a new feature.
     const EXPECTED_RFQ: Record<Role, { create: boolean; manage: boolean }> = {
       ADMIN: { create: true, manage: true },
-      EXPORT_MANAGER: { create: true, manage: false },
+      EXPORTER: { create: true, manage: false },
       VERIFIER: { create: false, manage: false },
       READ_ONLY: { create: false, manage: false },
       // Holds nothing at all - see abilities.ts.

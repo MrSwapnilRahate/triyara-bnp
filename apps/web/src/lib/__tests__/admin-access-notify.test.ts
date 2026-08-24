@@ -30,7 +30,7 @@ const result = (over: Record<string, unknown> = {}) =>
       userId: 'u1',
       requesterName: 'Priya Nair',
       requesterEmail: 'priya@triyara.test',
-      currentRole: 'EXPORT_MANAGER',
+      currentRole: 'EXPORTER',
       reason: 'Needs the review queue.',
       status: 'REVOKED',
       // Deliberately different people.

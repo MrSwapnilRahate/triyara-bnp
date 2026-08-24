@@ -14,7 +14,7 @@ import type { SupplierCertificationDto, UpdateSupplierCertificationDto } from '@
  *
  * Authorization mirrors contacts and offerings, the sibling sub-resources:
  * reading needs `read Supplier`, writing needs `update Supplier`,
- * so ADMIN and EXPORT_MANAGER maintain them and everyone else can look.
+ * so ADMIN and EXPORTER maintain them and everyone else can look.
  */
 
 export type SupplierCertificationCtx = AuthContext & { requestId?: string }

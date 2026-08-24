@@ -40,7 +40,7 @@ import { formatWhen, roleLabel } from './user-presentation'
 // granted only by a Super Admin approving an access request - so offering it
 // would be offering a button that returns 403. The server remains the authority;
 // this only stops the screen from promising something it cannot deliver.
-const ASSIGNABLE: RoleName[] = ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const ASSIGNABLE: RoleName[] = ['EXPORTER', 'VERIFIER', 'READ_ONLY']
 
 /**
  * Base roles and scoped grants (TRY-BNP-PORTAL-01 §12).

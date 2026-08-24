@@ -25,7 +25,7 @@ import { authConfig } from './config'
 
 const authorized = authConfig.callbacks?.authorized
 
-const INTERNAL_ROLES: Role[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const INTERNAL_ROLES: Role[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY']
 
 /** Internal pages an external party must never render. One per area. */
 const INTERNAL_ROUTES = [
@@ -147,7 +147,7 @@ describe('internal staff stay out of the portal', () => {
 
   it('keeps every internal route they already had', () => {
     for (const path of INTERNAL_ROUTES) {
-      expect(ask(path, ['EXPORT_MANAGER']), path).toBe(true)
+      expect(ask(path, ['EXPORTER']), path).toBe(true)
     }
   })
 })

@@ -23,7 +23,7 @@ function makeRequest(over: Partial<AdminAccessRequestRecord> = {}): AdminAccessR
     userId: 'u1',
     requesterName: 'A Person',
     requesterEmail: 'staff@triyara.test',
-    currentRole: 'EXPORT_MANAGER',
+    currentRole: 'EXPORTER',
     reason: 'I action the supplier review queue every day and need approvals.',
     status: 'PENDING',
     decidedById: null,
@@ -81,7 +81,7 @@ describe('requesting access', () => {
   it('records a request for a non-admin', async () => {
     const sink: DomainEvent[] = []
     const svc = svcWith({ repo: repo(), events: events(sink) })
-    const result = await svc.request(ctxFor(['EXPORT_MANAGER']), DTO)
+    const result = await svc.request(ctxFor(['EXPORTER']), DTO)
     expect(result.status).toBe('PENDING')
     expect(sink.find((e) => e.type === 'admin_access_request.submitted')).toBeDefined()
   })
@@ -146,7 +146,7 @@ describe('decision authorization', () => {
     ).rejects.toThrow(/super administrator/i)
   })
 
-  it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']])('refuses a %s', async (role) => {
+  it.each([['EXPORTER'], ['VERIFIER'], ['READ_ONLY']])('refuses a %s', async (role) => {
     const svc = svcWith({ repo: repo(), events: events() })
     await expect(svc.approve(ctxFor([role as Role]), 'req1', 1)).rejects.toThrow(
       /super administrator/i,
@@ -329,7 +329,7 @@ describe('revoking access', () => {
     ).rejects.toThrow(/super administrator/i)
   })
 
-  it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']])('refuses a %s', async (role) => {
+  it.each([['EXPORTER'], ['VERIFIER'], ['READ_ONLY']])('refuses a %s', async (role) => {
     const svc = svcWith({
       repo: repo({ findById: async () => makeRequest(APPROVED) }),
       events: events(),

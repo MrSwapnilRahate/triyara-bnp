@@ -139,7 +139,7 @@ describe('document service', () => {
       storage: fakeStorage(),
       events: events.bus,
     })
-    await svc.create(ctxFor(['EXPORT_MANAGER']), {
+    await svc.create(ctxFor(['EXPORTER']), {
       storageKey: 'org1/acc1/x/f.pdf',
       accountId: 'acc1',
       type: 'GST',
@@ -157,7 +157,7 @@ describe('document service', () => {
       events: events.bus,
     })
     await svc.addVersion(
-      ctxFor(['EXPORT_MANAGER']),
+      ctxFor(['EXPORTER']),
       'd1',
       { storageKey: 'org1/acc1/y/f2.pdf', mimeType: 'application/pdf', originalFilename: 'f2.pdf' },
       1,
@@ -171,7 +171,7 @@ describe('document service', () => {
       storage: fakeStorage(),
       events: events.bus,
     })
-    await expect(svc.remove(ctxFor(['EXPORT_MANAGER']), 'd1', 1)).rejects.toThrow()
+    await expect(svc.remove(ctxFor(['EXPORTER']), 'd1', 1)).rejects.toThrow()
     await expect(svc.remove(ctxFor(['ADMIN']), 'd1', 1)).resolves.toBeTruthy()
   })
 })

@@ -96,7 +96,7 @@ export function createSessionService({ repo, users, events }: SessionServiceDeps
      * `manage User` rather than `read User`. A session row carries an IP
      * address, a user agent and a last-seen time - where somebody was and what
      * they were using. Every role holds `read all`, so gating this on a read
-     * let an export manager or a read-only account enumerate the movements of
+     * let an exporter or a read-only account enumerate the movements of
      * everyone in the tenant, the super administrator included.
      */
     async list(ctx: SessionServiceCtx, query: ListSessionsQuery): Promise<SessionListResult> {

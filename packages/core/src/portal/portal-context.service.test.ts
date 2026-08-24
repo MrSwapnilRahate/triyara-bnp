@@ -145,7 +145,7 @@ describe('a buyer account resolves', () => {
 describe('the identity claim must be usable', () => {
   it('refuses an internal role', async () => {
     // Staff act across the tenant through CASL, never through an account scope.
-    for (const role of ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[]) {
+    for (const role of ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'] as Role[]) {
       await expect(harness().resolve(ctxFor([role], ACCOUNT)), role).rejects.toThrowError()
     }
   })

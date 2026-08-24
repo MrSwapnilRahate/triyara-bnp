@@ -122,9 +122,9 @@ describe('SupplierReviewPanel', () => {
   })
 
   it('hides the controls from anyone who cannot manage suppliers', () => {
-    // EXPORT_MANAGER may edit a supplier but not decide its fate.
+    // EXPORTER may edit a supplier but not decide its fate.
     renderWithProviders(<SupplierReviewPanel supplier={supplier()} version={2} />, {
-      roles: ['EXPORT_MANAGER'],
+      roles: ['EXPORTER'],
     })
     expect(screen.queryByText('Awaiting review')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument()

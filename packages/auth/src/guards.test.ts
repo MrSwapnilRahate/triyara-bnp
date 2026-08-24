@@ -8,7 +8,7 @@ const user: AuthUser = {
   organizationId: 'org1',
   email: 'a@b.com',
   name: 'A',
-  roles: ['EXPORT_MANAGER'],
+  roles: ['EXPORTER'],
   accountId: null,
 }
 
@@ -59,7 +59,7 @@ describe('guards', () => {
 
   it('assertRole passes for held role, throws otherwise', () => {
     const ctx = resolveContext({ user })
-    expect(() => assertRole(ctx, 'EXPORT_MANAGER')).not.toThrow()
+    expect(() => assertRole(ctx, 'EXPORTER')).not.toThrow()
     expect(() => assertRole(ctx, 'ADMIN')).toThrowError()
   })
 

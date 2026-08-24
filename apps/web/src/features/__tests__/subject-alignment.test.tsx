@@ -337,7 +337,7 @@ describe('the supplier master asks for Supplier, not SupplierProfile', () => {
 // ------------------------------------------------- every role is unaffected
 
 describe('every configured role keeps exactly the access it had', () => {
-  const ROLES: Role[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+  const ROLES: Role[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY']
 
   it.each(ROLES)('gives %s the same answer on the new subject as the old proxy', (role) => {
     // The migration is behaviour-preserving, and this is the assertion that
@@ -372,14 +372,14 @@ describe('every configured role keeps exactly the access it had', () => {
 
   it('keeps ADMIN as the only writer of the catalogue', () => {
     expect(buildAbilityFor(['ADMIN']).can('create', 'Product')).toBe(true)
-    for (const role of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[]) {
+    for (const role of ['EXPORTER', 'VERIFIER', 'READ_ONLY'] as Role[]) {
       expect(buildAbilityFor([role]).can('create', 'Product'), role).toBe(false)
       expect(buildAbilityFor([role]).can('create', 'Category'), role).toBe(false)
     }
   })
 
-  it('keeps EXPORT_MANAGER able to raise RFQs and quotations but not to award them', () => {
-    const em = buildAbilityFor(['EXPORT_MANAGER'])
+  it('keeps EXPORTER able to raise RFQs and quotations but not to award them', () => {
+    const em = buildAbilityFor(['EXPORTER'])
     expect(em.can('create', 'RFQ')).toBe(true)
     expect(em.can('update', 'RFQ')).toBe(true)
     expect(em.can('manage', 'RFQ')).toBe(false)
@@ -391,7 +391,7 @@ describe('every configured role keeps exactly the access it had', () => {
 
   it('leaves the boundaries the earlier work established alone', () => {
     // G4 security metadata, G5.4 supplier history, G5.5/G5.6 AuditLog.
-    const em = buildAbilityFor(['EXPORT_MANAGER'])
+    const em = buildAbilityFor(['EXPORTER'])
     expect(em.can('manage', 'User')).toBe(false)
     expect(em.can('read', 'SupplierProfile')).toBe(true)
     expect(em.can('manage', 'AuditLog')).toBe(false)

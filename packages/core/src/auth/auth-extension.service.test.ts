@@ -141,7 +141,7 @@ describe('scoped role service', () => {
     })
 
     await expect(
-      svc.grant(ctxFor(['EXPORT_MANAGER']), {
+      svc.grant(ctxFor(['EXPORTER']), {
         userId: 'u2',
         role: 'VERIFIER',
         scopeType: 'ACCOUNT',
@@ -303,7 +303,7 @@ describe('session service', () => {
  * authorization, and a client can call the route directly.
  */
 describe('security metadata is administration, not a read', () => {
-  const OPERATIONAL: Role[][] = [['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']]
+  const OPERATIONAL: Role[][] = [['EXPORTER'], ['VERIFIER'], ['READ_ONLY']]
 
   const sessions = () =>
     createSessionService({
@@ -417,7 +417,7 @@ describe('security metadata is administration, not a read', () => {
   it('closes the boundary at the ability, so no subject restores it', () => {
     // A role that cannot `manage User` has no other action that satisfies the
     // guard - the refusal cannot be walked around through a different subject.
-    for (const role of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+    for (const role of ['EXPORTER', 'VERIFIER', 'READ_ONLY'] as const) {
       const ability = buildAbilityFor([role])
       expect(ability.can('manage', 'User')).toBe(false)
       expect(ability.can('manage', 'all')).toBe(false)
@@ -436,14 +436,14 @@ describe('a security profile is administration too', () => {
       events: fakeEvents(),
     })
 
-  it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']] as const)(
+  it.each([['EXPORTER'], ['VERIFIER'], ['READ_ONLY']] as const)(
     "refuses %s another user's verification status",
     async (role) => {
       await expect(svc().status(ctxFor([role]), 'someone-else')).rejects.toThrow(/not permitted/i)
     },
   )
 
-  it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']] as const)(
+  it.each([['EXPORTER'], ['VERIFIER'], ['READ_ONLY']] as const)(
     'still lets %s read its own',
     async (role) => {
       await expect(svc().status(ctxFor([role]))).resolves.toBeDefined()

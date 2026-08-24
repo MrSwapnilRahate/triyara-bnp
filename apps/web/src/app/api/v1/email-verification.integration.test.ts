@@ -249,7 +249,7 @@ describe.skipIf(!process.env.DATABASE_URL)('email verification (integration)', (
     expect(sent).toHaveLength(0)
   })
 
-  it.each(['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[])(
+  it.each(['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'] as Role[])(
     'lets %s verify their own address',
     async (role) => {
       authState.roles = [role]

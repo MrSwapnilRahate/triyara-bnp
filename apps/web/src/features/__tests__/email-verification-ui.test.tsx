@@ -177,7 +177,7 @@ describe('sending the verification email', () => {
     expect(JSON.stringify(requests[0]?.body)).not.toContain('userId')
   })
 
-  it.each(['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[])(
+  it.each(['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'] as Role[])(
     'lets %s verify their own address',
     async (role) => {
       // No role gains anything from this screen: verifying your own address is

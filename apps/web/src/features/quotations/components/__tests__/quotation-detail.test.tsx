@@ -73,7 +73,7 @@ describe('QuotationDetail', () => {
       // the number is - and must never reconstruct it from price and total.
       const user = userEvent.setup()
       server.use(...handlers(redacted()))
-      renderWithProviders(<QuotationDetail id="q1" />, { roles: ['EXPORT_MANAGER'] })
+      renderWithProviders(<QuotationDetail id="q1" />, { roles: ['EXPORTER'] })
       await screen.findByText('Q3 spice programme')
 
       // Overview: the cost and margin rows are absent from the totals card.
@@ -90,7 +90,7 @@ describe('QuotationDetail', () => {
     it('drops the cost columns from the line table when redacted', async () => {
       const user = userEvent.setup()
       server.use(...handlers(redacted()))
-      renderWithProviders(<QuotationDetail id="q1" />, { roles: ['EXPORT_MANAGER'] })
+      renderWithProviders(<QuotationDetail id="q1" />, { roles: ['EXPORTER'] })
       await screen.findByText('Q3 spice programme')
       await user.click(screen.getByRole('tab', { name: /items/i }))
 
@@ -182,9 +182,9 @@ describe('QuotationDetail', () => {
   })
 
   describe('authorization', () => {
-    it('hides Withdraw from EXPORT_MANAGER, which lacks delete Quotation', async () => {
+    it('hides Withdraw from EXPORTER, which lacks delete Quotation', async () => {
       server.use(...handlers(makeQuotation()))
-      renderWithProviders(<QuotationDetail id="q1" />, { roles: ['EXPORT_MANAGER'] })
+      renderWithProviders(<QuotationDetail id="q1" />, { roles: ['EXPORTER'] })
       await screen.findByText('Q3 spice programme')
 
       expect(screen.queryByRole('button', { name: /withdraw/i })).not.toBeInTheDocument()

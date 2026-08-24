@@ -1,0 +1,56 @@
+-- ---------------------------------------------------------------------------
+-- EXPORT_MANAGER becomes EXPORTER (TRY-BNP-ROLE-VOCAB)
+--
+-- A rename of one RoleName enum member, and nothing else. The role keeps every
+-- ability it had, every Role row, and every UserRole assignment.
+--
+-- Hand-written, because `prisma migrate diff` cannot see a rename. Given an old
+-- enum with EXPORT_MANAGER and a new one with EXPORTER it infers a removed
+-- member and an added one, and emits the four-step drop-and-recreate that
+-- PostgreSQL needs for a genuine removal:
+--
+--     CREATE TYPE "RoleName_new" AS ENUM (...);
+--     ALTER TABLE "Role" ALTER COLUMN "name" TYPE "RoleName_new" USING ...;
+--     DROP TYPE "RoleName";
+--     ALTER TYPE "RoleName_new" RENAME TO "RoleName";
+--
+-- That is destructive here. The USING cast is `name::text::"RoleName_new"`, and
+-- 'EXPORT_MANAGER' is not a member of the new type, so the statement fails on
+-- any database holding the row - which is every database that has been seeded.
+-- The generated migration was discarded in favour of this one.
+--
+-- ALTER TYPE ... RENAME VALUE has existed since PostgreSQL 10 and is what a
+-- rename actually is: the member keeps its OID, so every stored value follows
+-- it without a table rewrite and without touching a single row.
+--
+-- UserRole is unaffected by construction. It is (userId, roleId) and references
+-- the role by id, so no assignment mentions the name at all.
+-- ---------------------------------------------------------------------------
+
+ALTER TYPE "RoleName" RENAME VALUE 'EXPORT_MANAGER' TO 'EXPORTER';
+
+-- ---------------------------------------------------------------------------
+-- What this migration deliberately does NOT do
+--
+-- AuditLog.before and AuditLog.after are jsonb, and older rows record grants and
+-- revocations that named the role as it was called then:
+--
+--     {"roles": ["VERIFIER", "EXPORT_MANAGER"]}
+--     {"name": "...", "role": "EXPORT_MANAGER", "email": "..."}
+--
+-- Those are left exactly as they are. The trail records what happened, and what
+-- happened is that somebody was granted EXPORT_MANAGER on a day when that was
+-- the role's name. Rewriting the payload would make the record agree with
+-- today's vocabulary by disagreeing with the event, which is the one thing an
+-- audit trail may not do.
+--
+-- The same reasoning keeps the three earlier migrations untouched. 0000_init,
+-- 0004_supplier_management and 0024_external_party_role all name
+-- EXPORT_MANAGER; they are the record of what was applied, Prisma checksums
+-- them, and editing an applied migration breaks `migrate deploy` on every
+-- database that already ran it.
+--
+-- AdminAccessRequest.currentRole is `text` rather than the enum and is written
+-- from the role held at the time of the request. Existing values are left as
+-- written, for the same reason as the audit payloads.
+-- ---------------------------------------------------------------------------

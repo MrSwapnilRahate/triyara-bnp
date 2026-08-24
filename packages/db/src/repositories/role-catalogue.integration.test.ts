@@ -26,7 +26,7 @@ describe.skipIf(!process.env.DATABASE_URL)('the role catalogue (integration)', (
 
     // Asserted as the whole set rather than "EXTERNAL_PARTY is present", so a
     // role quietly disappearing from the seed fails here too.
-    expect(names).toEqual(['ADMIN', 'EXPORT_MANAGER', 'EXTERNAL_PARTY', 'READ_ONLY', 'VERIFIER'])
+    expect(names).toEqual(['ADMIN', 'EXPORTER', 'EXTERNAL_PARTY', 'READ_ONLY', 'VERIFIER'])
   })
 
   it('holds exactly one EXTERNAL_PARTY row', async () => {

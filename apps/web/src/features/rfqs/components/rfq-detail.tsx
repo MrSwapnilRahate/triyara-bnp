@@ -110,7 +110,7 @@ export function RfqDetail({ id }: { id: string }) {
                 <Link href={`/rfqs/${rfq.id}/edit`}>Edit</Link>
               </Button>
             </Can>
-            {/* `delete RFQ` is ADMIN-only, so an export manager sees Edit but not
+            {/* `delete RFQ` is ADMIN-only, so an exporter sees Edit but not
               this - the same split the workflow actions below already make. */}
             <Can action="delete" subject="RFQ">
               <Button variant="ghost" leadingIcon={<Trash2 />} onClick={() => setConfirmOpen(true)}>

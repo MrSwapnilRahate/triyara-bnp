@@ -6,7 +6,7 @@ import { supplierNoteService } from '@/lib/supplier-master-service'
 
 type Ctx = { params: Promise<{ id: string; noteId: string }> }
 
-// PATCH /api/suppliers/:id/notes/:noteId - revise a note (ADMIN, EXPORT_MANAGER)
+// PATCH /api/suppliers/:id/notes/:noteId - revise a note (ADMIN, EXPORTER)
 //
 // If-Match is required, not optional: two people summarising the same call is
 // the ordinary case here, and a silent last-write-wins would quietly discard
@@ -29,7 +29,7 @@ export function PATCH(req: Request, { params }: Ctx) {
   })
 }
 
-// DELETE /api/suppliers/:id/notes/:noteId - soft delete (ADMIN, EXPORT_MANAGER)
+// DELETE /api/suppliers/:id/notes/:noteId - soft delete (ADMIN, EXPORTER)
 export function DELETE(req: Request, { params }: Ctx) {
   return route(req, async (requestId) => {
     const auth = await requireAuth()

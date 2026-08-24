@@ -10,13 +10,13 @@
 
 Every claim below was read from the repository at `a69a732`, not recalled.
 
-| Fact                                      | Evidence                                                                                        |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Four roles exist                          | `RoleName` enum, `ROLES`, `ASSIGNABLE_ROLES` — all `ADMIN, EXPORT_MANAGER, VERIFIER, READ_ONLY` |
-| No Order module                           | `grep -c "^model Order" schema.prisma` → `0`                                                    |
-| Org isolation is pervasive                | 804 `organizationId` occurrences across 42 repositories                                         |
-| Ability checks are subject-level          | 145 `assertAbility(` call sites in `packages/core`                                              |
-| A user's only account link is _ownership_ | `Account.ownerId → User @relation("AccountOwner")`                                              |
+| Fact                                      | Evidence                                                                                  |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Four roles exist                          | `RoleName` enum, `ROLES`, `ASSIGNABLE_ROLES` — all `ADMIN, EXPORTER, VERIFIER, READ_ONLY` |
+| No Order module                           | `grep -c "^model Order" schema.prisma` → `0`                                              |
+| Org isolation is pervasive                | 804 `organizationId` occurrences across 42 repositories                                   |
+| Ability checks are subject-level          | 145 `assertAbility(` call sites in `packages/core`                                        |
+| A user's only account link is _ownership_ | `Account.ownerId → User @relation("AccountOwner")`                                        |
 
 ---
 
@@ -78,7 +78,7 @@ Commercial preferences describing a counterparty. It carries **no credentials, n
 
 ```ts
 if (has('ADMIN'))          can('manage', 'all')
-if (has('EXPORT_MANAGER')) can('read', 'all'); can(['create','update'], [8 subjects])
+if (has('EXPORTER')) can('read', 'all'); can(['create','update'], [8 subjects])
 if (has('VERIFIER'))       can('read', 'all'); can(['verify','update'], 'Verification'); …
 if (has('READ_ONLY'))      can('read', 'all')
 ```

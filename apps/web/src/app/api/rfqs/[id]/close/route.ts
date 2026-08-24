@@ -6,7 +6,7 @@ type Ctx = { params: Promise<{ id: string }> }
 
 // POST /api/rfqs/:id/close - Closes a sourcing round. Legal predecessors come from the service's transition table.
 // Requires If-Match: a workflow move is a mutation like any other.
-// Authorization: ADMIN, EXPORT_MANAGER.
+// Authorization: ADMIN, EXPORTER.
 export function POST(req: Request, { params }: Ctx) {
   return route(req, async (requestId) => {
     const auth = await requireAuth()

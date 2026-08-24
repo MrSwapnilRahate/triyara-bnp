@@ -48,7 +48,7 @@ export const SUBJECTS = [
   // before/after payload recorded in it" as one permission.
   //
   // It stays at `manage`, deliberately. Every role holds `read all`, so
-  // `read AuditLog` would hand both trails to EXPORT_MANAGER, VERIFIER and
+  // `read AuditLog` would hand both trails to EXPORTER, VERIFIER and
   // READ_ONLY - the widening the audit route already warns about, since the
   // trail carries the payloads of every entity in the tenant and is therefore
   // more revealing than any single module's read. ADMIN reaches it through
@@ -62,7 +62,7 @@ export const SUBJECTS = [
   // delete the supplier master's certifications" could not be told apart.
   //
   // Unlike the earlier subject splits this one is NOT behaviour-preserving on
-  // its own: EXPORT_MANAGER holds create/update on SupplierProfile, and a new
+  // its own: EXPORTER holds create/update on SupplierProfile, and a new
   // subject starts with nothing. The grant below restores it deliberately -
   // see the role rules.
   'Supplier',
@@ -73,7 +73,7 @@ export const SUBJECTS = [
   // supplier network" the same permission, in both directions.
   //
   // Reads come from `read all` as usual, so every internal role can see the
-  // queue. Writes are granted below to ADMIN and EXPORT_MANAGER only.
+  // queue. Writes are granted below to ADMIN and EXPORTER only.
   'QuoteRequest',
 ] as const
 export type Subject = (typeof SUBJECTS)[number]
@@ -89,7 +89,7 @@ export function buildAbilityFor(roles: Role[]): AppAbility {
     can('manage', 'all')
   }
 
-  if (has('EXPORT_MANAGER')) {
+  if (has('EXPORTER')) {
     can('read', 'all')
     can(
       ['create', 'update'],
@@ -102,19 +102,19 @@ export function buildAbilityFor(roles: Role[]): AppAbility {
         'Document',
         'Note',
         'Activity',
-        // Named rather than inherited. An export manager could already raise and
+        // Named rather than inherited. An exporter could already raise and
         // edit both, through `create/update Account`; this says so directly
         // instead of letting it fall out of a permission about customers.
         // `manage` and `delete` are deliberately still absent, so awarding,
         // reopening and deletion stay with ADMIN exactly as before.
         'RFQ',
         'Quotation',
-        // The supplier master, which an export manager already maintained
+        // The supplier master, which an exporter already maintained
         // through `create/update SupplierProfile` when the two models shared a
         // subject. Named here so the split changes no answer: the supplier
         // master service documents this exact contract - "create/update ->
-        // ADMIN and EXPORT_MANAGER" - and a test has asserted since it was
-        // written that an export manager may onboard a supplier.
+        // ADMIN and EXPORTER" - and a test has asserted since it was
+        // written that an exporter may onboard a supplier.
         //
         // `manage` and `delete` stay absent, so approving and removing a
         // supplier remain ADMIN's, exactly as before.

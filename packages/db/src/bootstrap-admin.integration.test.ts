@@ -64,7 +64,7 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
     const roles = await prisma.role.findMany({ select: { name: true } })
     expect(roles.map((r) => r.name).sort()).toEqual([
       'ADMIN',
-      'EXPORT_MANAGER',
+      'EXPORTER',
       'EXTERNAL_PARTY',
       'READ_ONLY',
       'VERIFIER',
@@ -79,7 +79,7 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
     // EXTERNAL_PARTY included: external provisioning performs the same lookup,
     // and the row missing is what would make it fail at runtime on a value the
     // type system calls valid.
-    for (const name of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY', 'EXTERNAL_PARTY'] as const) {
+    for (const name of ['EXPORTER', 'VERIFIER', 'READ_ONLY', 'EXTERNAL_PARTY'] as const) {
       const role = await prisma.role.findFirst({ where: { name }, select: { id: true } })
       expect(role, `${name} must be resolvable`).not.toBeNull()
     }
@@ -192,7 +192,7 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
   })
 
   it('keeps role memberships the bootstrap did not grant', async () => {
-    // Someone already carrying EXPORT_MANAGER must not lose it by being made an
+    // Someone already carrying EXPORTER must not lose it by being made an
     // administrator - the bootstrap adds ADMIN, it does not reset the person.
     const email = `keeps-${randomUUID().slice(0, 8)}@example.com`
     const org = await prisma.organization.findUniqueOrThrow({
@@ -200,9 +200,9 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
       select: { id: true },
     })
     const existingRole = await prisma.role.upsert({
-      where: { name: 'EXPORT_MANAGER' },
+      where: { name: 'EXPORTER' },
       update: {},
-      create: { name: 'EXPORT_MANAGER' },
+      create: { name: 'EXPORTER' },
       select: { id: true },
     })
     await prisma.user.create({
@@ -222,7 +222,7 @@ describe.skipIf(!process.env.DATABASE_URL)('bootstrap admin (integration)', () =
       where: { user: { email } },
       select: { role: { select: { name: true } } },
     })
-    expect(roles.map((r) => r.role.name).sort()).toEqual(['ADMIN', 'EXPORT_MANAGER'])
+    expect(roles.map((r) => r.role.name).sort()).toEqual(['ADMIN', 'EXPORTER'])
   })
 
   it('grants ADMIN and nothing else', async () => {

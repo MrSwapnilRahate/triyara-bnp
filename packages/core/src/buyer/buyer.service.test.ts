@@ -70,21 +70,21 @@ describe('buyer service', () => {
     await expect(svc.create(ctxFor(['READ_ONLY']), 'acc1', {})).rejects.toThrow()
   })
 
-  it('EXPORT_MANAGER create emits buyer.created', async () => {
+  it('EXPORTER create emits buyer.created', async () => {
     const svc = createBuyerService({ repo: fakeRepo(), events: events.bus })
-    await svc.create(ctxFor(['EXPORT_MANAGER']), 'acc1', { businessType: 'IMPORTER' })
+    await svc.create(ctxFor(['EXPORTER']), 'acc1', { businessType: 'IMPORTER' })
     expect(events.emitted.map((e) => e.type)).toEqual(['buyer.created'])
   })
 
   it('addProduct emits buyer.capability_changed', async () => {
     const svc = createBuyerService({ repo: fakeRepo(), events: events.bus })
-    await svc.addProduct(ctxFor(['EXPORT_MANAGER']), 'acc1', { product: 'Onion Powder' }, 1)
+    await svc.addProduct(ctxFor(['EXPORTER']), 'acc1', { product: 'Onion Powder' }, 1)
     expect(events.emitted.map((e) => e.type)).toEqual(['buyer.capability_changed'])
   })
 
   it('remove requires delete ability (manager denied, admin allowed)', async () => {
     const svc = createBuyerService({ repo: fakeRepo(), events: events.bus })
-    await expect(svc.remove(ctxFor(['EXPORT_MANAGER']), 'acc1', 1)).rejects.toThrow()
+    await expect(svc.remove(ctxFor(['EXPORTER']), 'acc1', 1)).rejects.toThrow()
     await expect(svc.remove(ctxFor(['ADMIN']), 'acc1', 1)).resolves.toBeTruthy()
   })
 

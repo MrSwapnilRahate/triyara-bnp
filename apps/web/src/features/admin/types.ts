@@ -103,7 +103,7 @@ export function humanise(value: string): string {
 // ---- User administration (TRY-BNP-ADMIN-02, TRY-BNP-AUTH-03) ----
 
 export type UserStatus = 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED'
-export type RoleName = 'ADMIN' | 'EXPORT_MANAGER' | 'VERIFIER' | 'READ_ONLY'
+export type RoleName = 'ADMIN' | 'EXPORTER' | 'VERIFIER' | 'READ_ONLY'
 
 /** A row of GET /api/v1/admin/users. */
 export interface AdminUser {

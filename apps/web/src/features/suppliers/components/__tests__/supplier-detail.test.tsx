@@ -151,10 +151,10 @@ describe('SupplierDetail', () => {
     expect(container.textContent).not.toMatch(/accountNumber/)
   })
 
-  it('shows Edit to an EXPORT_MANAGER and hides it from READ_ONLY', async () => {
+  it('shows Edit to an EXPORTER and hides it from READ_ONLY', async () => {
     server.use(...handlers())
     const { unmount } = renderWithProviders(<SupplierDetail id="s1" />, {
-      roles: ['EXPORT_MANAGER'],
+      roles: ['EXPORTER'],
     })
     expect(await screen.findByRole('link', { name: 'Edit' })).toBeInTheDocument()
     unmount()

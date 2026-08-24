@@ -4,7 +4,7 @@ import { supplierMasterService } from '@/lib/supplier-master-service'
 
 type Params = { params: Promise<{ id: string }> }
 
-// POST /api/suppliers/:id/restore - undoes a soft delete. Authorized `update Supplier` - ADMIN and EXPORT_MANAGER.
+// POST /api/suppliers/:id/restore - undoes a soft delete. Authorized `update Supplier` - ADMIN and EXPORTER.
 //
 // If-Match is required for the same reason it is on the delete: the version
 // proves the caller is acting on the record they last read, so a stale tab
