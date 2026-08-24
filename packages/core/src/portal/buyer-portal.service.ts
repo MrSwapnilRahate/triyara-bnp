@@ -1,4 +1,10 @@
-import type { BuyerRfqDetail, BuyerRfqListItem, BuyerRfqListResult } from '@triyara/db'
+import type {
+  BuyerQuotationItem,
+  BuyerQuotationListResult,
+  BuyerRfqDetail,
+  BuyerRfqListItem,
+  BuyerRfqListResult,
+} from '@triyara/db'
 import { ForbiddenError } from '@triyara/lib'
 
 import type { PortalPartyContext } from './portal-context.service'
@@ -79,6 +85,43 @@ export interface BuyerRequirementDetail extends BuyerRequirementView {
   readonly items: BuyerRequirementItemView[]
 }
 
+/**
+ * One offer TRIYARA has sent this buyer.
+ *
+ * `grandTotal` is what we quoted them - our price to them, not anyone's cost to
+ * us. The arithmetic behind it (subtotal, charges, discounts, tax, fx) stays
+ * internal, and so does every relation: `items` leads to `sourceOptions`, which
+ * holds supplier identity and landed cost.
+ *
+ * No quotation id. `quotationNumber` and `revisionNumber` together name the
+ * offer in the language we already use with the buyer.
+ */
+export interface BuyerQuotationView {
+  readonly quotationNumber: string
+  readonly revisionNumber: number
+  readonly status: string
+  readonly currency: string
+  /** Serialised from Decimal. Null until the totals have been computed. */
+  readonly grandTotal: string | null
+  readonly sentAt: Date | null
+  readonly validUntil: Date | null
+}
+
+export interface BuyerQuotationList {
+  readonly items: BuyerQuotationView[]
+  /** True when the account has more offers than this page shows. No cursor. */
+  readonly hasMore: boolean
+}
+
+/** The narrow slice of the quotation repository this needs. Nothing wider. */
+export interface BuyerQuotationLookup {
+  listQuotationsForBuyer(
+    organizationId: string,
+    buyerId: string,
+    limit?: number,
+  ): Promise<BuyerQuotationListResult>
+}
+
 /** The narrow slice of the RFQ repository this needs. Nothing wider. */
 export interface BuyerRfqLookup {
   listForBuyer(organizationId: string, buyerId: string, limit?: number): Promise<BuyerRfqListResult>
@@ -91,6 +134,7 @@ export interface BuyerRfqLookup {
 
 export interface BuyerPortalDeps {
   rfqs: BuyerRfqLookup
+  quotations: BuyerQuotationLookup
 }
 
 /**
@@ -126,6 +170,19 @@ function toRequirement(row: BuyerRfqListItem): BuyerRequirementView {
  */
 const REFUSED = 'This portal is not available for your account.'
 
+/** Builds one offer, field by field. `Decimal` never leaves as an object. */
+function toQuotation(row: BuyerQuotationItem): BuyerQuotationView {
+  return {
+    quotationNumber: row.quotationNumber,
+    revisionNumber: row.revisionNumber,
+    status: row.status,
+    currency: row.currency,
+    grandTotal: row.grandTotal?.toString() ?? null,
+    sentAt: row.sentAt,
+    validUntil: row.validUntil,
+  }
+}
+
 /** Builds one line, field by field. `Decimal` is serialised rather than passed on. */
 function toItem(row: BuyerRfqDetail['items'][number]): BuyerRequirementItemView {
   return {
@@ -138,7 +195,7 @@ function toItem(row: BuyerRfqDetail['items'][number]): BuyerRequirementItemView 
   }
 }
 
-export function createBuyerPortalService({ rfqs }: BuyerPortalDeps) {
+export function createBuyerPortalService({ quotations, rfqs }: BuyerPortalDeps) {
   return {
     /**
      * The requirements this party has raised with us.
@@ -177,6 +234,23 @@ export function createBuyerPortalService({ rfqs }: BuyerPortalDeps) {
       if (!found) throw new ForbiddenError(REFUSED)
 
       return { ...toRequirement(found), items: found.items.map(toItem) }
+    },
+
+    /**
+     * The offers we have sent this party.
+     *
+     * Takes the resolved party and nothing else - no account, no organization,
+     * no status filter. Which quotations count as the buyer's to see is decided
+     * in the repository query, not by a caller, so no argument here can widen
+     * it to an internal draft.
+     */
+    async listQuotations(party: PortalPartyContext): Promise<BuyerQuotationList> {
+      const { items, hasMore } = await quotations.listQuotationsForBuyer(
+        party.organizationId,
+        party.accountId,
+      )
+
+      return { items: items.map(toQuotation), hasMore }
     },
   }
 }
