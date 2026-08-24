@@ -168,3 +168,23 @@ describe('the requirements page reaches data only through the sanctioned path', 
     expect(code).not.toContain('params')
   })
 })
+
+describe('each requirement links to its own detail', () => {
+  it('links by rfqNumber, which the DTO already carries', () => {
+    // Not by row id: Batch E deliberately keeps the database id out of every
+    // buyer-facing projection, and linking must not reopen that.
+    renderList()
+    expect(screen.getByRole('link', { name: 'Basmati rice, 25t' })).toHaveAttribute(
+      'href',
+      '/portal/requirements/RFQ-0001',
+    )
+  })
+
+  it('encodes a number that needs escaping', () => {
+    renderList({ items: [{ ...ITEM, rfqNumber: 'RFQ/2026 001' }] })
+    expect(screen.getByRole('link', { name: 'Basmati rice, 25t' })).toHaveAttribute(
+      'href',
+      '/portal/requirements/RFQ%2F2026%20001',
+    )
+  })
+})

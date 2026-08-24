@@ -19,7 +19,7 @@ import { rfqRepository } from './rfq.repository'
  * returns somebody else's row rather than an empty list - a mistake that reads
  * as data appearing, not data missing.
  */
-describe.skipIf(!process.env.DATABASE_URL)('rfqRepository.listForBuyer (integration)', () => {
+describe.skipIf(!process.env.DATABASE_URL)('rfqRepository buyer reads (integration)', () => {
   let orgA = ''
   let orgB = ''
   let actorA = ''
@@ -104,64 +104,167 @@ describe.skipIf(!process.env.DATABASE_URL)('rfqRepository.listForBuyer (integrat
     })
   })
 
-  it('returns only the RFQs the buyer account owns', async () => {
-    const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
-    expect(items.map((r) => r.rfqNumber).sort()).toEqual([`RFQ-${tag}-MINE`, `RFQ-${tag}-MINE2`])
+  describe('listForBuyer', () => {
+    it('returns only the RFQs the buyer account owns', async () => {
+      const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
+      expect(items.map((r) => r.rfqNumber).sort()).toEqual([`RFQ-${tag}-MINE`, `RFQ-${tag}-MINE2`])
+    })
+
+    it('excludes another buyer in the same organization', async () => {
+      const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
+      expect(items.map((r) => r.rfqNumber)).not.toContain(`RFQ-${tag}-OTHER-BUYER`)
+    })
+
+    it('excludes INTERNAL RFQs, which carry no buyer', async () => {
+      const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
+      expect(items.map((r) => r.rfqNumber)).not.toContain(`RFQ-${tag}-INTERNAL`)
+    })
+
+    it('excludes soft-deleted RFQs', async () => {
+      const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
+      expect(items.map((r) => r.rfqNumber)).not.toContain(`RFQ-${tag}-DELETED`)
+    })
+
+    it('enforces the organization in the query, not afterwards', async () => {
+      // Asking organization B for organization A's account must find nothing. If
+      // the org clause were dropped, this returns buyer1's rows instead - which is
+      // why the assertion is on emptiness rather than on a filtered result.
+      const { items } = await rfqRepository.listForBuyer(orgB, buyer1)
+      expect(items).toEqual([])
+    })
+
+    it('does not leak organization B&rsquo;s rows into an organization A query', async () => {
+      const { items } = await rfqRepository.listForBuyer(orgA, buyerInB)
+      expect(items).toEqual([])
+    })
+
+    it('selects no supplier, staff or audit column', async () => {
+      // The projection is applied at the database, so these never enter the
+      // process. Asserted on the returned row's own keys.
+      const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
+      const row = items[0]!
+
+      expect(Object.keys(row).sort()).toEqual([
+        'createdAt',
+        'currency',
+        'destinationCountry',
+        'destinationPort',
+        'expectedShipmentDate',
+        'incoterm',
+        'priority',
+        'quotationDeadline',
+        'rfqNumber',
+        'status',
+        'title',
+      ])
+    })
+
+    it('reports hasMore without handing back a cursor', async () => {
+      const page = await rfqRepository.listForBuyer(orgA, buyer1, 1)
+      expect(page.items).toHaveLength(1)
+      expect(page.hasMore).toBe(true)
+      expect(page).not.toHaveProperty('nextCursor')
+    })
   })
 
-  it('excludes another buyer in the same organization', async () => {
-    const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
-    expect(items.map((r) => r.rfqNumber)).not.toContain(`RFQ-${tag}-OTHER-BUYER`)
-  })
+  /**
+   * `findForBuyer` against a real database.
+   *
+   * The same reasoning as the list cases above, and the same fixture: two
+   * organizations, two accounts in one of them, an INTERNAL RFQ and a deleted one.
+   * A dropped clause here returns a real row belonging to somebody else, not an
+   * empty result - which is what makes these able to catch the mutation.
+   *
+   * One extra property this file can prove and the service unit tests cannot: the
+   * projection is applied by Postgres, so forbidden columns are never fetched at
+   * all rather than dropped afterwards.
+   */
+  describe('findForBuyer', () => {
+    it('returns the requirement the buyer owns', async () => {
+      const found = await rfqRepository.findForBuyer(orgA, buyer1, `RFQ-${tag}-MINE`)
+      expect(found?.rfqNumber).toBe(`RFQ-${tag}-MINE`)
+    })
 
-  it('excludes INTERNAL RFQs, which carry no buyer', async () => {
-    const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
-    expect(items.map((r) => r.rfqNumber)).not.toContain(`RFQ-${tag}-INTERNAL`)
-  })
+    it('refuses another buyer&rsquo;s requirement in the same organization', async () => {
+      // The row exists and the number is right; only the account differs. Drop the
+      // buyer clause and this returns OTHER-BUYER instead of null.
+      expect(await rfqRepository.findForBuyer(orgA, buyer1, `RFQ-${tag}-OTHER-BUYER`)).toBeNull()
+    })
 
-  it('excludes soft-deleted RFQs', async () => {
-    const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
-    expect(items.map((r) => r.rfqNumber)).not.toContain(`RFQ-${tag}-DELETED`)
-  })
+    it('refuses a requirement in another organization', async () => {
+      expect(await rfqRepository.findForBuyer(orgA, buyerInB, `RFQ-${tag}-OTHER-ORG`)).toBeNull()
+    })
 
-  it('enforces the organization in the query, not afterwards', async () => {
-    // Asking organization B for organization A's account must find nothing. If
-    // the org clause were dropped, this returns buyer1's rows instead - which is
-    // why the assertion is on emptiness rather than on a filtered result.
-    const { items } = await rfqRepository.listForBuyer(orgB, buyer1)
-    expect(items).toEqual([])
-  })
+    it('refuses when the organization does not match the account&rsquo;s own rows', async () => {
+      // Asking organization B for organization A's account and number. Without the
+      // organization clause this returns MINE.
+      expect(await rfqRepository.findForBuyer(orgB, buyer1, `RFQ-${tag}-MINE`)).toBeNull()
+    })
 
-  it('does not leak organization B&rsquo;s rows into an organization A query', async () => {
-    const { items } = await rfqRepository.listForBuyer(orgA, buyerInB)
-    expect(items).toEqual([])
-  })
+    it('refuses an INTERNAL requirement, which carries no buyer', async () => {
+      expect(await rfqRepository.findForBuyer(orgA, buyer1, `RFQ-${tag}-INTERNAL`)).toBeNull()
+    })
 
-  it('selects no supplier, staff or audit column', async () => {
-    // The projection is applied at the database, so these never enter the
-    // process. Asserted on the returned row's own keys.
-    const { items } = await rfqRepository.listForBuyer(orgA, buyer1)
-    const row = items[0]!
+    it('refuses a soft-deleted requirement', async () => {
+      expect(await rfqRepository.findForBuyer(orgA, buyer1, `RFQ-${tag}-DELETED`)).toBeNull()
+    })
 
-    expect(Object.keys(row).sort()).toEqual([
-      'createdAt',
-      'currency',
-      'destinationCountry',
-      'destinationPort',
-      'expectedShipmentDate',
-      'incoterm',
-      'priority',
-      'quotationDeadline',
-      'rfqNumber',
-      'status',
-      'title',
-    ])
-  })
+    it('refuses a number that does not exist', async () => {
+      expect(await rfqRepository.findForBuyer(orgA, buyer1, `RFQ-${tag}-NOPE`)).toBeNull()
+    })
 
-  it('reports hasMore without handing back a cursor', async () => {
-    const page = await rfqRepository.listForBuyer(orgA, buyer1, 1)
-    expect(page.items).toHaveLength(1)
-    expect(page.hasMore).toBe(true)
-    expect(page).not.toHaveProperty('nextCursor')
+    it('selects no supplier, staff, audit or description column', async () => {
+      const found = await rfqRepository.findForBuyer(orgA, buyer1, `RFQ-${tag}-MINE`)
+
+      expect(Object.keys(found!).sort()).toEqual([
+        'createdAt',
+        'currency',
+        'destinationCountry',
+        'destinationPort',
+        'expectedShipmentDate',
+        'incoterm',
+        'items',
+        'priority',
+        'quotationDeadline',
+        'rfqNumber',
+        'status',
+        'title',
+      ])
+    })
+
+    it('selects only the approved columns on a requirement line', async () => {
+      await prisma.rFQItem.create({
+        data: {
+          rfqId: (
+            await prisma.rFQ.findFirstOrThrow({
+              where: { organizationId: orgA, rfqNumber: `RFQ-${tag}-MINE` },
+              select: { id: true },
+            })
+          ).id,
+          organizationId: orgA,
+          lineNumber: 1,
+          customProductName: 'Sona Masoori, unpolished',
+          quantity: 25,
+          unit: 'MT',
+          packaging: '25kg bags',
+          remarks: 'operator remark that must not be selected',
+        },
+      })
+
+      const found = await rfqRepository.findForBuyer(orgA, buyer1, `RFQ-${tag}-MINE`)
+      const line = found!.items[0]!
+
+      expect(Object.keys(line).sort()).toEqual([
+        'customProductName',
+        'lineNumber',
+        'packaging',
+        'product',
+        'quantity',
+        'requiredCertifications',
+        'unit',
+      ])
+      // The column exists on the row and is deliberately not fetched.
+      expect(JSON.stringify(found)).not.toContain('operator remark')
+    })
   })
 })
