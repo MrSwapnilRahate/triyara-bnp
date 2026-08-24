@@ -80,21 +80,21 @@ describe('supplier service', () => {
     await expect(svc.create(ctxFor(['READ_ONLY']), 'acc1', {})).rejects.toThrow()
   })
 
-  it('EXPORT_MANAGER create emits supplier.created', async () => {
+  it('EXPORTER create emits supplier.created', async () => {
     const svc = createSupplierService({ repo: fakeRepo(), events: events.bus })
-    await svc.create(ctxFor(['EXPORT_MANAGER']), 'acc1', { manufacturingType: 'MANUFACTURER' })
+    await svc.create(ctxFor(['EXPORTER']), 'acc1', { manufacturingType: 'MANUFACTURER' })
     expect(events.emitted.map((e) => e.type)).toEqual(['supplier.created'])
   })
 
   it('addProduct emits supplier.capability_changed', async () => {
     const svc = createSupplierService({ repo: fakeRepo(), events: events.bus })
-    await svc.addProduct(ctxFor(['EXPORT_MANAGER']), 'acc1', { product: 'Onion Powder' }, 1)
+    await svc.addProduct(ctxFor(['EXPORTER']), 'acc1', { product: 'Onion Powder' }, 1)
     expect(events.emitted.map((e) => e.type)).toEqual(['supplier.capability_changed'])
   })
 
-  it('remove requires delete ability (EXPORT_MANAGER denied, ADMIN allowed)', async () => {
+  it('remove requires delete ability (EXPORTER denied, ADMIN allowed)', async () => {
     const svc = createSupplierService({ repo: fakeRepo(), events: events.bus })
-    await expect(svc.remove(ctxFor(['EXPORT_MANAGER']), 'acc1', 1)).rejects.toThrow()
+    await expect(svc.remove(ctxFor(['EXPORTER']), 'acc1', 1)).rejects.toThrow()
     await expect(svc.remove(ctxFor(['ADMIN']), 'acc1', 1)).resolves.toBeTruthy()
   })
 

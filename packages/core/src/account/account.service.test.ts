@@ -75,9 +75,9 @@ describe('account service', () => {
     expect(events.emitted).toHaveLength(0)
   })
 
-  it('EXPORT_MANAGER create emits account.created', async () => {
+  it('EXPORTER create emits account.created', async () => {
     const svc = createAccountService({ repo: fakeRepo(), events: events.bus })
-    const account = await svc.create(ctxFor(['EXPORT_MANAGER']), { legalName: 'Sunrise Agro' })
+    const account = await svc.create(ctxFor(['EXPORTER']), { legalName: 'Sunrise Agro' })
     expect(account.legalName).toBe('Sunrise Agro')
     expect(events.emitted.map((e) => e.type)).toEqual(['account.created'])
   })

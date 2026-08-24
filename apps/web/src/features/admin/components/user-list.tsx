@@ -37,7 +37,7 @@ import { formatWhen, RoleBadges, StatusTone } from './user-presentation'
 const DEFAULTS: Partial<AdminUsersQuery> = { limit: '25' }
 
 const STATUSES: UserStatus[] = ['INVITED', 'ACTIVE', 'SUSPENDED', 'DEACTIVATED']
-const ROLES: RoleName[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const ROLES: RoleName[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY']
 
 /**
  * Users list (TRY-BNP-PORTAL-01 §12).

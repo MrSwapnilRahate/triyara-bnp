@@ -60,13 +60,13 @@ const SLUG = 'admin-users-itest'
 
 describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real PostgreSQL)', () => {
   let otherOrgId = ''
-  const roleIds: Partial<Record<'ADMIN' | 'EXPORT_MANAGER' | 'VERIFIER' | 'READ_ONLY', string>> = {}
+  const roleIds: Partial<Record<'ADMIN' | 'EXPORTER' | 'VERIFIER' | 'READ_ONLY', string>> = {}
 
   async function makeUser(
     over: {
       name?: string
       status?: 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED'
-      role?: 'ADMIN' | 'EXPORT_MANAGER' | 'VERIFIER' | 'READ_ONLY'
+      role?: 'ADMIN' | 'EXPORTER' | 'VERIFIER' | 'READ_ONLY'
       organizationId?: string
       lastLoginAt?: Date
     } = {},
@@ -120,7 +120,7 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
 
     // Sequential, not Promise.all: `Role.name` is globally unique, so
     // concurrent upserts of the same name race on an empty database.
-    for (const name of ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+    for (const name of ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'] as const) {
       const role = await prisma.role.upsert({ where: { name }, update: {}, create: { name } })
       roleIds[name] = role.id
     }
@@ -133,7 +133,7 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
       expect(res.status).toBe(200)
     })
 
-    it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']])(
+    it.each([['EXPORTER'], ['VERIFIER'], ['READ_ONLY']])(
       'refuses %s with 403, rather than serving a filtered list',
       async (role) => {
         authState.roles = [role as Role]
@@ -276,11 +276,9 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
     })
 
     it('combines status and role with AND', async () => {
-      const wanted = await makeUser({ status: 'ACTIVE', role: 'EXPORT_MANAGER' })
-      const decoy = await makeUser({ status: 'DEACTIVATED', role: 'EXPORT_MANAGER' })
-      const res = await listUsers(
-        req('/api/v1/admin/users?status=ACTIVE&role=EXPORT_MANAGER&limit=100'),
-      )
+      const wanted = await makeUser({ status: 'ACTIVE', role: 'EXPORTER' })
+      const decoy = await makeUser({ status: 'DEACTIVATED', role: 'EXPORTER' })
+      const res = await listUsers(req('/api/v1/admin/users?status=ACTIVE&role=EXPORTER&limit=100'))
       const ids = (await rows(res)).map((r) => r.id)
 
       expect(ids).toContain(wanted.id)
@@ -454,7 +452,7 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
 
     it('writes an audit row that carries no credential', async () => {
       const email = `invite-${uniq()}@triyara.test`
-      const res = await post({ name: 'Invited Person', email, role: 'EXPORT_MANAGER' })
+      const res = await post({ name: 'Invited Person', email, role: 'EXPORTER' })
       const created = (await body(res)).data as unknown as { id: string }
 
       const audit = await prisma.auditLog.findFirst({
@@ -498,7 +496,7 @@ describe.skipIf(!process.env.DATABASE_URL)('admin users API (integration, real P
 
     it('refuses a non-admin and creates nothing', async () => {
       const email = `invite-${uniq()}@triyara.test`
-      authState.roles = ['EXPORT_MANAGER']
+      authState.roles = ['EXPORTER']
       try {
         // A grantable role, so this exercises the authorization refusal rather
         // than stopping at the body schema.

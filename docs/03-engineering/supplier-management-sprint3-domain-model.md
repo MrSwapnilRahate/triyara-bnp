@@ -88,7 +88,7 @@ enum SupplierStatus {
 enum SupplierContactRole {
   OWNER
   SALES
-  EXPORT_MANAGER
+  EXPORTER
   ACCOUNTS
   QUALITY
   LOGISTICS

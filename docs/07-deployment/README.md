@@ -221,7 +221,7 @@ be committed, pasted into a ticket, or written to an env file that outlives the
 command. Prefer a shell that does not record history for that line. Neither the
 command nor its error messages ever print the password or the hash.
 
-It also creates the four role rows — `ADMIN`, `EXPORT_MANAGER`, `VERIFIER` and
+It also creates the four role rows — `ADMIN`, `EXPORTER`, `VERIFIER` and
 `READ_ONLY` — if they are absent. Those are names, not grants: only `ADMIN` is
 assigned, to this one account. They matter because inviting a colleague resolves
 the chosen role by name, so a database missing them produces an administrator

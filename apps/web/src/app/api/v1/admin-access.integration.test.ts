@@ -14,7 +14,7 @@ const SLUG = `admin-access-it-${randomUUID().slice(0, 8)}`
 const uniq = () => randomUUID().slice(0, 8)
 
 const authState = {
-  roles: ['EXPORT_MANAGER'] as Role[],
+  roles: ['EXPORTER'] as Role[],
   organizationId: '',
   userId: '',
   email: 'staff@triyara.test',
@@ -79,7 +79,7 @@ describe.skipIf(!process.env.DATABASE_URL)('admin access requests (integration)'
     return user
   }
 
-  async function submitAs(userId: string, email: string, roles: Role[] = ['EXPORT_MANAGER']) {
+  async function submitAs(userId: string, email: string, roles: Role[] = ['EXPORTER']) {
     authState.userId = userId
     authState.email = email
     authState.roles = roles
@@ -106,12 +106,12 @@ describe.skipIf(!process.env.DATABASE_URL)('admin access requests (integration)'
     })
     authState.organizationId = org.id
 
-    for (const name of ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+    for (const name of ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'] as const) {
       await prisma.role.upsert({ where: { name }, update: {}, create: { name } })
     }
     adminRoleId = (await prisma.role.findFirstOrThrow({ where: { name: 'ADMIN' } })).id
 
-    requesterId = (await makeUser(`requester-${uniq()}@triyara.test`, 'EXPORT_MANAGER')).id
+    requesterId = (await makeUser(`requester-${uniq()}@triyara.test`, 'EXPORTER')).id
     superId = (await makeUser(SUPER.replace('@', `+${uniq()}@`), 'ADMIN')).id
   })
 

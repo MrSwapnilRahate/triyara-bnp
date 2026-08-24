@@ -28,7 +28,7 @@ export interface RestoreActionProps {
  * the row behind it.
  *
  * The gate is passed in, not assumed, because the contract is deliberately
- * uneven - RFQ and Supplier restore on `update` (ADMIN and EXPORT_MANAGER), the
+ * uneven - RFQ and Supplier restore on `update` (ADMIN and EXPORTER), the
  * catalogue on `update` where only ADMIN holds it, and Quotation on `manage`.
  * A shared default here would have quietly widened one of them.
  *

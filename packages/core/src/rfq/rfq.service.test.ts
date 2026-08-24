@@ -85,11 +85,11 @@ const supRepo = (over: Partial<RfqSupplierRepository> = {}): RfqSupplierReposito
 const ITEM = [{ productId: 'p1', quantity: 10, unit: 'MT', requiredCertifications: [] as never }]
 
 describe('rfq service - authorization', () => {
-  it('lets an EXPORT_MANAGER raise an RFQ', async () => {
+  it('lets an EXPORTER raise an RFQ', async () => {
     const sink: DomainEvent[] = []
     const svc = createRfqService({ repo: repo(), events: events(sink) })
     const r = await svc.create(
-      ctxFor(['EXPORT_MANAGER']),
+      ctxFor(['EXPORTER']),
       {
         rfqNumber: 'RFQ-2026-000001',
         type: 'BUYER',
@@ -119,13 +119,13 @@ describe('rfq service - authorization', () => {
     ).rejects.toThrow(/not permitted/i)
   })
 
-  it('separates raising from approving: EXPORT_MANAGER may not approve', async () => {
+  it('separates raising from approving: EXPORTER may not approve', async () => {
     const svc = createRfqService({
       repo: repo({ findById: async () => makeRfq({ status: 'PENDING_APPROVAL' }) }),
       events: events(),
     })
     await expect(
-      svc.decide(ctxFor(['EXPORT_MANAGER']), 'rfq1', 1, { decision: 'APPROVED' }),
+      svc.decide(ctxFor(['EXPORTER']), 'rfq1', 1, { decision: 'APPROVED' }),
     ).rejects.toThrow(/not permitted/i)
   })
 })
@@ -395,11 +395,11 @@ describe('rfq service - award', () => {
     expect(event?.data).toMatchObject({ supplierId: 's1', participationId: 'rs1' })
   })
 
-  it('refuses an EXPORT_MANAGER - awarding needs `manage Account`', async () => {
+  it('refuses an EXPORTER - awarding needs `manage Account`', async () => {
     // Committing the business to a supplier is a different authority from
     // editing the RFQ's shipping port.
     const svc = createRfqService({ repo: awardRepo(), events: events() })
-    await expect(svc.award(ctxFor(['EXPORT_MANAGER']), 'rfq1', 1, 'rs1')).rejects.toThrow()
+    await expect(svc.award(ctxFor(['EXPORTER']), 'rfq1', 1, 'rs1')).rejects.toThrow()
   })
 
   it('refuses a READ_ONLY user', async () => {

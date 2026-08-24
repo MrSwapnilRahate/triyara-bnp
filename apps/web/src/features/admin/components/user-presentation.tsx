@@ -20,14 +20,14 @@ export const StatusTone: Record<UserStatus, 'success' | 'warning' | 'danger' | '
  */
 const RoleTone: Record<RoleName, 'accent' | 'neutral'> = {
   ADMIN: 'accent',
-  EXPORT_MANAGER: 'neutral',
+  EXPORTER: 'neutral',
   VERIFIER: 'neutral',
   READ_ONLY: 'neutral',
 }
 
 const ROLE_LABELS: Record<RoleName, string> = {
   ADMIN: 'Admin',
-  EXPORT_MANAGER: 'Export manager',
+  EXPORTER: 'Exporter',
   VERIFIER: 'Verifier',
   READ_ONLY: 'Read only',
 }

@@ -26,15 +26,15 @@ import { createSupplierOfferingService } from './supplier-offering.service'
  * granted apart.
  *
  * Unlike the earlier splits, this one is NOT free. A new subject starts with no
- * grants, and EXPORT_MANAGER holds create/update on SupplierProfile - so the
- * ability had to name `Supplier` explicitly or an export manager would have
+ * grants, and EXPORTER holds create/update on SupplierProfile - so the
+ * ability had to name `Supplier` explicitly or an exporter would have
  * silently lost supplier onboarding. The service documented that contract
- * ("create/update -> ADMIN and EXPORT_MANAGER") and a test has asserted it
+ * ("create/update -> ADMIN and EXPORTER") and a test has asserted it
  * since it was written; the first block below pins it as an equivalence.
  */
 
-const ROLES: Role[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
-const BELOW_ADMIN: Role[] = ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const ROLES: Role[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY']
+const BELOW_ADMIN: Role[] = ['EXPORTER', 'VERIFIER', 'READ_ONLY']
 const ACTIONS = ['read', 'create', 'update', 'delete', 'manage'] as const
 
 const ability = (role: Role): AppAbility => buildAbilityFor([role])
@@ -42,7 +42,7 @@ const ability = (role: Role): AppAbility => buildAbilityFor([role])
 describe('Supplier grants exactly what SupplierProfile granted', () => {
   it.each(ROLES)('gives %s the same answer on every action', (role) => {
     // The migration is behaviour-preserving BECAUSE the grant was added. Drop
-    // 'Supplier' from EXPORT_MANAGER's list and this fails on two actions.
+    // 'Supplier' from EXPORTER's list and this fails on two actions.
     const a = ability(role)
     for (const action of ACTIONS) {
       expect(a.can(action, 'Supplier'), `${role} ${action}`).toBe(a.can(action, 'SupplierProfile'))
@@ -53,13 +53,11 @@ describe('Supplier grants exactly what SupplierProfile granted', () => {
     for (const role of ROLES) expect(ability(role).can('read', 'Supplier'), role).toBe(true)
   })
 
-  it('lets ADMIN and EXPORT_MANAGER maintain it, and nobody else', () => {
+  it('lets ADMIN and EXPORTER maintain it, and nobody else', () => {
     // The contract the master service states in its header.
     for (const action of ['create', 'update'] as const) {
       expect(ability('ADMIN').can(action, 'Supplier'), `ADMIN ${action}`).toBe(true)
-      expect(ability('EXPORT_MANAGER').can(action, 'Supplier'), `EXPORT_MANAGER ${action}`).toBe(
-        true,
-      )
+      expect(ability('EXPORTER').can(action, 'Supplier'), `EXPORTER ${action}`).toBe(true)
       for (const role of ['VERIFIER', 'READ_ONLY'] as Role[]) {
         expect(ability(role).can(action, 'Supplier'), `${role} ${action}`).toBe(false)
       }
@@ -68,7 +66,7 @@ describe('Supplier grants exactly what SupplierProfile granted', () => {
 
   it('keeps approval and removal with ADMIN alone', () => {
     // Onboarding a supplier and approving one are deliberately different
-    // privileges - `manage` and `delete` stay off EXPORT_MANAGER's list.
+    // privileges - `manage` and `delete` stay off EXPORTER's list.
     for (const action of ['manage', 'delete'] as const) {
       expect(ability('ADMIN').can(action, 'Supplier'), `ADMIN ${action}`).toBe(true)
       for (const role of BELOW_ADMIN) {
@@ -101,7 +99,7 @@ describe('the two supplier subjects are genuinely separate', () => {
 
   it('leaves every other boundary the earlier work established alone', () => {
     // G5.2 RFQ/Quotation, G5.3 Product/Category, G5.5 AuditLog, G4 User.
-    const em = ability('EXPORT_MANAGER')
+    const em = ability('EXPORTER')
     expect(em.can('create', 'RFQ')).toBe(true)
     expect(em.can('create', 'Quotation')).toBe(true)
     expect(em.can('create', 'Product')).toBe(false)
@@ -262,13 +260,13 @@ describe('supplier documents belong to the supplier master, not to Document', ()
   })
 
   it('leaves general Document permissions exactly as they were', () => {
-    // Untouched by this change: EXPORT_MANAGER and VERIFIER may create, ADMIN
+    // Untouched by this change: EXPORTER and VERIFIER may create, ADMIN
     // may delete, everyone may read.
     for (const role of ROLES) expect(ability(role).can('read', 'Document'), role).toBe(true)
-    expect(ability('EXPORT_MANAGER').can('create', 'Document')).toBe(true)
+    expect(ability('EXPORTER').can('create', 'Document')).toBe(true)
     expect(ability('VERIFIER').can('create', 'Document')).toBe(true)
     expect(ability('READ_ONLY').can('create', 'Document')).toBe(false)
     expect(ability('ADMIN').can('delete', 'Document')).toBe(true)
-    expect(ability('EXPORT_MANAGER').can('delete', 'Document')).toBe(false)
+    expect(ability('EXPORTER').can('delete', 'Document')).toBe(false)
   })
 })

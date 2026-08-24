@@ -15,7 +15,7 @@ const user = (over: Record<string, unknown> = {}) => ({
   email: 'ada@triyara.test',
   avatarUrl: null,
   status: 'ACTIVE',
-  roles: ['EXPORT_MANAGER'],
+  roles: ['EXPORTER'],
   lastLoginAt: '2026-07-01T09:00:00.000Z',
   createdAt: '2026-01-01T09:00:00.000Z',
   ...over,
@@ -29,7 +29,7 @@ const matrix = {
       role: 'ADMIN',
       permissions: { User: ['manage', 'read', 'update'], Organization: ['manage'] },
     },
-    { role: 'EXPORT_MANAGER', permissions: { User: ['read'] } },
+    { role: 'EXPORTER', permissions: { User: ['read'] } },
     { role: 'VERIFIER', permissions: { User: ['read'] } },
     { role: 'READ_ONLY', permissions: { User: ['read'] } },
   ],
@@ -41,9 +41,7 @@ const handlers = (over: { users?: unknown[]; roles?: unknown[] } = {}) => [
     HttpResponse.json(ok(over.users ?? [user()], { nextCursor: null, limit: 25 })),
   ),
   http.get('/api/v1/admin/users/:id/roles', () =>
-    HttpResponse.json(
-      ok(over.roles ?? [{ roleId: 'r1', name: 'EXPORT_MANAGER', description: null }]),
-    ),
+    HttpResponse.json(ok(over.roles ?? [{ roleId: 'r1', name: 'EXPORTER', description: null }])),
   ),
   http.get('/api/v1/auth/role-assignments', () => HttpResponse.json(ok([]))),
   http.get('/api/v1/auth/sessions', () => HttpResponse.json(ok([]))),
@@ -73,12 +71,12 @@ describe('UserList', () => {
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
     expect(screen.getByText('ada@triyara.test')).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
-    expect(screen.getByText('Export manager')).toBeInTheDocument()
+    expect(screen.getByText('Exporter')).toBeInTheDocument()
   })
 
   it('refuses a non-admin and explains why, rather than showing an empty table', async () => {
     server.use(...handlers())
-    renderWithProviders(<UserList />, { roles: ['EXPORT_MANAGER'] })
+    renderWithProviders(<UserList />, { roles: ['EXPORTER'] })
 
     expect(await screen.findByText(/only administrators can manage users/i)).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
@@ -182,7 +180,7 @@ describe('UserDetail', () => {
           posted.push(await request.json())
           return HttpResponse.json(
             ok([
-              { roleId: 'r1', name: 'EXPORT_MANAGER', description: null },
+              { roleId: 'r1', name: 'EXPORTER', description: null },
               { roleId: 'r2', name: 'VERIFIER', description: null },
             ]),
             { status: 201 },
@@ -221,7 +219,7 @@ describe('UserDetail', () => {
       const dialog = await screen.findByRole('alertdialog')
       await person.click(within(dialog).getByRole('button', { name: /remove role/i }))
 
-      await waitFor(() => expect(deleted).toBe('EXPORT_MANAGER'))
+      await waitFor(() => expect(deleted).toBe('EXPORTER'))
     })
 
     it('will not let an administrator remove their own admin role', async () => {
@@ -420,8 +418,8 @@ describe('UserDetail', () => {
       await person.click(await screen.findByRole('tab', { name: 'Permissions' }))
       await screen.findByRole('columnheader', { name: 'manage' })
 
-      // Ada holds EXPORT_MANAGER, which the matrix says may only read User.
-      expect(screen.getByText(/the union of export manager/i)).toBeInTheDocument()
+      // Ada holds EXPORTER, which the matrix says may only read User.
+      expect(screen.getByText(/the union of exporter/i)).toBeInTheDocument()
       expect(screen.getByText('Can read User')).toBeInTheDocument()
       expect(screen.getByText('Cannot manage User')).toBeInTheDocument()
     })
@@ -485,7 +483,7 @@ describe('Inviting a colleague', () => {
               id: 'new1',
               name: 'New Colleague',
               email: 'colleague@triyara.test',
-              role: 'EXPORT_MANAGER',
+              role: 'EXPORTER',
               expiresAt: '2026-08-09T00:00:00.000Z',
             },
             { extra: { invitationEmail: 'sent' } },
@@ -506,7 +504,7 @@ describe('Inviting a colleague', () => {
     expect(sent).toEqual({
       name: 'New Colleague',
       email: 'colleague@triyara.test',
-      role: 'EXPORT_MANAGER',
+      role: 'EXPORTER',
     })
     expect(await screen.findByText(/invitation sent/i)).toBeInTheDocument()
   })
@@ -522,7 +520,7 @@ describe('Inviting a colleague', () => {
               id: 'new1',
               name: 'New Colleague',
               email: 'colleague@triyara.test',
-              role: 'EXPORT_MANAGER',
+              role: 'EXPORTER',
               expiresAt: '2026-08-09T00:00:00.000Z',
             },
             { extra: { invitationEmail: 'failed' } },

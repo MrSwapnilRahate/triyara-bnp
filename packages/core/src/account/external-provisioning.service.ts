@@ -79,7 +79,7 @@ export type ProvisionOutcome =
   | { status: 'already_linked'; user: { id: string; email: string; name: string } }
 
 /** Every internal role. A user holding any of these is staff, not an external party. */
-const INTERNAL_ROLES = new Set(['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'])
+const INTERNAL_ROLES = new Set(['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'])
 
 export function createExternalProvisioningService({
   accounts,

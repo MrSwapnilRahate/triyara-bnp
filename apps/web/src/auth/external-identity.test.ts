@@ -60,10 +60,10 @@ describe('the existing claims are unchanged', () => {
     const session = mapToSession({
       sub: 'u1',
       organizationId: 'org-existing',
-      roles: ['EXPORT_MANAGER'],
+      roles: ['EXPORTER'],
     })
     expect(session.user.organizationId).toBe('org-existing')
-    expect(session.user.roles).toEqual(['EXPORT_MANAGER'])
+    expect(session.user.roles).toEqual(['EXPORTER'])
   })
 
   it('defaults organizationId and roles when a token lacks them', () => {

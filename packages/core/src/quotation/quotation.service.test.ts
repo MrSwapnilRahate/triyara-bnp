@@ -195,14 +195,14 @@ describe('quotation authorization', () => {
     await expect(svc.create(ctxFor(['READ_ONLY']), draft, validItems)).rejects.toThrow()
   })
 
-  it('allows an export manager to create', async () => {
+  it('allows an exporter to create', async () => {
     const svc = service()
-    await expect(svc.create(ctxFor(['EXPORT_MANAGER']), draft, validItems)).resolves.toBeTruthy()
+    await expect(svc.create(ctxFor(['EXPORTER']), draft, validItems)).resolves.toBeTruthy()
   })
 
   it('refuses restore to anyone but an admin', async () => {
     const svc = service()
-    await expect(svc.restore(ctxFor(['EXPORT_MANAGER']), 'q1', 1)).rejects.toThrow()
+    await expect(svc.restore(ctxFor(['EXPORTER']), 'q1', 1)).rejects.toThrow()
     await expect(svc.restore(ctxFor(['ADMIN']), 'q1', 1)).resolves.toBeTruthy()
   })
 })
@@ -210,7 +210,7 @@ describe('quotation authorization', () => {
 describe('internal cost visibility', () => {
   it('hides cost and margin from a non-admin', async () => {
     const svc = service()
-    const q = await svc.get(ctxFor(['EXPORT_MANAGER']), 'q1')
+    const q = await svc.get(ctxFor(['EXPORTER']), 'q1')
     expect(q.costTotal).toBeNull()
     expect(q.marginPercent).toBeNull()
     expect(q.items[0]?.unitCost).toBeNull()
@@ -390,10 +390,10 @@ describe('status transitions', () => {
 })
 
 describe('approval thresholds', () => {
-  it('lets an export manager approve an ordinary quotation', async () => {
+  it('lets an exporter approve an ordinary quotation', async () => {
     const svc = service({ approvalThreshold: 1_000_000, minMarginPercent: 10 })
     await expect(
-      svc.transition(ctxFor(['EXPORT_MANAGER']), 'q1', 1, { decision: 'APPROVED' } as never),
+      svc.transition(ctxFor(['EXPORTER']), 'q1', 1, { decision: 'APPROVED' } as never),
     ).resolves.toBeTruthy()
   })
 
@@ -402,12 +402,9 @@ describe('approval thresholds', () => {
       repo: { findById: async () => makeQuotation({ grandTotal: 5_000_000 as never }) },
     }
     await expect(
-      service({ ...high, approvalThreshold: 1_000_000 }).transition(
-        ctxFor(['EXPORT_MANAGER']),
-        'q1',
-        1,
-        { decision: 'APPROVED' } as never,
-      ),
+      service({ ...high, approvalThreshold: 1_000_000 }).transition(ctxFor(['EXPORTER']), 'q1', 1, {
+        decision: 'APPROVED',
+      } as never),
     ).rejects.toThrow()
     await expect(
       service({ ...high, approvalThreshold: 1_000_000 }).transition(ctxFor(['ADMIN']), 'q1', 1, {
@@ -419,7 +416,7 @@ describe('approval thresholds', () => {
   it('demands an admin below the margin floor', async () => {
     const thin = { repo: { findById: async () => makeQuotation({ marginPercent: 3 as never }) } }
     await expect(
-      service({ ...thin, minMarginPercent: 10 }).transition(ctxFor(['EXPORT_MANAGER']), 'q1', 1, {
+      service({ ...thin, minMarginPercent: 10 }).transition(ctxFor(['EXPORTER']), 'q1', 1, {
         decision: 'APPROVED',
       } as never),
     ).rejects.toThrow()
@@ -438,7 +435,7 @@ describe('approval thresholds', () => {
       approvalThreshold: 1_000_000,
     })
     await expect(
-      svc.transition(ctxFor(['EXPORT_MANAGER']), 'q1', 1, { decision: 'REJECTED' } as never),
+      svc.transition(ctxFor(['EXPORTER']), 'q1', 1, { decision: 'REJECTED' } as never),
     ).resolves.toBeTruthy()
   })
 })

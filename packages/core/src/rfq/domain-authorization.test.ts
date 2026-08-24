@@ -11,12 +11,12 @@ import { describe, expect, it } from 'vitest'
  * this change was meant to move the decision, not the answer.
  */
 
-const ROLES: Role[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const ROLES: Role[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY']
 
 /** What `Account` used to grant, and therefore what RFQ/Quotation must grant. */
 const EXPECTED: Record<Role, { read: boolean; write: boolean; manage: boolean; del: boolean }> = {
   ADMIN: { read: true, write: true, manage: true, del: true },
-  EXPORT_MANAGER: { read: true, write: true, manage: false, del: false },
+  EXPORTER: { read: true, write: true, manage: false, del: false },
   VERIFIER: { read: true, write: false, manage: false, del: false },
   READ_ONLY: { read: true, write: false, manage: false, del: false },
   // Holds nothing at all - see abilities.ts.
@@ -69,7 +69,7 @@ describe('the subjects are genuinely separate', () => {
 
   it('leaves every other subject alone', () => {
     // Product and Category authorization is explicitly out of scope here.
-    const em = ability('EXPORT_MANAGER')
+    const em = ability('EXPORTER')
     expect(em.can('create', 'ReferenceData')).toBe(false)
     expect(em.can('update', 'ReferenceData')).toBe(false)
     expect(em.can('create', 'Account')).toBe(true)

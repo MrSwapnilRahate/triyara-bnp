@@ -97,7 +97,7 @@ export const supplierOpenApiDocument = {
       'the existence of records the caller may not see.',
       '',
       'Authorization uses the `SupplierProfile` CASL subject: read is open to every',
-      'role, create/update/delete require ADMIN or EXPORT_MANAGER.',
+      'role, create/update/delete require ADMIN or EXPORTER.',
       '',
       'Bank account numbers are never returned by any endpoint.',
     ].join('\n'),
@@ -184,7 +184,7 @@ export const supplierOpenApiDocument = {
         tags: ['Suppliers'],
         summary: 'Onboard a supplier',
         description:
-          'Creates the record in DRAFT and opens its approval history. Requires ADMIN or EXPORT_MANAGER.',
+          'Creates the record in DRAFT and opens its approval history. Requires ADMIN or EXPORTER.',
         requestBody: {
           required: true,
           content: {

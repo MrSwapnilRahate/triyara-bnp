@@ -21,13 +21,7 @@ async function main() {
   // EXTERNAL_PARTY included, because the invite primitive resolves roles by row
   // and cannot create a missing one. Creating it grants nobody anything: it
   // holds no CASL rule and no administrator can assign it.
-  const roleNames: RoleName[] = [
-    'ADMIN',
-    'EXPORT_MANAGER',
-    'VERIFIER',
-    'READ_ONLY',
-    'EXTERNAL_PARTY',
-  ]
+  const roleNames: RoleName[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY', 'EXTERNAL_PARTY']
   for (const name of roleNames) {
     await prisma.role.upsert({ where: { name }, update: {}, create: { name } })
   }

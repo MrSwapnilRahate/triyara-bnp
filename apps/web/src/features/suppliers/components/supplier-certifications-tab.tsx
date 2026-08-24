@@ -55,7 +55,7 @@ import type { SupplierCertificationRow } from '../types'
  * organic before showing anyone to a buyer, so the list leads with what lapses
  * next rather than with the certificate number.
  *
- * Editing is gated on `update Supplier` - ADMIN and EXPORT_MANAGER. A
+ * Editing is gated on `update Supplier` - ADMIN and EXPORTER. A
  * lesser role sees the certificates and no controls.
  */
 

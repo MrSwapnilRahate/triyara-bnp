@@ -134,8 +134,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     })
 
     describe('authorization', () => {
-      it('lets ADMIN and EXPORT_MANAGER write', async () => {
-        for (const role of ['ADMIN', 'EXPORT_MANAGER'] as Role[]) {
+      it('lets ADMIN and EXPORTER write', async () => {
+        for (const role of ['ADMIN', 'EXPORTER'] as Role[]) {
           authState.roles = [role]
           const supplier = await makeSupplier()
           const res = await add(supplier.id, { type: 'FSSAI', certificateNumber: `FS-${uniq()}` })

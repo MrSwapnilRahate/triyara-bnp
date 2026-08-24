@@ -20,7 +20,7 @@ import { renderWithProviders } from '@/test/render'
  * The restore contract is deliberately uneven, so each list is asserted against
  * its own pair rather than a shared assumption:
  *
- *   RFQ, Supplier   `update`   ADMIN + EXPORT_MANAGER
+ *   RFQ, Supplier   `update`   ADMIN + EXPORTER
  *   Product         `update`   ADMIN only - only ADMIN writes the catalogue
  *   Quotation       `manage`   ADMIN only, stricter than the rest
  */
@@ -163,8 +163,8 @@ describe('a deleted row does not navigate', () => {
   })
 })
 
-describe('RFQ restore is offered to ADMIN and EXPORT_MANAGER', () => {
-  it.each(['ADMIN', 'EXPORT_MANAGER'] as Role[])('shows Restore to %s', async (role) => {
+describe('RFQ restore is offered to ADMIN and EXPORTER', () => {
+  it.each(['ADMIN', 'EXPORTER'] as Role[])('shows Restore to %s', async (role) => {
     search = new URLSearchParams('includeDeleted=true')
     injected = buildAbilityFor([role])
     rfqHandlers([rfqRow({ deletedAt: DELETED_AT })])
@@ -323,37 +323,37 @@ describe('each list names the subject and action its own backend guard uses', ()
       ),
     )
 
-  it('offers product restore to ADMIN but not EXPORT_MANAGER', async () => {
+  it('offers product restore to ADMIN but not EXPORTER', async () => {
     search = new URLSearchParams('includeDeleted=true')
     // The catalogue is readable by every role and writable by ADMIN alone, so
-    // this is the one place `update` does NOT reach an export manager.
+    // this is the one place `update` does NOT reach an exporter.
     injected = buildAbilityFor(['ADMIN'])
     catalogue()
     const admin = renderWithProviders(<ProductList />, { roles: [INJECT] })
     expect(await screen.findByRole('button', RESTORE)).toBeInTheDocument()
     admin.unmount()
 
-    injected = buildAbilityFor(['EXPORT_MANAGER'])
+    injected = buildAbilityFor(['EXPORTER'])
     catalogue()
     renderWithProviders(<ProductList />, { roles: [INJECT] })
     await screen.findByText('Turmeric')
     expect(screen.queryByRole('button', RESTORE)).not.toBeInTheDocument()
   })
 
-  it('offers supplier restore to EXPORT_MANAGER', async () => {
+  it('offers supplier restore to EXPORTER', async () => {
     search = new URLSearchParams('includeDeleted=true')
-    injected = buildAbilityFor(['EXPORT_MANAGER'])
+    injected = buildAbilityFor(['EXPORTER'])
     suppliers()
     renderWithProviders(<SupplierList />, { roles: [INJECT] })
 
     expect(await screen.findByRole('button', RESTORE)).toBeInTheDocument()
   })
 
-  it('withholds quotation restore from EXPORT_MANAGER, which holds update but not manage', async () => {
+  it('withholds quotation restore from EXPORTER, which holds update but not manage', async () => {
     search = new URLSearchParams('includeDeleted=true')
-    // The sharpest case: an export manager may update a quotation, so a control
+    // The sharpest case: an exporter may update a quotation, so a control
     // gated on `update` would appear here. It is gated on `manage`.
-    injected = buildAbilityFor(['EXPORT_MANAGER'])
+    injected = buildAbilityFor(['EXPORTER'])
     quotations()
     renderWithProviders(<QuotationList />, { roles: [INJECT] })
 
@@ -473,11 +473,11 @@ describe('deleted categories appear inline in the tree', () => {
     expect(restoreCalls[0]?.ifMatch).toBe('W/"v2"')
   })
 
-  it.each(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[])(
+  it.each(['EXPORTER', 'VERIFIER', 'READ_ONLY'] as Role[])(
     'withholds Restore from %s',
     async (role) => {
       // The catalogue is readable by every role and writable by ADMIN alone,
-      // so even an export manager sees the deleted category but cannot act.
+      // so even an exporter sees the deleted category but cannot act.
       search = new URLSearchParams()
       injected = buildAbilityFor([role])
       tree([cat({ deletedAt: DELETED_AT })])

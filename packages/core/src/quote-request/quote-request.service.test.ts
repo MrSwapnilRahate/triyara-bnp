@@ -179,7 +179,7 @@ describe('public submission', () => {
 describe('reading the queue', () => {
   it('always scopes the query to the caller organization', async () => {
     const repo = makeRepo()
-    await build(repo).list(ctx('EXPORT_MANAGER'), { limit: 25 } as never)
+    await build(repo).list(ctx('EXPORTER'), { limit: 25 } as never)
     expect(repo.list.mock.calls[0]![0]).toMatchObject({ organizationId: ORG })
   })
 
@@ -196,8 +196,8 @@ describe('reading the queue', () => {
 })
 
 describe('triage', () => {
-  it('lets an export manager qualify an enquiry', async () => {
-    const updated = await build().review(ctx('EXPORT_MANAGER'), 'qr1', 1, {
+  it('lets an exporter qualify an enquiry', async () => {
+    const updated = await build().review(ctx('EXPORTER'), 'qr1', 1, {
       status: 'QUALIFIED',
     } as never)
     expect(updated.status).toBe('QUALIFIED')
@@ -239,7 +239,7 @@ describe('promotion into the commercial workflow', () => {
   it('creates the RFQ through the RFQ service, not by writing rows', async () => {
     // A second code path that writes RFQ rows is how two divergent definitions
     // of a valid RFQ come about.
-    const result = await build().promote(ctx('EXPORT_MANAGER'), 'qr1', 1, DTO)
+    const result = await build().promote(ctx('EXPORTER'), 'qr1', 1, DTO)
     expect(rfqs.create).toHaveBeenCalledOnce()
     expect(result.rfqNumber).toBe('RFQ-2026-000431')
   })

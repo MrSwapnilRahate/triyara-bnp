@@ -708,7 +708,7 @@ describe.skipIf(!process.env.DATABASE_URL)('RFQ API (integration, real PostgreSQ
       expect(res.status).toBe(403)
     })
 
-    it('lets an EXPORT_MANAGER create and publish', async () => {
+    it('lets an EXPORTER create and publish', async () => {
       const rfq = await create()
       await prisma.rFQSupplier.create({
         data: {
@@ -723,7 +723,7 @@ describe.skipIf(!process.env.DATABASE_URL)('RFQ API (integration, real PostgreSQ
         where: { id: rfq.id },
         data: { status: 'APPROVED', version: { increment: 1 } },
       })
-      authState.roles = ['EXPORT_MANAGER']
+      authState.roles = ['EXPORTER']
       const res = await publishRfq(
         req(`/api/rfqs/${rfq.id}/publish`, {
           method: 'POST',
@@ -735,13 +735,13 @@ describe.skipIf(!process.env.DATABASE_URL)('RFQ API (integration, real PostgreSQ
       expect(res.status).toBe(200)
     })
 
-    it('refuses reopen to an EXPORT_MANAGER - it needs manage', async () => {
+    it('refuses reopen to an EXPORTER - it needs manage', async () => {
       const rfq = await create()
       const updated = await prisma.rFQ.update({
         where: { id: rfq.id },
         data: { status: 'CANCELLED', version: { increment: 1 } },
       })
-      authState.roles = ['EXPORT_MANAGER']
+      authState.roles = ['EXPORTER']
       const res = await reopenRfq(
         req(`/api/rfqs/${rfq.id}/reopen`, {
           method: 'POST',
@@ -1246,9 +1246,9 @@ describe.skipIf(!process.env.DATABASE_URL)('RFQ API (integration, real PostgreSQ
       expect(res.status).toBe(409)
     })
 
-    it('refuses an EXPORT_MANAGER with 403', async () => {
+    it('refuses an EXPORTER with 403', async () => {
       const rfq = await evaluating()
-      authState.roles = ['EXPORT_MANAGER']
+      authState.roles = ['EXPORTER']
       try {
         const res = await post(rfq.id, rfq.version, rfq.participationId)
         expect(res.status).toBe(403)

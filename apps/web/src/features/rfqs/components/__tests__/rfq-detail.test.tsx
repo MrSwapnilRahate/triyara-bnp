@@ -133,9 +133,9 @@ describe('RfqDetail', () => {
   })
 
   describe('authorization', () => {
-    it('hides Reopen from EXPORT_MANAGER, which lacks manage RFQ', async () => {
+    it('hides Reopen from EXPORTER, which lacks manage RFQ', async () => {
       server.use(...handlers(makeRfq({ status: 'CANCELLED' })))
-      renderWithProviders(<RfqDetail id="r1" />, { roles: ['EXPORT_MANAGER'] })
+      renderWithProviders(<RfqDetail id="r1" />, { roles: ['EXPORTER'] })
 
       await screen.findByText('Q3 black pepper')
       expect(screen.queryByRole('button', { name: /reopen/i })).not.toBeInTheDocument()
@@ -148,10 +148,10 @@ describe('RfqDetail', () => {
       expect(await screen.findByRole('button', { name: /reopen/i })).toBeInTheDocument()
     })
 
-    it('hides Approve from EXPORT_MANAGER but shows it to ADMIN', async () => {
+    it('hides Approve from EXPORTER but shows it to ADMIN', async () => {
       server.use(...handlers(makeRfq({ status: 'PENDING_APPROVAL' })))
       const { unmount } = renderWithProviders(<RfqDetail id="r1" />, {
-        roles: ['EXPORT_MANAGER'],
+        roles: ['EXPORTER'],
       })
       await screen.findByText('Q3 black pepper')
       expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument()
@@ -241,19 +241,16 @@ describe('RfqDetail delete', () => {
     expect(await screen.findByRole('button', DELETE_BTN)).toBeInTheDocument()
   })
 
-  it.each(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const)(
-    'hides Delete from %s',
-    async (role) => {
-      // EXPORT_MANAGER holds `update RFQ` and still sees Edit, so this is the
-      // narrower `delete` boundary rather than a blanket read-only screen.
-      const rfq = makeRfq()
-      server.use(...withDelete(rfq).handlers)
-      renderWithProviders(<RfqDetail id="r1" />, { roles: [role] })
+  it.each(['EXPORTER', 'VERIFIER', 'READ_ONLY'] as const)('hides Delete from %s', async (role) => {
+    // EXPORTER holds `update RFQ` and still sees Edit, so this is the
+    // narrower `delete` boundary rather than a blanket read-only screen.
+    const rfq = makeRfq()
+    server.use(...withDelete(rfq).handlers)
+    renderWithProviders(<RfqDetail id="r1" />, { roles: [role] })
 
-      await screen.findByText(rfq.rfqNumber)
-      expect(screen.queryByRole('button', DELETE_BTN)).not.toBeInTheDocument()
-    },
-  )
+    await screen.findByText(rfq.rfqNumber)
+    expect(screen.queryByRole('button', DELETE_BTN)).not.toBeInTheDocument()
+  })
 
   it('sends DELETE with the current version and returns to the list', async () => {
     // If-Match carries the version: a stale tab must lose the race rather than

@@ -47,7 +47,7 @@ import type { SupplierDocumentRow } from '../types'
  * so nobody has to scroll back through a chat to find the file a supplier sent
  * three weeks ago.
  *
- * Editing is gated on `update Supplier` - ADMIN and EXPORT_MANAGER. A
+ * Editing is gated on `update Supplier` - ADMIN and EXPORTER. A
  * lesser role can see and download, which is the common case for anyone
  * answering a buyer.
  */

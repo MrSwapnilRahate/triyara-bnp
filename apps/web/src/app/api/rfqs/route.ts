@@ -12,7 +12,7 @@ const createRfqWithItemsSchema = createRfqSchema.extend({
 })
 
 // GET  /api/rfqs - list with search, filters, sorting, cursor paging
-// POST /api/rfqs - raise an RFQ with its lines (ADMIN, EXPORT_MANAGER)
+// POST /api/rfqs - raise an RFQ with its lines (ADMIN, EXPORTER)
 export function GET(req: Request) {
   return route(req, async (requestId) => {
     const auth = await requireAuth()

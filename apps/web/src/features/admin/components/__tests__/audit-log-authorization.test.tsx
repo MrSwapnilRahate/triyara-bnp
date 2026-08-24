@@ -120,7 +120,7 @@ describe('every configured role keeps the access it had', () => {
     expect(await screen.findByText('rfq.issued')).toBeInTheDocument()
   })
 
-  it.each(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[])('refuses %s', async (role) => {
+  it.each(['EXPORTER', 'VERIFIER', 'READ_ONLY'] as Role[])('refuses %s', async (role) => {
     injected = roleAbility(role)
     auditHandler()
     renderWithProviders(<AuditLog />)
@@ -129,7 +129,7 @@ describe('every configured role keeps the access it had', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
-  it.each(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as Role[])(
+  it.each(['EXPORTER', 'VERIFIER', 'READ_ONLY'] as Role[])(
     'holds %s at manage, not at read - `read all` must not open the trail',
     (role) => {
       // Why the screen asks at `manage`. Every role holds `read all`, so a

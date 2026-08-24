@@ -5,7 +5,7 @@
 // it is absent from ASSIGNABLE_ROLES and GRANTABLE_ROLES in @triyara/validation,
 // so no administrator can grant it through the UI. Which party an external user
 // actually is comes from their Account, not from a second role.
-export const ROLES = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY', 'EXTERNAL_PARTY'] as const
+export const ROLES = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY', 'EXTERNAL_PARTY'] as const
 export type Role = (typeof ROLES)[number]
 
 export function isRole(value: string): value is Role {

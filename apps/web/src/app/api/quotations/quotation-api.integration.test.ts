@@ -767,7 +767,7 @@ describe.skipIf(!process.env.DATABASE_URL)('quotation API (integration, real Pos
   describe('internal cost redaction', () => {
     it('hides cost and margin from a non-admin, on the record and on its lines', async () => {
       const q = await create()
-      authState.roles = ['EXPORT_MANAGER']
+      authState.roles = ['EXPORTER']
       const b = await body(await getQuotation(req(`/api/quotations/${q.id}`), params(q.id)))
       const items = await body(await listItems(req(`/api/quotations/${q.id}/items`), params(q.id)))
       authState.roles = ['ADMIN']
@@ -855,9 +855,9 @@ describe.skipIf(!process.env.DATABASE_URL)('quotation API (integration, real Pos
       expect(res.status).toBe(403)
     })
 
-    it('lets an EXPORT_MANAGER approve an ordinary quotation', async () => {
+    it('lets an EXPORTER approve an ordinary quotation', async () => {
       const q = await create()
-      authState.roles = ['EXPORT_MANAGER']
+      authState.roles = ['EXPORTER']
       const res = await approve(
         req(`/api/quotations/${q.id}/approve`, {
           method: 'POST',
@@ -875,7 +875,7 @@ describe.skipIf(!process.env.DATABASE_URL)('quotation API (integration, real Pos
       const q = await create({
         items: [{ productId, quantity: 20000, unit: 'MT', unitPrice: 100, unitCost: 80 }],
       })
-      authState.roles = ['EXPORT_MANAGER']
+      authState.roles = ['EXPORTER']
       const denied = await approve(
         req(`/api/quotations/${q.id}/approve`, {
           method: 'POST',
@@ -903,7 +903,7 @@ describe.skipIf(!process.env.DATABASE_URL)('quotation API (integration, real Pos
       const q = await create({
         items: [{ productId, quantity: 10, unit: 'MT', unitPrice: 100, unitCost: 98 }],
       })
-      authState.roles = ['EXPORT_MANAGER']
+      authState.roles = ['EXPORTER']
       const denied = await approve(
         req(`/api/quotations/${q.id}/approve`, {
           method: 'POST',

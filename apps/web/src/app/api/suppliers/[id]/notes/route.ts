@@ -24,7 +24,7 @@ export function GET(req: Request, { params }: Ctx) {
   })
 }
 
-// POST /api/suppliers/:id/notes - record a conversation (ADMIN, EXPORT_MANAGER)
+// POST /api/suppliers/:id/notes - record a conversation (ADMIN, EXPORTER)
 export function POST(req: Request, { params }: Ctx) {
   return route(req, async (requestId) => {
     const auth = await requireAuth()

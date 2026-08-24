@@ -267,8 +267,8 @@ describe.skipIf(!process.env.DATABASE_URL)('supplier API (integration, real Post
       expect(res.status).toBe(403)
     })
 
-    it('lets an EXPORT_MANAGER create', async () => {
-      authState.roles = ['EXPORT_MANAGER']
+    it('lets an EXPORTER create', async () => {
+      authState.roles = ['EXPORTER']
       const res = await createSupplier(
         req('/api/suppliers', { method: 'POST', body: JSON.stringify(newSupplier()) }),
       )

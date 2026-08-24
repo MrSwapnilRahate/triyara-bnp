@@ -33,7 +33,7 @@ export function GET(req: Request, { params }: Ctx) {
   })
 }
 
-// POST /api/suppliers/:id/products - add an offering (ADMIN, EXPORT_MANAGER)
+// POST /api/suppliers/:id/products - add an offering (ADMIN, EXPORTER)
 export function POST(req: Request, { params }: Ctx) {
   return route(req, async (requestId) => {
     const auth = await requireAuth()

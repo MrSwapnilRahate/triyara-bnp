@@ -89,7 +89,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       otherOrgId = other.id
 
       // Sequential: Role.name is globally unique, so concurrent upserts race.
-      for (const name of ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+      for (const name of ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY'] as const) {
         const role = await prisma.role.upsert({ where: { name }, update: {}, create: { name } })
         roleIds[name] = role.id
       }
@@ -116,7 +116,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     })
 
     describe('authorization', () => {
-      it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']])(
+      it.each([['EXPORTER'], ['VERIFIER'], ['READ_ONLY']])(
         'refuses %s on all three operations',
         async (role) => {
           const target = await makeUser()
@@ -445,7 +445,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         // point of this screen is that it cannot disagree with the guards.
         expect(data.roles.map((r) => r.role).sort()).toEqual([
           'ADMIN',
-          'EXPORT_MANAGER',
+          'EXPORTER',
           'EXTERNAL_PARTY',
           'READ_ONLY',
           'VERIFIER',

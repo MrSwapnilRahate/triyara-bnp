@@ -24,7 +24,7 @@ import { createSupplierMasterService } from './supplier-management/supplier.serv
  *
  * The contract is NOT uniform, and that is deliberate:
  *
- *   RFQ, Supplier      restore -> `update`   ADMIN + EXPORT_MANAGER
+ *   RFQ, Supplier      restore -> `update`   ADMIN + EXPORTER
  *   Product, Category  restore -> `update`   ADMIN only, because the catalogue
  *                                            is readable by all and writable by
  *                                            ADMIN alone
@@ -36,7 +36,7 @@ import { createSupplierMasterService } from './supplier-management/supplier.serv
  * No ability grant was changed to make any of this work.
  */
 
-const ROLES: Role[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const ROLES: Role[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY']
 const fakeEvents = () => ({ emit: async () => undefined }) as unknown as EventBus
 const NOT_PERMITTED = /not permitted/i
 
@@ -98,13 +98,13 @@ function services() {
 const CASES = [
   {
     name: 'RFQ',
-    allowed: ['ADMIN', 'EXPORT_MANAGER'] as Role[],
+    allowed: ['ADMIN', 'EXPORTER'] as Role[],
     call: (s: ReturnType<typeof services>, c: never) => s.rfq.restore(c, 'x1', 1),
     repo: (s: ReturnType<typeof services>) => s.rfqRepo,
   },
   {
     name: 'Supplier',
-    allowed: ['ADMIN', 'EXPORT_MANAGER'] as Role[],
+    allowed: ['ADMIN', 'EXPORTER'] as Role[],
     call: (s: ReturnType<typeof services>, c: never) => s.supplier.restore(c, 'x1', 1),
     repo: (s: ReturnType<typeof services>) => s.supplierRepo,
   },
@@ -157,8 +157,8 @@ describe.each(CASES)('$name restore', ({ allowed, call, repo }) => {
 })
 
 describe('the restore contract is not uniform, and that is deliberate', () => {
-  it('lets EXPORT_MANAGER restore an RFQ and a supplier, but not the catalogue', () => {
-    const em = buildAbilityFor(['EXPORT_MANAGER'])
+  it('lets EXPORTER restore an RFQ and a supplier, but not the catalogue', () => {
+    const em = buildAbilityFor(['EXPORTER'])
     expect(em.can('update', 'RFQ')).toBe(true)
     expect(em.can('update', 'Supplier')).toBe(true)
     expect(em.can('update', 'Product')).toBe(false)
@@ -168,7 +168,7 @@ describe('the restore contract is not uniform, and that is deliberate', () => {
   it('keeps quotation restore above the rest', () => {
     // `manage`, not `update` - the one domain where restoring is an
     // administrative act rather than an edit.
-    const em = buildAbilityFor(['EXPORT_MANAGER'])
+    const em = buildAbilityFor(['EXPORTER'])
     expect(em.can('update', 'Quotation')).toBe(true)
     expect(em.can('manage', 'Quotation')).toBe(false)
     expect(buildAbilityFor(['ADMIN']).can('manage', 'Quotation')).toBe(true)

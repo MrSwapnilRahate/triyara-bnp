@@ -129,11 +129,11 @@ describe('ProductList', () => {
       expect(screen.getByRole('link', { name: 'New product' })).toBeInTheDocument()
     })
 
-    it('HIDES New product from an EXPORT_MANAGER - the catalogue is ADMIN-write', async () => {
+    it('HIDES New product from an EXPORTER - the catalogue is ADMIN-write', async () => {
       server.use(...handlers())
-      renderWithProviders(<ProductList />, { roles: ['EXPORT_MANAGER'] })
+      renderWithProviders(<ProductList />, { roles: ['EXPORTER'] })
       await screen.findByRole('table')
-      // Hidden, not disabled: a greyed control teaches an export manager only
+      // Hidden, not disabled: a greyed control teaches an exporter only
       // that something exists they cannot have, and the API would 403 anyway.
       expect(screen.queryByRole('link', { name: 'New product' })).toBeNull()
     })
@@ -145,9 +145,9 @@ describe('ProductList', () => {
       expect(screen.queryByRole('link', { name: 'New product' })).toBeNull()
     })
 
-    it('still lets an EXPORT_MANAGER read the list', async () => {
+    it('still lets an EXPORTER read the list', async () => {
       server.use(...handlers())
-      renderWithProviders(<ProductList />, { roles: ['EXPORT_MANAGER'] })
+      renderWithProviders(<ProductList />, { roles: ['EXPORTER'] })
       expect(await screen.findByRole('table')).toBeInTheDocument()
     })
   })

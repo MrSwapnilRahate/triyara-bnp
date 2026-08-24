@@ -56,7 +56,7 @@ import type { SupplierContact } from '../types'
  * form leads with the three ways to reach someone and treats the rest as
  * optional detail.
  *
- * Editing is gated on `update Supplier` - ADMIN and EXPORT_MANAGER. A
+ * Editing is gated on `update Supplier` - ADMIN and EXPORTER. A
  * lesser role sees the contacts and no controls, rather than buttons that
  * refuse.
  */

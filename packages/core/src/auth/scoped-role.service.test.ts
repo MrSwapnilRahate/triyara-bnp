@@ -69,15 +69,13 @@ describe('ADMIN cannot be granted through a scoped assignment', () => {
   })
 
   it('still grants every other role', async () => {
-    for (const role of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const) {
+    for (const role of ['EXPORTER', 'VERIFIER', 'READ_ONLY'] as const) {
       await expect(service().grant(ctxFor(['ADMIN']), grant(role))).resolves.toBeDefined()
     }
   })
 
   it('refuses a non-administrator outright, as before', async () => {
-    await expect(
-      service().grant(ctxFor(['EXPORT_MANAGER']), grant('EXPORT_MANAGER')),
-    ).rejects.toThrow()
+    await expect(service().grant(ctxFor(['EXPORTER']), grant('EXPORTER'))).rejects.toThrow()
   })
 })
 

@@ -21,7 +21,7 @@ import { createProductService, type ProductServiceCtx } from './product.service'
  * so this change moves where the decision is made and nothing else.
  */
 
-const ROLES: Role[] = ['ADMIN', 'EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']
+const ROLES: Role[] = ['ADMIN', 'EXPORTER', 'VERIFIER', 'READ_ONLY']
 const CATALOGUE = ['Product', 'Category'] as const
 const WRITES = ['create', 'update', 'delete'] as const
 
@@ -38,14 +38,11 @@ describe.each(CATALOGUE)('%s authorization', (subject) => {
     }
   })
 
-  it.each(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'] as const)(
-    'refuses every write to %s',
-    (role) => {
-      for (const action of WRITES) {
-        expect(ability(role).can(action, subject), `${role} ${action}`).toBe(false)
-      }
-    },
-  )
+  it.each(['EXPORTER', 'VERIFIER', 'READ_ONLY'] as const)('refuses every write to %s', (role) => {
+    for (const action of WRITES) {
+      expect(ability(role).can(action, subject), `${role} ${action}`).toBe(false)
+    }
+  })
 
   it.each(ROLES)('gives %s exactly what ReferenceData used to give it', (role) => {
     // The migration is behaviour-preserving. If these diverge it has to be a
@@ -92,7 +89,7 @@ describe('the catalogue no longer shares a permission with reference data', () =
 
   it('does not disturb the subjects the other work established', () => {
     // G5.2 (RFQ/Quotation) and G4 (security metadata) must be unaffected.
-    const em = ability('EXPORT_MANAGER')
+    const em = ability('EXPORTER')
     expect(em.can('create', 'RFQ')).toBe(true)
     expect(em.can('create', 'Quotation')).toBe(true)
     expect(em.can('manage', 'User')).toBe(false)

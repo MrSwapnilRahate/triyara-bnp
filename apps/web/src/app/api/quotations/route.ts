@@ -16,7 +16,7 @@ const createQuotationWithItemsSchema = createQuotationSchema.extend({
 })
 
 // GET  /api/quotations - list with search, filters, sorting, cursor paging
-// POST /api/quotations - raise a quotation with its lines (ADMIN, EXPORT_MANAGER)
+// POST /api/quotations - raise a quotation with its lines (ADMIN, EXPORTER)
 export function GET(req: Request) {
   return route(req, async (requestId) => {
     const auth = await requireAuth()

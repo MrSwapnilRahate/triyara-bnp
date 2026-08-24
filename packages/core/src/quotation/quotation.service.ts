@@ -52,7 +52,7 @@ interface RepricedConditions {
 // has one: pricing a deal is not an act on a customer record. Who may do what is
 // unchanged:
 //   read   Quotation -> every role
-//   create/update    -> ADMIN and EXPORT_MANAGER
+//   create/update    -> ADMIN and EXPORTER
 //   manage           -> ADMIN only, used for approval decisions and margin data
 //   delete           -> ADMIN only
 //

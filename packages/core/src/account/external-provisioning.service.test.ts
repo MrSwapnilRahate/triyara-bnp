@@ -116,16 +116,13 @@ describe('who may provision a portal login', () => {
     })
   })
 
-  it.each([['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']] as const)(
-    'refuses a %s',
-    async (role) => {
-      // `manage User` and `manage Account` are both ADMIN alone. Anyone who
-      // could provision could hand out a credential for a customer's records.
-      const { service, rows } = harness()
-      await expect(service.provision(ctxFor([role]), 'acct-1', DTO)).rejects.toThrowError()
-      expect(rows).toHaveLength(0)
-    },
-  )
+  it.each([['EXPORTER'], ['VERIFIER'], ['READ_ONLY']] as const)('refuses a %s', async (role) => {
+    // `manage User` and `manage Account` are both ADMIN alone. Anyone who
+    // could provision could hand out a credential for a customer's records.
+    const { service, rows } = harness()
+    await expect(service.provision(ctxFor([role]), 'acct-1', DTO)).rejects.toThrowError()
+    expect(rows).toHaveLength(0)
+  })
 
   it('refuses an EXTERNAL_PARTY outright', async () => {
     // The role holds no ability at all, so this is refused by the same gate -
@@ -275,7 +272,7 @@ describe('repeating the request', () => {
 })
 
 describe('collisions with somebody who already exists', () => {
-  it.each([['ADMIN'], ['EXPORT_MANAGER'], ['VERIFIER'], ['READ_ONLY']] as const)(
+  it.each([['ADMIN'], ['EXPORTER'], ['VERIFIER'], ['READ_ONLY']] as const)(
     'refuses an email belonging to a %s',
     async (role) => {
       const staff = userRow({ id: 'staff1', email: 'buyer@example.com', roles: [role] })

@@ -75,7 +75,7 @@ describe('QuotationForm', () => {
   it('does not ask a cost-blind role for unit cost', async () => {
     // Asking for a number the API will not show back manufactures confusion,
     // and a blank would silently zero a margin the server is hiding.
-    renderWithProviders(<QuotationForm />, { roles: ['EXPORT_MANAGER'] })
+    renderWithProviders(<QuotationForm />, { roles: ['EXPORTER'] })
     expect(field('items.0.unitCost')).toBeNull()
   })
 
@@ -164,7 +164,7 @@ describe('QuotationLinesEditor', () => {
   it('hides unit cost from a cost-blind role even when prefilling', async () => {
     server.use(...detailHandlers(redacted()))
     renderWithProviders(<QuotationLinesEditor id="q1" mode="replace" />, {
-      roles: ['EXPORT_MANAGER'],
+      roles: ['EXPORTER'],
     })
 
     await screen.findByDisplayValue('Turmeric powder')

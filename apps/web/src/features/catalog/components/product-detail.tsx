@@ -77,7 +77,7 @@ export function ProductDetail({ id }: { id: string }) {
           },
         ]}
         actions={
-          // `Product` writes are ADMIN-only, so an export manager sees a
+          // `Product` writes are ADMIN-only, so an exporter sees a
           // read-only page rather than buttons that would 403.
           <Can action="update" subject="Product">
             <Button asChild variant="secondary" leadingIcon={<Pencil />}>

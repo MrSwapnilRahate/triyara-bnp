@@ -15,7 +15,7 @@ import type { SupplierContactDto, UpdateSupplierContactDto } from '@triyara/vali
  * The people at a supplier: who to ring, who quotes, who sends the documents.
  * Authorization mirrors offerings, which is the neighbouring sub-resource -
  * reading needs `read Supplier`, writing needs `update Supplier`,
- * so ADMIN and EXPORT_MANAGER maintain them and everyone else can look.
+ * so ADMIN and EXPORTER maintain them and everyone else can look.
  *
  * "Exactly one primary" is enforced in the repository transaction rather than
  * here: it is a property of the set, and a check-then-write in a service would

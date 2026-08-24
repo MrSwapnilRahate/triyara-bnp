@@ -96,8 +96,8 @@ describe('BuyerReviewPanel', () => {
   })
 
   it('hides the controls from anyone who cannot manage accounts', () => {
-    // EXPORT_MANAGER may edit an account but not decide whether it is real.
-    renderWithProviders(<BuyerReviewPanel account={account()} />, { roles: ['EXPORT_MANAGER'] })
+    // EXPORTER may edit an account but not decide whether it is real.
+    renderWithProviders(<BuyerReviewPanel account={account()} />, { roles: ['EXPORTER'] })
     expect(screen.queryByText('Awaiting review')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument()
   })

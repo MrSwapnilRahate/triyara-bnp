@@ -37,13 +37,13 @@ describe('a granting request cannot ask for ADMIN', () => {
   })
 
   it.each(GRANT_BODIES)('still accepts the operational roles when you %s', (_label, parse) => {
-    for (const role of ['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY']) {
+    for (const role of ['EXPORTER', 'VERIFIER', 'READ_ONLY']) {
       expect(parse(role).success, `${role} must remain grantable`).toBe(true)
     }
   })
 
   it('offers exactly the three operational roles', () => {
-    expect([...GRANTABLE_ROLES]).toEqual(['EXPORT_MANAGER', 'VERIFIER', 'READ_ONLY'])
+    expect([...GRANTABLE_ROLES]).toEqual(['EXPORTER', 'VERIFIER', 'READ_ONLY'])
     expect(GRANTABLE_ROLES).not.toContain('ADMIN')
   })
 })

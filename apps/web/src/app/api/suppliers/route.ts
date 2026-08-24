@@ -5,7 +5,7 @@ import { enforceWriteLimit, etag, ok, parseBody, parseQuery, route } from '@/lib
 import { supplierMasterService } from '@/lib/supplier-master-service'
 
 // GET  /api/suppliers - list with search, filters, sorting, cursor paging
-// POST /api/suppliers - onboard a supplier (ADMIN, EXPORT_MANAGER)
+// POST /api/suppliers - onboard a supplier (ADMIN, EXPORTER)
 export function GET(req: Request) {
   return route(req, async (requestId) => {
     const auth = await requireAuth()

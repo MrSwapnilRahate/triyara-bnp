@@ -132,8 +132,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     })
 
     describe('authorization', () => {
-      it('lets ADMIN and EXPORT_MANAGER upload', async () => {
-        for (const role of ['ADMIN', 'EXPORT_MANAGER'] as Role[]) {
+      it('lets ADMIN and EXPORTER upload', async () => {
+        for (const role of ['ADMIN', 'EXPORTER'] as Role[]) {
           authState.roles = [role]
           const s = await makeSupplier()
           const key = await upload(s.id)

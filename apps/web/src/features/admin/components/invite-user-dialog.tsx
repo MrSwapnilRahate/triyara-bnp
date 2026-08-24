@@ -26,8 +26,8 @@ import type { RoleName } from '../types'
 const ROLE_OPTIONS: { value: RoleName; label: string; hint: string }[] = [
   { value: 'ADMIN', label: 'Administrator', hint: 'Full access, including approvals and users.' },
   {
-    value: 'EXPORT_MANAGER',
-    label: 'Export manager',
+    value: 'EXPORTER',
+    label: 'Exporter',
     hint: 'Runs sourcing: suppliers, RFQs and quotations.',
   },
   { value: 'VERIFIER', label: 'Verifier', hint: 'Reviews documents and certifications.' },
@@ -53,13 +53,13 @@ export function InviteUserDialog({
   const invite = useInviteUser()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<RoleName>('EXPORT_MANAGER')
+  const [role, setRole] = useState<RoleName>('EXPORTER')
 
   function close() {
     onOpenChange(false)
     setName('')
     setEmail('')
-    setRole('EXPORT_MANAGER')
+    setRole('EXPORTER')
   }
 
   async function submit() {

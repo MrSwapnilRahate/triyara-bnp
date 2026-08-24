@@ -12,7 +12,7 @@ record for suppliers and buyers. This repository is the production-grade **scaff
 ## Overview
 
 - **What** — internal directory + CRM for export partners (not a marketplace).
-- **Who** — Triyara export managers, verifiers and admins.
+- **Who** — Triyara exporters, verifiers and admins.
 - **Problem it solves** — replaces email / WhatsApp / PDF / Excel sprawl (see `docs/02-product`).
 
 ## Tech stack
