@@ -1,4 +1,5 @@
-import type { BuyerRfqListItem, BuyerRfqListResult } from '@triyara/db'
+import type { BuyerRfqDetail, BuyerRfqListItem, BuyerRfqListResult } from '@triyara/db'
+import { ForbiddenError } from '@triyara/lib'
 
 import type { PortalPartyContext } from './portal-context.service'
 
@@ -48,9 +49,44 @@ export interface BuyerRequirementList {
   readonly hasMore: boolean
 }
 
+/**
+ * One line of a requirement, as the buyer described it to us.
+ *
+ * `productName` collapses the two ways a line names its goods - a catalogue
+ * product, or free text when there is no catalogue match - so the screen does
+ * not have to know which. The line's own `id`, `version`, `remarks` and
+ * `specifications` are absent, and so is every relation: `RFQItem` also joins to
+ * supplier responses and quotation items, which are the other side of the
+ * intermediary.
+ */
+export interface BuyerRequirementItemView {
+  readonly lineNumber: number
+  readonly productName: string | null
+  readonly quantity: string
+  readonly unit: string
+  readonly requiredCertifications: string[]
+  readonly packaging: string | null
+}
+
+/**
+ * One requirement in full.
+ *
+ * The list's eleven fields plus the lines. No `description`: the domain records
+ * no difference between what the buyer wrote and what an operator edited
+ * afterwards, so it cannot be shown as theirs.
+ */
+export interface BuyerRequirementDetail extends BuyerRequirementView {
+  readonly items: BuyerRequirementItemView[]
+}
+
 /** The narrow slice of the RFQ repository this needs. Nothing wider. */
 export interface BuyerRfqLookup {
   listForBuyer(organizationId: string, buyerId: string, limit?: number): Promise<BuyerRfqListResult>
+  findForBuyer(
+    organizationId: string,
+    buyerId: string,
+    rfqNumber: string,
+  ): Promise<BuyerRfqDetail | null>
 }
 
 export interface BuyerPortalDeps {
@@ -80,6 +116,28 @@ function toRequirement(row: BuyerRfqListItem): BuyerRequirementView {
   }
 }
 
+/**
+ * The one message every detail refusal uses.
+ *
+ * Identical whether the RFQ does not exist, belongs to another organization,
+ * belongs to another buyer, is INTERNAL, or is deleted - because the difference
+ * between those answers tells a caller whether somebody else's requirement
+ * exists. The same reasoning, and the same wording, as the portal context.
+ */
+const REFUSED = 'This portal is not available for your account.'
+
+/** Builds one line, field by field. `Decimal` is serialised rather than passed on. */
+function toItem(row: BuyerRfqDetail['items'][number]): BuyerRequirementItemView {
+  return {
+    lineNumber: row.lineNumber,
+    productName: row.product?.name ?? row.customProductName,
+    quantity: row.quantity.toString(),
+    unit: row.unit,
+    requiredCertifications: row.requiredCertifications,
+    packaging: row.packaging,
+  }
+}
+
 export function createBuyerPortalService({ rfqs }: BuyerPortalDeps) {
   return {
     /**
@@ -96,6 +154,29 @@ export function createBuyerPortalService({ rfqs }: BuyerPortalDeps) {
       const { items, hasMore } = await rfqs.listForBuyer(party.organizationId, party.accountId)
 
       return { items: items.map(toRequirement), hasMore }
+    },
+
+    /**
+     * One requirement the party owns, by the number they can see.
+     *
+     * Takes the resolved party and the identifier off the URL - and nothing
+     * else. The identifier cannot widen anything: it is matched inside a query
+     * already narrowed to this organization and this account, so the worst a
+     * guessed number does is fail to match.
+     *
+     * A miss and a refusal are the same outcome here, deliberately. The
+     * repository returns null for "no such number", "another buyer's", "another
+     * tenant's", "internal" and "deleted" alike, and this turns all five into one
+     * message rather than letting the difference disclose which it was.
+     */
+    async getRequirement(
+      party: PortalPartyContext,
+      rfqNumber: string,
+    ): Promise<BuyerRequirementDetail> {
+      const found = await rfqs.findForBuyer(party.organizationId, party.accountId, rfqNumber)
+      if (!found) throw new ForbiddenError(REFUSED)
+
+      return { ...toRequirement(found), items: found.items.map(toItem) }
     },
   }
 }

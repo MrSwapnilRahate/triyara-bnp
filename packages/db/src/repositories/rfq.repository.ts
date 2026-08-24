@@ -179,6 +179,55 @@ const buyerListSelect = {
 
 export type BuyerRfqListItem = Prisma.RFQGetPayload<{ select: typeof buyerListSelect }>
 
+/**
+ * What a buyer may be told about one of their own RFQs, in full.
+ *
+ * The list's eleven fields plus the requirement lines - what they asked us to
+ * source. Nothing else: no `description`, because the domain cannot distinguish
+ * what the buyer wrote from what an operator edited afterwards, and no relation
+ * that leads to the other side of the intermediary.
+ *
+ * `items` is the one relation crossed, and it is crossed narrowly. Written as an
+ * explicit `select` rather than an `include` precisely because `RFQItem` also
+ * relates to `RFQSupplierResponse` and `QuotationItem` - supplier bids and
+ * sourced pricing hanging off the buyer's own line. An `include` here would be
+ * one word away from handing over both.
+ *
+ * `product` is entered for the name alone. The catalogue's `id` and `sku` are
+ * internal handles the buyer has no use for, so they are not selected.
+ */
+const buyerDetailSelect = {
+  rfqNumber: true,
+  title: true,
+  status: true,
+  priority: true,
+  currency: true,
+  incoterm: true,
+  destinationCountry: true,
+  destinationPort: true,
+  expectedShipmentDate: true,
+  quotationDeadline: true,
+  createdAt: true,
+  items: {
+    where: { deletedAt: null },
+    orderBy: { lineNumber: 'asc' },
+    select: {
+      lineNumber: true,
+      // Catalogue name when the line names a product, and the free-text name
+      // otherwise - `customProductName` is documented as used only when
+      // `productId` is null.
+      customProductName: true,
+      product: { select: { name: true } },
+      quantity: true,
+      unit: true,
+      requiredCertifications: true,
+      packaging: true,
+    },
+  },
+} satisfies Prisma.RFQSelect
+
+export type BuyerRfqDetail = Prisma.RFQGetPayload<{ select: typeof buyerDetailSelect }>
+
 export interface BuyerRfqListResult {
   items: BuyerRfqListItem[]
   /** Whether the account owns more RFQs than were returned. Carries no cursor. */
@@ -330,6 +379,38 @@ export const rfqRepository = {
     })
 
     return { items: rows.slice(0, limit), hasMore: rows.length > limit }
+  },
+
+  /**
+   * One RFQ, by the number the buyer can see, scoped to the buyer who owns it.
+   *
+   * Not `findByNumber`, which is organization-scoped but carries no buyer clause
+   * and no soft-delete filter - reading it from the portal would return another
+   * buyer's RFQ in the same tenant, and deleted ones. Not `findById` either: the
+   * buyer holds no row id, and it returns the internal projection.
+   *
+   * All four clauses are required arguments written unconditionally into the
+   * `where`. `rfqNumber` is unique only per organization - the constraint is
+   * `@@unique([organizationId, rfqNumber])` - so it is safe here precisely
+   * because the organization travels with it, and never safe alone.
+   *
+   * `buyerId` also settles the INTERNAL case without naming `type`: an internal
+   * RFQ carries no buyer, and null matches no account.
+   */
+  findForBuyer(
+    organizationId: string,
+    buyerId: string,
+    rfqNumber: string,
+  ): Promise<BuyerRfqDetail | null> {
+    return prisma.rFQ.findFirst({
+      where: {
+        organizationId,
+        buyerId,
+        rfqNumber,
+        deletedAt: null,
+      },
+      select: buyerDetailSelect,
+    })
   },
 
   async list(params: ListRfqsParams): Promise<RfqListResult> {

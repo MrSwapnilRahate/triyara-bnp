@@ -1,4 +1,4 @@
-import type { BuyerRfqListItem, BuyerRfqListResult } from '@triyara/db'
+import type { BuyerRfqDetail, BuyerRfqListItem, BuyerRfqListResult } from '@triyara/db'
 import { describe, expect, it } from 'vitest'
 
 import { createBuyerPortalService } from './buyer-portal.service'
@@ -30,11 +30,28 @@ function party(over: Partial<PortalPartyContext> = {}): PortalPartyContext {
   }
 }
 
-/** A row as `buyerListSelect` returns it, plus the scope columns the table needs. */
+/** A row as the buyer selects return it, plus the scope columns the table needs. */
 interface Row extends BuyerRfqListItem {
   organizationId: string
   buyerId: string | null
   deletedAt: Date | null
+  items?: BuyerRfqDetail['items']
+}
+
+/** One requirement line, as `buyerDetailSelect` returns it. */
+function itemRow(
+  over: Partial<BuyerRfqDetail['items'][number]> = {},
+): BuyerRfqDetail['items'][number] {
+  return {
+    lineNumber: 1,
+    customProductName: null,
+    product: { name: 'Basmati rice' },
+    quantity: '25' as unknown as never,
+    unit: 'MT',
+    requiredCertifications: [],
+    packaging: '25kg bags',
+    ...over,
+  } as BuyerRfqDetail['items'][number]
 }
 
 function row(over: Partial<Row> = {}): Row {
@@ -69,6 +86,17 @@ function harness(rows: Row[]) {
 
   const service = createBuyerPortalService({
     rfqs: {
+      async findForBuyer(organizationId, buyerId, rfqNumber): Promise<BuyerRfqDetail | null> {
+        calls.push({ organizationId, buyerId })
+        const found = rows.find(
+          (r) =>
+            matches(r.organizationId, organizationId) &&
+            matches(r.buyerId, buyerId) &&
+            matches(r.rfqNumber, rfqNumber) &&
+            r.deletedAt === null,
+        )
+        return found ? ({ ...found, items: found.items ?? [] } as unknown as BuyerRfqDetail) : null
+      },
       async listForBuyer(organizationId, buyerId, limit = 50): Promise<BuyerRfqListResult> {
         calls.push({ organizationId, buyerId })
         const found = rows.filter(
@@ -229,6 +257,156 @@ describe('what the buyer is allowed to see', () => {
     const serialized = JSON.stringify((await service.listRequirements(party())).items)
 
     for (const leak of ['sup-99', 'staff-1', 'Acme Rice Mills', 'internal notes']) {
+      expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
+    }
+  })
+})
+
+const DETAIL_KEYS = [...APPROVED_KEYS, 'items'].sort()
+const ITEM_KEYS = [
+  'lineNumber',
+  'packaging',
+  'productName',
+  'quantity',
+  'requiredCertifications',
+  'unit',
+]
+
+describe('opening one of the buyer&rsquo;s own requirements', () => {
+  it('returns the requirement they own', async () => {
+    const { service } = harness([row({ items: [itemRow()] })])
+    const detail = await service.getRequirement(party(), 'RFQ-0001')
+
+    expect(detail.rfqNumber).toBe('RFQ-0001')
+    expect(detail.items).toHaveLength(1)
+  })
+
+  it('resolves a catalogue product by name', async () => {
+    const { service } = harness([row({ items: [itemRow()] })])
+    const [item] = (await service.getRequirement(party(), 'RFQ-0001')).items
+    expect(item?.productName).toBe('Basmati rice')
+  })
+
+  it('falls back to the free-text name when the line names no catalogue product', async () => {
+    // `customProductName` is documented as used only when `productId` is null.
+    const { service } = harness([
+      row({ items: [itemRow({ product: null, customProductName: 'Sona Masoori, unpolished' })] }),
+    ])
+    const [item] = (await service.getRequirement(party(), 'RFQ-0001')).items
+    expect(item?.productName).toBe('Sona Masoori, unpolished')
+  })
+
+  it('serialises quantity rather than passing a Decimal on', async () => {
+    const { service } = harness([row({ items: [itemRow()] })])
+    const [item] = (await service.getRequirement(party(), 'RFQ-0001')).items
+    expect(typeof item?.quantity).toBe('string')
+  })
+})
+
+describe('a requirement that is not theirs is indistinguishable from one that does not exist', () => {
+  it.each([
+    ['no such number', () => harness([row()]), 'RFQ-NOPE'],
+    ['another organization', () => harness([row({ organizationId: 'org2' })]), 'RFQ-0001'],
+    ['another buyer', () => harness([row({ buyerId: 'acct-2' })]), 'RFQ-0001'],
+    ['an INTERNAL RFQ', () => harness([row({ buyerId: null })]), 'RFQ-0001'],
+    ['a soft-deleted RFQ', () => harness([row({ deletedAt: new Date() })]), 'RFQ-0001'],
+  ])('refuses %s', async (_label, build, number) => {
+    const { service } = build()
+    await expect(service.getRequirement(party(), number)).rejects.toThrowError(
+      /not available for your account/,
+    )
+  })
+
+  it('uses one message for every refusal, so none can be told apart', async () => {
+    const cases: [() => ReturnType<typeof harness>, string][] = [
+      [() => harness([row()]), 'RFQ-NOPE'],
+      [() => harness([row({ organizationId: 'org2' })]), 'RFQ-0001'],
+      [() => harness([row({ buyerId: 'acct-2' })]), 'RFQ-0001'],
+      [() => harness([row({ buyerId: null })]), 'RFQ-0001'],
+      [() => harness([row({ deletedAt: new Date() })]), 'RFQ-0001'],
+    ]
+
+    const messages = new Set<string>()
+    for (const [build, number] of cases) {
+      await build()
+        .service.getRequirement(party(), number)
+        .catch((e: Error) => messages.add(e.message))
+    }
+    expect(messages.size, 'all refusals must read identically').toBe(1)
+  })
+})
+
+describe('the detail scope also comes from the party, not the caller', () => {
+  it('accepts the party and the identifier, and nothing else', () => {
+    const { service } = harness([])
+    expect(service.getRequirement.length).toBe(2)
+  })
+
+  it('passes the party&rsquo;s organization and account to the repository', async () => {
+    const { service, calls } = harness([row({ items: [] })])
+    await service.getRequirement(party(), 'RFQ-0001')
+    expect(calls).toEqual([{ organizationId: ORG, buyerId: ACCOUNT }])
+  })
+})
+
+describe('what the detail is allowed to carry', () => {
+  it('returns exactly the approved keys plus items', async () => {
+    const { service } = harness([row({ items: [itemRow()] })])
+    const detail = await service.getRequirement(party(), 'RFQ-0001')
+    expect(Object.keys(detail).sort()).toEqual(DETAIL_KEYS)
+  })
+
+  it('returns exactly the approved item keys', async () => {
+    const { service } = harness([row({ items: [itemRow()] })])
+    const [item] = (await service.getRequirement(party(), 'RFQ-0001')).items
+    expect(Object.keys(item!).sort()).toEqual(ITEM_KEYS)
+  })
+
+  it.each(['id', 'organizationId', 'buyerId', 'awardedSupplierId', 'suppliers', 'description'])(
+    'never carries %s at the top level',
+    async (key) => {
+      const { service } = harness([row({ items: [itemRow()] })])
+      expect(await service.getRequirement(party(), 'RFQ-0001')).not.toHaveProperty(key)
+    },
+  )
+
+  it.each(['id', 'version', 'remarks', 'specifications', 'responses', 'productId', 'product'])(
+    'never carries %s on a line',
+    async (key) => {
+      const { service } = harness([row({ items: [itemRow()] })])
+      const [item] = (await service.getRequirement(party(), 'RFQ-0001')).items
+      expect(item).not.toHaveProperty(key)
+    },
+  )
+
+  it('carries no supplier, staff or internal value even when the row holds some', async () => {
+    const polluted = {
+      ...row(),
+      awardedSupplierId: 'sup-99',
+      createdById: 'staff-1',
+      description: 'internal notes about this buyer',
+      items: [
+        {
+          ...itemRow(),
+          id: 'item-internal-id',
+          remarks: 'operator remark',
+          responses: [{ price: '9.99', supplier: { companyName: 'Acme Rice Mills' } }],
+        } as unknown as BuyerRfqDetail['items'][number],
+      ],
+    } as unknown as Row
+
+    const { service } = harness([polluted])
+    const serialized = JSON.stringify(await service.getRequirement(party(), 'RFQ-0001'))
+
+    for (const leak of [
+      'sup-99',
+      'staff-1',
+      'internal notes',
+      'item-internal-id',
+      'operator remark',
+      'Acme Rice Mills',
+      '9.99',
+    ]) {
       expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
     }
   })

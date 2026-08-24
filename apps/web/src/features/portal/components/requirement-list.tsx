@@ -8,6 +8,7 @@ import {
   CardTitle,
   EmptyState,
 } from '@triyara/ui'
+import Link from 'next/link'
 
 /**
  * The buyer's own requirements.
@@ -43,7 +44,17 @@ export function RequirementList({ list }: { list: BuyerRequirementList }) {
           <li key={r.rfqNumber}>
             <Card>
               <CardHeader>
-                <CardTitle as="h2">{r.title}</CardTitle>
+                <CardTitle as="h2">
+                  {/* Linked by number, not id. `rfqNumber` is already on this
+                      DTO and is what the detail route matches on; the row id
+                      stays out of every buyer-facing projection. */}
+                  <Link
+                    href={`/portal/requirements/${encodeURIComponent(r.rfqNumber)}`}
+                    className="hover:underline"
+                  >
+                    {r.title}
+                  </Link>
+                </CardTitle>
                 <CardDescription>
                   {r.rfqNumber} &middot; raised {formatDate(r.createdAt)}
                 </CardDescription>

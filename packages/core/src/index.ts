@@ -152,6 +152,8 @@ export {
 export {
   type BuyerPortalDeps,
   type BuyerPortalService,
+  type BuyerRequirementDetail,
+  type BuyerRequirementItemView,
   type BuyerRequirementList,
   type BuyerRequirementView,
   type BuyerRfqLookup,
