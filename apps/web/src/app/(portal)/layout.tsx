@@ -1,9 +1,11 @@
 import { requireExternalAccountContext } from '@triyara/auth'
+import { SkipToContent } from '@triyara/ui'
 import type { ReactNode } from 'react'
 
 import { logoutAction } from '@/auth/actions'
 import { requireAuth } from '@/auth/context'
 import { SignOutButton } from '@/components/layout/sign-out-button'
+import { PortalNav } from '@/features/portal/components/portal-nav'
 
 /**
  * The external party's shell (TRY-BNP-EXT-PROVISION).
@@ -31,15 +33,25 @@ export default async function PortalLayout({ children }: { children: ReactNode }
 
   return (
     <div className="bg-background text-foreground min-h-screen">
+      {/* Before the navigation, so a keyboard user reaches it on the first tab
+          rather than after every link on every page. */}
+      <SkipToContent />
       <header className="border-b">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <span className="font-semibold">TRIYARA Partner Portal</span>
-          <form action={logoutAction}>
-            <SignOutButton />
-          </form>
+        <div className="mx-auto max-w-3xl px-6 py-4">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold">TRIYARA Partner Portal</span>
+            <form action={logoutAction}>
+              <SignOutButton />
+            </form>
+          </div>
+          <div className="mt-3">
+            <PortalNav />
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl px-6 py-10">{children}</main>
+      <main id="main-content" className="mx-auto max-w-3xl px-6 py-10">
+        {children}
+      </main>
     </div>
   )
 }
