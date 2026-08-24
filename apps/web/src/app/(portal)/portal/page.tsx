@@ -1,6 +1,11 @@
+import type { PortalPartyType } from '@triyara/core'
 import type { Metadata } from 'next'
 
 import { requireAuth } from '@/auth/context'
+import {
+  PortalOverview,
+  type PortalOverviewView,
+} from '@/features/portal/components/portal-overview'
 import { portalContextService } from '@/lib/portal-context-service'
 
 export const metadata: Metadata = { title: 'Partner Portal · Triyara BNP' }
@@ -11,54 +16,52 @@ export const metadata: Metadata = { title: 'Partner Portal · Triyara BNP' }
 export const dynamic = 'force-dynamic'
 
 /**
- * The portal landing page.
+ * How a resolved party type reads to the person it describes.
  *
- * Its whole job is to prove the context resolves. It reads nothing beyond the
- * party's own identity - no requirements, no quotations, no documents, no
- * counterparties - because record scoping for external parties does not exist
- * yet and a screen that queried anything now would be the first place to get it
- * wrong.
+ * A lookup rather than a literal in the markup, so the label is derived from
+ * what the context actually resolved. Writing "Buyer" directly in the component
+ * would keep rendering "Buyer" if the resolver ever returned something else -
+ * the screen would be confidently wrong rather than failing.
  *
- * A refusal from `resolve` throws, which the portal error boundary turns into a
- * generic message. Rendering happens only after the account has been found in
- * this organization, confirmed approved, and confirmed to be a buyer.
+ * `Record<PortalPartyType, string>` is what enforces that: adding a member to
+ * the union without adding its label stops compiling here.
+ */
+const PARTY_TYPE_LABELS: Record<PortalPartyType, string> = {
+  BUYER: 'Buyer',
+}
+
+/**
+ * The buyer's portal overview.
+ *
+ * Takes no props, no `params` and no `searchParams`, deliberately. There is
+ * nothing for a URL to influence: the account comes from the session through
+ * `resolve`, which itself accepts only an AuthContext. The browser cannot ask
+ * this page to show it a different company, because there is no input through
+ * which to ask.
+ *
+ * It reads no domain data beyond the party's own identity. Counts of
+ * requirements or quotations would each need a portal-scoped read model that
+ * does not exist yet - every service that could produce one gates on CASL, and
+ * EXTERNAL_PARTY holds no ability. An invented number would be worse than an
+ * honest absence, so there are none.
  */
 export default async function Page() {
   const auth = await requireAuth()
   const party = await portalContextService.resolve(auth)
 
-  return (
-    <section className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">Welcome to the TRIYARA Partner Portal</h1>
-        <p className="text-muted-foreground">
-          Your account is set up. We&rsquo;re preparing your portal &mdash; your requirements,
-          quotations and documents will appear here.
-        </p>
-      </div>
+  // The display projection. Built field by field from two trusted sources and
+  // never by spreading either: `party` carries identifiers that exist for
+  // scoping and must not reach the DOM, and `auth.user` is the viewer's own
+  // record.
+  const view: PortalOverviewView = {
+    companyName: party.companyName,
+    country: party.country,
+    partyTypeLabel: PARTY_TYPE_LABELS[party.partyType],
+    // The viewer's own identity, from their own session - no second user is
+    // looked up. Name when we have one, email otherwise, because a login always
+    // has an email and a name is only as good as what they typed at sign-up.
+    signedInAs: auth.user.name || auth.user.email,
+  }
 
-      <dl className="grid gap-4 rounded-lg border p-6 sm:grid-cols-2">
-        <div className="space-y-1">
-          <dt className="text-muted-foreground text-sm">Company</dt>
-          <dd className="font-medium">{party.companyName}</dd>
-        </div>
-        <div className="space-y-1">
-          <dt className="text-muted-foreground text-sm">Account type</dt>
-          {/* Resolved from the account's profiles, not from the signed-in role -
-              every external login holds the same role. */}
-          <dd className="font-medium">Buyer</dd>
-        </div>
-        {party.country ? (
-          <div className="space-y-1">
-            <dt className="text-muted-foreground text-sm">Country</dt>
-            <dd className="font-medium">{party.country}</dd>
-          </div>
-        ) : null}
-      </dl>
-
-      <p className="text-muted-foreground">
-        In the meantime, your TRIYARA contact remains the best way to reach us.
-      </p>
-    </section>
-  )
+  return <PortalOverview view={view} />
 }
