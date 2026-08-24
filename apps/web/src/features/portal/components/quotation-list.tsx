@@ -8,6 +8,7 @@ import {
   CardTitle,
   EmptyState,
 } from '@triyara/ui'
+import Link from 'next/link'
 
 /**
  * The offers TRIYARA has sent this buyer.
@@ -46,7 +47,18 @@ export function QuotationList({ list }: { list: BuyerQuotationList }) {
                   {q.grandTotal ? formatMoney(q.grandTotal, q.currency) : 'Pricing in progress'}
                 </CardTitle>
                 <CardDescription>
-                  {q.quotationNumber} &middot; revision {q.revisionNumber}
+                  {/* Linked by number, not id. `quotationNumber` is already on
+                      this DTO and is what the detail route matches on; the row
+                      id stays out of every buyer-facing projection. The number
+                      names a revision family rather than one row, so the detail
+                      resolves to whichever revision is currently standing. */}
+                  <Link
+                    href={`/portal/quotations/${encodeURIComponent(q.quotationNumber)}`}
+                    className="hover:underline"
+                  >
+                    {q.quotationNumber}
+                  </Link>{' '}
+                  &middot; revision {q.revisionNumber}
                 </CardDescription>
               </CardHeader>
               <CardContent>

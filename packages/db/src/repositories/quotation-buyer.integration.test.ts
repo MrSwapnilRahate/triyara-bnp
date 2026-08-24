@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { prisma } from '../client'
@@ -267,6 +270,421 @@ describe.skipIf(!process.env.DATABASE_URL)('quotationRepository buyer reads (int
     it('does not report more when the page holds everything', async () => {
       const page = await quotationRepository.listQuotationsForBuyer(orgA, buyer1, 50)
       expect(page.hasMore).toBe(false)
+    })
+  })
+
+  /**
+   * `findQuotationForBuyer` against the same database and the same fixture.
+   *
+   * Nested here rather than in its own file so it inherits the two
+   * organizations, three accounts and twelve rows above - a fixture already
+   * arranged so that dropping a clause returns somebody else's offer, or an
+   * internal one, rather than an empty result. What it adds is the part a list
+   * never touches: lines, a supplier source option hanging off a line, and
+   * charges on both sides of the customer-visibility flag.
+   */
+  describe('findQuotationForBuyer', () => {
+    let sentQuotationId = ''
+    let lineId = ''
+
+    beforeAll(async () => {
+      const sent = await prisma.quotation.findFirstOrThrow({
+        where: { organizationId: orgA, quotationNumber: `QT-${tag}-SENT` },
+        select: { id: true },
+      })
+      sentQuotationId = sent.id
+
+      const line = await prisma.quotationItem.create({
+        data: {
+          quotationId: sentQuotationId,
+          organizationId: orgA,
+          lineNumber: 1,
+          customProductName: 'Sona Masoori, unpolished',
+          description: 'internal line description',
+          quantity: 25,
+          unit: 'MT',
+          // INTERNAL, and present on purpose: the projection has to be the
+          // thing that keeps them out, not their absence from the fixture.
+          unitCost: '333.3333',
+          marginPercent: '18.8888',
+          unitPrice: '440.0000',
+          lineSubtotal: '11000.0000',
+          lineTotal: '66666.6666',
+          packaging: '25kg PP bags',
+          hsCode: '10063020',
+          countryOfOrigin: 'IN',
+          requiredCertifications: ['ORGANIC'],
+          leadTimeDays: 45,
+          remarks: 'operator remark that must not be selected',
+        },
+        select: { id: true },
+      })
+      lineId = line.id
+
+      // A soft-deleted line, to prove the relation filter is applied.
+      await prisma.quotationItem.create({
+        data: {
+          quotationId: sentQuotationId,
+          organizationId: orgA,
+          lineNumber: 2,
+          customProductName: 'Deleted line',
+          quantity: 1,
+          unit: 'MT',
+          unitPrice: '1.0000',
+          lineSubtotal: '1.0000',
+          lineTotal: '1.0000',
+          deletedAt: new Date(),
+        },
+      })
+
+      // The wall itself: a real supplier, costed against a real line.
+      const supplier = await prisma.supplier.create({
+        data: {
+          organizationId: orgA,
+          supplierCode: `SUP-${tag}`,
+          companyName: 'Acme Rice Mills',
+          legalName: 'Acme Rice Mills Private Limited',
+          businessType: 'MANUFACTURER_EXPORTER',
+        },
+        select: { id: true },
+      })
+
+      await prisma.quotationSourceOption.create({
+        data: {
+          quotationItemId: lineId,
+          organizationId: orgA,
+          supplierId: supplier.id,
+          supplierPrice: '355.5555',
+          supplierCurrency: 'USD',
+          landedUnitCost: '377.7777',
+          isSelected: true,
+          selectionReason: 'internal sourcing note',
+        },
+      })
+
+      await prisma.quotationCharge.createMany({
+        data: [
+          {
+            quotationId: sentQuotationId,
+            organizationId: orgA,
+            type: 'FREIGHT',
+            scope: 'HEADER',
+            label: 'Ocean freight',
+            amount: '1200.0000',
+            currency: 'USD',
+            sequence: 1,
+            isVisibleToCustomer: true,
+            notes: 'internal charge note',
+          },
+          {
+            quotationId: sentQuotationId,
+            organizationId: orgA,
+            type: 'HANDLING',
+            scope: 'HEADER',
+            label: 'Absorbed handling',
+            amount: '9111.1111',
+            currency: 'USD',
+            sequence: 2,
+            isVisibleToCustomer: false,
+          },
+          {
+            quotationId: sentQuotationId,
+            organizationId: orgA,
+            type: 'DISCOUNT',
+            scope: 'HEADER',
+            label: 'Volume discount',
+            amount: '200.0000',
+            currency: 'USD',
+            isDeduction: true,
+            sequence: 3,
+            isVisibleToCustomer: true,
+            deletedAt: new Date(),
+          },
+        ],
+      })
+
+      // A second revision of ACCEPTED, both visible, so the ordering clause is
+      // load-bearing rather than incidental.
+      await prisma.quotation.create({
+        data: {
+          organizationId: orgA,
+          quotationNumber: `QT-${tag}-ACCEPTED`,
+          revisionNumber: 2,
+          buyerId: buyer1,
+          currency: 'USD',
+          baseCurrency: 'INR',
+          status: 'SENT',
+          sentAt: new Date('2026-08-11'),
+          grandTotal: '13500.0000',
+          createdById: actorA,
+        },
+      })
+    })
+
+    describe('whose offer comes back', () => {
+      it('returns the offer the buyer account was sent', async () => {
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-SENT`,
+        )
+        expect(found?.quotationNumber).toBe(`QT-${tag}-SENT`)
+      })
+
+      it('refuses another buyer&rsquo;s offer in the same organization', async () => {
+        // The row exists and the number is right; only the account differs.
+        // Drop the buyer clause and this returns OTHER-BUYER instead of null.
+        expect(
+          await quotationRepository.findQuotationForBuyer(orgA, buyer1, `QT-${tag}-OTHER-BUYER`),
+        ).toBeNull()
+      })
+
+      it('refuses an offer in another organization', async () => {
+        expect(
+          await quotationRepository.findQuotationForBuyer(orgA, buyerInB, `QT-${tag}-OTHER-ORG`),
+        ).toBeNull()
+      })
+
+      it('refuses when the organization does not match the account&rsquo;s own rows', async () => {
+        // Asking organization B for organization A's account and number.
+        // Without the organization clause this returns SENT.
+        expect(
+          await quotationRepository.findQuotationForBuyer(orgB, buyer1, `QT-${tag}-SENT`),
+        ).toBeNull()
+      })
+
+      it('refuses a soft-deleted offer', async () => {
+        expect(
+          await quotationRepository.findQuotationForBuyer(orgA, buyer1, `QT-${tag}-DELETED`),
+        ).toBeNull()
+      })
+
+      it('refuses a number that does not exist', async () => {
+        expect(
+          await quotationRepository.findQuotationForBuyer(orgA, buyer1, `QT-${tag}-NOPE`),
+        ).toBeNull()
+      })
+    })
+
+    describe('which offers a buyer may open at all', () => {
+      it.each([
+        ['SENT', 'we have made them the offer'],
+        ['UNDER-NEGOTIATION', 'they are talking to us about it'],
+        ['ACCEPTED', 'they took it'],
+        ['REJECTED', 'they turned it down and may want the record'],
+        ['EXPIRED', 'it lapsed, and a lapsed offer is still one we made'],
+      ])('opens %s, because %s', async (suffix) => {
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-${suffix}`,
+        )
+        expect(found).not.toBeNull()
+      })
+
+      it.each([
+        ['DRAFT', 'we have not finished pricing it'],
+        ['APPROVED', 'it passed internal approval but was never sent'],
+        ['WITHDRAWN', 'we pulled it back'],
+        ['SUPERSEDED', 'a later revision replaced it'],
+      ])('refuses %s, because %s', async (suffix) => {
+        // Each of these rows belongs to this buyer in this organization, so only
+        // the status clause can be refusing it.
+        expect(
+          await quotationRepository.findQuotationForBuyer(orgA, buyer1, `QT-${tag}-${suffix}`),
+        ).toBeNull()
+      })
+    })
+
+    describe('which revision the buyer is shown', () => {
+      it('answers with the newest visible revision, not the first row found', async () => {
+        // ACCEPTED holds revision 1 (ACCEPTED) and revision 2 (SENT), both
+        // buyer-visible.
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-ACCEPTED`,
+        )
+        expect(found?.revisionNumber).toBe(2)
+      })
+
+      it('keeps answering the same revision on repeat', async () => {
+        const seen = new Set<number | undefined>()
+        for (let i = 0; i < 5; i++) {
+          seen.add(
+            (await quotationRepository.findQuotationForBuyer(orgA, buyer1, `QT-${tag}-ACCEPTED`))
+              ?.revisionNumber,
+          )
+        }
+        expect([...seen]).toEqual([2])
+      })
+
+      /**
+       * The ordering clause, asserted on the source rather than on a result.
+       *
+       * The behavioural cases above are worth having but cannot be trusted to
+       * protect this on their own. `findFirst` without an `orderBy` returns
+       * whichever row the planner reaches first, and that is a planner
+       * decision, not a contract: removing the clause and running these very
+       * tests passes on an empty database and fails on a populated one. CI
+       * runs against a freshly migrated database, so the behavioural test
+       * would not have caught the removal at all.
+       *
+       * Row order is not something Postgres promises, so it is not something a
+       * test can assert against. What can be asserted is that the query asks
+       * for the order, which is the actual contract: the buyer is shown the
+       * offer currently standing under this number, never an older revision
+       * that happened to be scanned first.
+       */
+      it('asks the database for the newest revision rather than trusting row order', () => {
+        const source = readFileSync(join(__dirname, 'quotation.repository.ts'), 'utf8')
+        const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+        const method = code.slice(
+          code.indexOf('findQuotationForBuyer('),
+          code.indexOf('async list(', code.indexOf('findQuotationForBuyer(')),
+        )
+
+        expect(method).toContain("orderBy: [{ revisionNumber: 'desc' }]")
+      })
+    })
+
+    describe('what the offer carries', () => {
+      it('selects no supplier, cost, margin or internal column at the header', async () => {
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-SENT`,
+        )
+
+        expect(Object.keys(found!).sort()).toEqual([
+          'acceptedAt',
+          'charges',
+          'chargesTotal',
+          'currency',
+          'destinationCountry',
+          'destinationPort',
+          'discountTotal',
+          'grandTotal',
+          'incoterm',
+          'items',
+          'leadTimeDays',
+          'namedPlace',
+          'packingSummary',
+          'paymentTermsText',
+          'quotationNumber',
+          'rejectedAt',
+          'revisionNumber',
+          'samplingTerms',
+          'sentAt',
+          'status',
+          'subtotal',
+          'taxTotal',
+          'title',
+          'type',
+          'validFrom',
+          'validUntil',
+        ])
+      })
+
+      it('selects only the approved columns on a quoted line', async () => {
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-SENT`,
+        )
+        const line = found!.items[0]!
+
+        expect(Object.keys(line).sort()).toEqual([
+          'countryOfOrigin',
+          'customProductName',
+          'hsCode',
+          'leadTimeDays',
+          'lineNumber',
+          'lineSubtotal',
+          'packaging',
+          'product',
+          'quantity',
+          'requiredCertifications',
+          'unit',
+          'unitPrice',
+        ])
+      })
+
+      it('selects only the approved columns on a charge', async () => {
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-SENT`,
+        )
+        const charge = found!.charges[0]!
+
+        expect(Object.keys(charge).sort()).toEqual([
+          'amount',
+          'currency',
+          'isDeduction',
+          'label',
+          'type',
+        ])
+      })
+
+      it('excludes a soft-deleted line', async () => {
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-SENT`,
+        )
+        expect(found!.items.map((i) => i.customProductName)).not.toContain('Deleted line')
+      })
+
+      it('shows only charges we marked visible to the customer', async () => {
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-SENT`,
+        )
+        expect(found!.charges.map((c) => c.label)).toEqual(['Ocean freight'])
+      })
+
+      it('fetches nothing from the sourcing side of the offer', async () => {
+        // Every one of these exists on the rows this query touches. They are
+        // absent because they were never asked for, not because the fixture is
+        // thin.
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-SENT`,
+        )
+        const serialized = JSON.stringify(found)
+
+        for (const leak of [
+          '9111.1111', // costTotal, and the absorbed charge
+          '333.3333', // line unitCost
+          '18.8888', // line marginPercent
+          '66666.6666', // lineTotal
+          '355.5555', // supplier price
+          '377.7777', // landed unit cost
+          'Acme Rice Mills',
+          'internal sourcing note',
+          'internal charge note',
+          'internal line description',
+          'operator remark',
+          sentQuotationId,
+          lineId,
+        ]) {
+          expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
+        }
+      })
+
+      it('carries the price we quoted, line and header', async () => {
+        const found = await quotationRepository.findQuotationForBuyer(
+          orgA,
+          buyer1,
+          `QT-${tag}-SENT`,
+        )
+        expect(found!.grandTotal?.toString()).toBe('12500')
+        expect(found!.items[0]!.unitPrice.toString()).toBe('440')
+        expect(found!.items[0]!.lineSubtotal.toString()).toBe('11000')
+      })
     })
   })
 })
