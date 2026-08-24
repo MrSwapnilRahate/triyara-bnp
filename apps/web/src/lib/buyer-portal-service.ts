@@ -1,5 +1,5 @@
 import { createBuyerPortalService } from '@triyara/core'
-import { rfqRepository } from '@triyara/db'
+import { quotationRepository, rfqRepository } from '@triyara/db'
 
 // Buyer portal read wiring (TRY-BNP-PORTAL-RFQ). The repository is injected here
 // so the page depends only on the service - never on Prisma - matching how the
@@ -10,5 +10,6 @@ import { rfqRepository } from '@triyara/db'
 // one account.
 
 export const buyerPortalService = createBuyerPortalService({
+  quotations: quotationRepository,
   rfqs: rfqRepository,
 })

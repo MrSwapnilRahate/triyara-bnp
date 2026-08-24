@@ -215,6 +215,63 @@ export interface QuotationListResult {
   nextCursor: string | null
 }
 
+/**
+ * The quotation states TRIYARA has deliberately put in front of the buyer.
+ *
+ * `SENT` is the act of disclosure - the moment an offer stops being internal
+ * working material and becomes the buyer's to read - and the states after it are
+ * what happened to that offer once they had it. DRAFT, PENDING_APPROVAL and
+ * APPROVED are the internal preparation of a price and are not the buyer's
+ * business; WITHDRAWN and SUPERSEDED are offers we took back or replaced, and
+ * showing them would present a number nobody stands behind any more.
+ *
+ * Applied inside the query rather than filtered afterwards, so an internal
+ * quotation is never fetched at all.
+ */
+export const BUYER_VISIBLE_QUOTATION_STATUSES: QuotationStatus[] = [
+  'SENT',
+  'UNDER_NEGOTIATION',
+  'ACCEPTED',
+  'REJECTED',
+  'EXPIRED',
+]
+
+/**
+ * What a buyer may be told about an offer we made them.
+ *
+ * A separate select from `listSelect`, which is an internal projection: it
+ * carries `id`, `organizationId`, `buyerId`, `primaryRfqId`, `version` and
+ * `deletedAt`, and - more to the point - `subtotal`, `chargesTotal`,
+ * `discountTotal`, `taxTotal`, `fxRate` and `baseCurrency`, which is the
+ * arithmetic behind our price rather than the price itself.
+ *
+ * `grandTotal` is what we quoted them, not what anyone charged us. No relation
+ * is entered: `items` leads to `sourceOptions`, which holds supplier identity
+ * and landed cost, and that is the wall this portal exists to keep.
+ */
+const buyerQuotationSelect = {
+  quotationNumber: true,
+  revisionNumber: true,
+  status: true,
+  currency: true,
+  grandTotal: true,
+  sentAt: true,
+  validUntil: true,
+} satisfies Prisma.QuotationSelect
+
+export type BuyerQuotationItem = Prisma.QuotationGetPayload<{
+  select: typeof buyerQuotationSelect
+}>
+
+export interface BuyerQuotationListResult {
+  items: BuyerQuotationItem[]
+  /** Whether the account has more offers than were returned. Carries no cursor. */
+  hasMore: boolean
+}
+
+/** How many of a buyer's quotations one portal page shows. */
+const DEFAULT_BUYER_QUOTATION_LIMIT = 50
+
 function conflictOnUnique(error: unknown): never {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
     throw new ConflictError('A quotation with that number and revision already exists.')
@@ -358,6 +415,46 @@ export const quotationRepository = {
       orderBy: { revisionNumber: 'desc' },
       select: listSelect,
     })
+  },
+
+  /**
+   * The offers this buyer account has been sent.
+   *
+   * Not `list`, which applies its buyer as
+   * `...(params.buyerId ? { buyerId: params.buyerId } : {})`. That is right for
+   * an internal screen that may or may not be narrowing by customer, and the
+   * wrong default the moment an external party reads it: a falsy buyer omits the
+   * clause and returns every quotation in the tenant. Here both scopes are
+   * required arguments and both are written unconditionally.
+   *
+   * The status filter is part of the query for the same reason. Fetching a DRAFT
+   * quotation and hiding it in the service would mean an internal price had
+   * already crossed into the portal process.
+   *
+   * `hasMore` rather than a cursor: `encodeCursor` is base64url of the row id,
+   * so handing one to the browser would hand over a quotation id, which this
+   * projection excludes.
+   */
+  async listQuotationsForBuyer(
+    organizationId: string,
+    buyerId: string,
+    limit = DEFAULT_BUYER_QUOTATION_LIMIT,
+  ): Promise<BuyerQuotationListResult> {
+    const rows = await prisma.quotation.findMany({
+      where: {
+        organizationId,
+        buyerId,
+        status: { in: BUYER_VISIBLE_QUOTATION_STATUSES },
+        deletedAt: null,
+      },
+      select: buyerQuotationSelect,
+      // Most recently sent first. `sentAt` is non-null for every status in the
+      // buyer-visible set, since all of them follow the act of sending.
+      orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    })
+
+    return { items: rows.slice(0, limit), hasMore: rows.length > limit }
   },
 
   async list(params: ListQuotationsParams): Promise<QuotationListResult> {

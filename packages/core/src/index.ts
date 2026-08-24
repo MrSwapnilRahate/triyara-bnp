@@ -152,6 +152,9 @@ export {
 export {
   type BuyerPortalDeps,
   type BuyerPortalService,
+  type BuyerQuotationList,
+  type BuyerQuotationLookup,
+  type BuyerQuotationView,
   type BuyerRequirementDetail,
   type BuyerRequirementItemView,
   type BuyerRequirementList,

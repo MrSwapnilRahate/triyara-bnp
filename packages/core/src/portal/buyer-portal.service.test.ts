@@ -1,4 +1,10 @@
-import type { BuyerRfqDetail, BuyerRfqListItem, BuyerRfqListResult } from '@triyara/db'
+import type {
+  BuyerQuotationItem,
+  BuyerQuotationListResult,
+  BuyerRfqDetail,
+  BuyerRfqListItem,
+  BuyerRfqListResult,
+} from '@triyara/db'
 import { describe, expect, it } from 'vitest'
 
 import { createBuyerPortalService } from './buyer-portal.service'
@@ -81,10 +87,52 @@ function matches(actual: string | null, filter: string | null | undefined): bool
   return actual === filter
 }
 
-function harness(rows: Row[]) {
+/** A quotation as `buyerQuotationSelect` returns it, plus scope columns. */
+interface QuotationRow extends BuyerQuotationItem {
+  organizationId: string
+  buyerId: string
+  deletedAt: Date | null
+}
+
+function quotationRow(over: Partial<QuotationRow> = {}): QuotationRow {
+  return {
+    organizationId: ORG,
+    buyerId: ACCOUNT,
+    deletedAt: null,
+    quotationNumber: 'QT-0001',
+    revisionNumber: 1,
+    status: 'SENT',
+    currency: 'USD',
+    grandTotal: '12500.0000' as unknown as never,
+    sentAt: new Date('2026-08-10'),
+    validUntil: new Date('2026-09-10'),
+    ...over,
+  } as QuotationRow
+}
+
+function harness(rows: Row[], quotationRows: QuotationRow[] = []) {
   const calls: { organizationId: string; buyerId: string }[] = []
 
   const service = createBuyerPortalService({
+    quotations: {
+      async listQuotationsForBuyer(
+        organizationId,
+        buyerId,
+        limit = 50,
+      ): Promise<BuyerQuotationListResult> {
+        calls.push({ organizationId, buyerId })
+        const found = quotationRows.filter(
+          (q) =>
+            matches(q.organizationId, organizationId) &&
+            matches(q.buyerId, buyerId) &&
+            q.deletedAt === null,
+        )
+        return {
+          items: found.slice(0, limit) as BuyerQuotationItem[],
+          hasMore: found.length > limit,
+        }
+      },
+    },
     rfqs: {
       async findForBuyer(organizationId, buyerId, rfqNumber): Promise<BuyerRfqDetail | null> {
         calls.push({ organizationId, buyerId })
@@ -406,6 +454,174 @@ describe('what the detail is allowed to carry', () => {
       'operator remark',
       'Acme Rice Mills',
       '9.99',
+    ]) {
+      expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
+    }
+  })
+})
+
+const QUOTATION_KEYS = [
+  'currency',
+  'grandTotal',
+  'quotationNumber',
+  'revisionNumber',
+  'sentAt',
+  'status',
+  'validUntil',
+]
+
+describe('the offers TRIYARA has sent the buyer', () => {
+  it('returns the account&rsquo;s quotations', async () => {
+    const { service } = harness([], [quotationRow(), quotationRow({ quotationNumber: 'QT-0002' })])
+    const list = await service.listQuotations(party())
+
+    expect(list.items.map((q) => q.quotationNumber)).toEqual(['QT-0001', 'QT-0002'])
+    expect(list.hasMore).toBe(false)
+  })
+
+  it('returns an empty list rather than failing when there are none', async () => {
+    const { service } = harness([], [])
+    expect(await service.listQuotations(party())).toEqual({ items: [], hasMore: false })
+  })
+
+  it('serialises grandTotal rather than passing a Decimal on', async () => {
+    const { service } = harness([], [quotationRow()])
+    const [q] = (await service.listQuotations(party())).items
+    expect(typeof q?.grandTotal).toBe('string')
+    expect(q?.grandTotal).toBe('12500.0000')
+  })
+
+  it('carries a null grandTotal through as null', async () => {
+    // Totals are computed; an offer can exist before they are.
+    const { service } = harness([], [quotationRow({ grandTotal: null })])
+    const [q] = (await service.listQuotations(party())).items
+    expect(q?.grandTotal).toBeNull()
+  })
+
+  it.each(['SENT', 'UNDER_NEGOTIATION', 'ACCEPTED', 'REJECTED', 'EXPIRED'])(
+    'preserves the %s status it was given',
+    async (status) => {
+      const { service } = harness([], [quotationRow({ status: status as never })])
+      const [q] = (await service.listQuotations(party())).items
+      expect(q?.status).toBe(status)
+    },
+  )
+})
+
+describe('isolation for quotations', () => {
+  it('never returns another organization&rsquo;s quotations', async () => {
+    const { service } = harness([], [quotationRow({ organizationId: 'org2' })])
+    expect((await service.listQuotations(party())).items).toEqual([])
+  })
+
+  it('never returns another buyer&rsquo;s quotations in the same organization', async () => {
+    const { service } = harness([], [quotationRow({ buyerId: 'acct-2' })])
+    expect((await service.listQuotations(party())).items).toEqual([])
+  })
+
+  it('never returns soft-deleted quotations', async () => {
+    const { service } = harness([], [quotationRow({ deletedAt: new Date() })])
+    expect((await service.listQuotations(party())).items).toEqual([])
+  })
+
+  it('returns only the caller&rsquo;s rows when several parties are present', async () => {
+    const { service } = harness(
+      [],
+      [
+        quotationRow({ quotationNumber: 'MINE' }),
+        quotationRow({ organizationId: 'org2', quotationNumber: 'FOREIGN-ORG' }),
+        quotationRow({ buyerId: 'acct-2', quotationNumber: 'FOREIGN-BUYER' }),
+        quotationRow({ deletedAt: new Date(), quotationNumber: 'DELETED' }),
+      ],
+    )
+    expect((await service.listQuotations(party())).items.map((q) => q.quotationNumber)).toEqual([
+      'MINE',
+    ])
+  })
+})
+
+describe('the quotation scope comes from the party, not the caller', () => {
+  it('accepts exactly one argument, so no account can be passed', () => {
+    const { service } = harness([], [])
+    expect(service.listQuotations.length).toBe(1)
+  })
+
+  it('passes the party&rsquo;s organization and account to the repository', async () => {
+    const { service, calls } = harness([], [quotationRow()])
+    await service.listQuotations(party())
+    expect(calls).toEqual([{ organizationId: ORG, buyerId: ACCOUNT }])
+  })
+
+  it('follows the party when it names a different account', async () => {
+    const { service, calls } = harness(
+      [],
+      [quotationRow({ buyerId: 'acct-2', quotationNumber: 'THEIRS' })],
+    )
+    const list = await service.listQuotations(party({ accountId: 'acct-2' }))
+
+    expect(list.items.map((q) => q.quotationNumber)).toEqual(['THEIRS'])
+    expect(calls[0]?.buyerId).toBe('acct-2')
+  })
+})
+
+describe('what a quotation is allowed to carry', () => {
+  it('returns exactly the approved keys', async () => {
+    const { service } = harness([], [quotationRow()])
+    const [q] = (await service.listQuotations(party())).items
+    expect(Object.keys(q!).sort()).toEqual(QUOTATION_KEYS)
+  })
+
+  it.each([
+    'id',
+    'organizationId',
+    'buyerId',
+    'primaryRfqId',
+    'items',
+    'sourceOptions',
+    'subtotal',
+    'chargesTotal',
+    'discountTotal',
+    'taxTotal',
+    'fxRate',
+    'baseCurrency',
+    'createdById',
+    'updatedById',
+    'deletedById',
+    'version',
+    'deletedAt',
+    'type',
+  ])('never carries %s', async (key) => {
+    const { service } = harness([], [quotationRow()])
+    const [q] = (await service.listQuotations(party())).items
+    expect(q).not.toHaveProperty(key)
+  })
+
+  it('carries no supplier, sourcing or internal value even when the row holds some', async () => {
+    // The money sentinels share no digits with the legitimate grand total, which
+    // is `12500.0000`. A rounder figure such as `500.0000` sits inside it as a
+    // substring, and this scan would fail on the total we are supposed to show.
+    const polluted = {
+      ...quotationRow(),
+      id: 'qt-internal-id',
+      primaryRfqId: 'rfq-internal-id',
+      supplierId: 'sup-99',
+      createdById: 'staff-1',
+      subtotal: '9111.1111',
+      taxTotal: '777.7777',
+      items: [{ sourceOptions: [{ supplierId: 'sup-99', landedUnitCost: '6.6666' }] }],
+    } as unknown as QuotationRow
+
+    const { service } = harness([], [polluted])
+    const serialized = JSON.stringify((await service.listQuotations(party())).items)
+
+    for (const leak of [
+      'qt-internal-id',
+      'rfq-internal-id',
+      'sup-99',
+      'staff-1',
+      '9111.1111',
+      '777.7777',
+      '6.6666',
     ]) {
       expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
     }

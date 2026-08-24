@@ -133,6 +133,9 @@ export {
   type UpdateProductData,
 } from './repositories/product.repository'
 export {
+  BUYER_VISIBLE_QUOTATION_STATUSES,
+  type BuyerQuotationItem,
+  type BuyerQuotationListResult,
   type CreateQuotationData,
   type ListQuotationsParams,
   type QuotationItemData,
