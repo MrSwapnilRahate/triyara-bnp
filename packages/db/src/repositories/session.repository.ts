@@ -78,6 +78,36 @@ export const sessionRepository = {
     return row !== null
   },
 
+  /**
+   * Whether this session may still authenticate a request in this tenant.
+   *
+   * Deliberately narrower than `isActive`, in two ways.
+   *
+   * It takes the organization, because this one is asked on every authenticated
+   * request rather than by an administrator who has already been scoped. A
+   * lookup on `tokenId` alone would be answered by a row in any tenant, and the
+   * caller would have no way to tell.
+   *
+   * And it asks only whether the session was ended - never whether it expired.
+   * Auth.js rolls the JWT's expiry forward on every request while `expiresAt`
+   * here is written once, so after eight hours of ordinary use the two clocks
+   * disagree and the row starts refusing a cookie that is still perfectly
+   * valid. Reading the stale clock would sign people out at their desks. JWT
+   * expiry is already enforced cryptographically in `decode`, before this is
+   * reached, so the only question left for the database is revocation.
+   *
+   * `endedAt: null` is written as a required predicate rather than a spread. A
+   * conditional would compile to a query that omits it - which is to say a
+   * query that accepts revoked sessions.
+   */
+  async isLive(organizationId: string, tokenId: string): Promise<boolean> {
+    const row = await prisma.userSession.findFirst({
+      where: { organizationId, tokenId, endedAt: null },
+      select: { id: true },
+    })
+    return row !== null
+  },
+
   async touch(tokenId: string): Promise<void> {
     await prisma.userSession.updateMany({
       where: { tokenId, endedAt: null },
@@ -105,11 +135,19 @@ export const sessionRepository = {
     return { items, nextCursor }
   },
 
-  /** Ends one session. Already-ended sessions are left untouched (idempotent). */
+  /**
+   * Ends one session.
+   *
+   * Scoped by organization as well as id. The service already refuses a session
+   * it could not find in the caller's tenant, so this is the second lock on the
+   * same door - but it is the lock nearest the data, and it is the one that
+   * still holds if a future caller reaches this method without doing the
+   * lookup first.
+   */
   async revoke(ctx: MutationCtx, id: string, reason: SessionEndReason): Promise<SessionRecord> {
     return prisma.$transaction(async (tx) => {
       const session = await tx.userSession.update({
-        where: { id },
+        where: { id, organizationId: ctx.organizationId },
         data: { endedAt: new Date(), endReason: reason },
         select: sessionSelect,
       })

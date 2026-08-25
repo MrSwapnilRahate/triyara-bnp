@@ -37,6 +37,16 @@ export interface SessionServiceDeps {
 export const CANNOT_END_SUPER_ADMIN_SESSION =
   'Only a super administrator may end a super administrator’s session.'
 
+/**
+ * What a refused session is told.
+ *
+ * One message for every reason - revoked, unknown, forged, or belonging to
+ * another tenant. Which of those it was is information about a session the
+ * caller does not hold, and telling them apart would let someone probe for
+ * identifiers that exist.
+ */
+export const SESSION_NO_LONGER_VALID = 'This session is no longer valid. Please sign in again.'
+
 function mutationCtx(ctx: SessionServiceCtx): MutationCtx {
   return { actorId: ctx.user.id, organizationId: ctx.organizationId, requestId: ctx.requestId }
 }
@@ -83,6 +93,25 @@ export function createSessionService({ repo, users, events }: SessionServiceDeps
     async assertActive(tokenId: string): Promise<void> {
       if (!(await repo.isActive(tokenId))) {
         throw new UnauthenticatedError('This session is no longer valid.')
+      }
+    },
+
+    /**
+     * Throws unless this session is still live in this organization.
+     *
+     * What every authenticated request calls, so revoking a session takes
+     * effect on that session's next request rather than at expiry. Both
+     * arguments are required: the organization comes from the caller's own
+     * resolved identity, and asking without it would accept a session
+     * identifier belonging to another tenant.
+     *
+     * Nothing is caught here. A lookup that fails is a question left
+     * unanswered, and an unanswered revocation check must not become a granted
+     * request - so the error travels, and the caller is refused.
+     */
+    async assertLive(organizationId: string, tokenId: string): Promise<void> {
+      if (!(await repo.isLive(organizationId, tokenId))) {
+        throw new UnauthenticatedError(SESSION_NO_LONGER_VALID)
       }
     },
 

@@ -78,6 +78,7 @@ export {
 } from './auth/scoped-role.service'
 export {
   createSessionService,
+  SESSION_NO_LONGER_VALID,
   type SessionService,
   type SessionServiceCtx,
   type SessionServiceDeps,
