@@ -95,3 +95,101 @@ describe('nothing about ending your own session changes', () => {
     ).resolves.toBeDefined()
   })
 })
+
+/**
+ * The check every authenticated request makes.
+ *
+ * An in-memory table applying Prisma's own semantics, where a dropped predicate
+ * WIDENS the query rather than emptying it. Against a fake that compared
+ * strictly, a missing organization scope would still pass - which is the bug
+ * being guarded against, not a detail of the fake.
+ */
+type SessionRow = { organizationId: string; tokenId: string; endedAt: Date | null }
+
+function liveService(rows: SessionRow[]) {
+  const calls: Array<Record<string, unknown>> = []
+  const repo = {
+    async isLive(organizationId: string, tokenId: string) {
+      calls.push({ organizationId, tokenId })
+      return rows.some(
+        (r) =>
+          (organizationId === undefined || r.organizationId === organizationId) &&
+          (tokenId === undefined || r.tokenId === tokenId) &&
+          r.endedAt === null,
+      )
+    },
+  } as unknown as SessionRepository
+
+  const users = { findById: async () => null }
+  return { calls, svc: createSessionService({ repo, users, events: events() }) }
+}
+
+const LIVE: SessionRow = { organizationId: 'org1', tokenId: 'sid-a', endedAt: null }
+
+describe('assertLive is what makes revocation take effect', () => {
+  it('accepts a live session', async () => {
+    const { svc } = liveService([LIVE])
+    await expect(svc.assertLive('org1', 'sid-a')).resolves.toBeUndefined()
+  })
+
+  it('refuses a revoked session', async () => {
+    const { svc } = liveService([{ ...LIVE, endedAt: new Date() }])
+    await expect(svc.assertLive('org1', 'sid-a')).rejects.toThrow(/no longer valid/i)
+  })
+
+  it('refuses an identifier nobody holds', async () => {
+    const { svc } = liveService([LIVE])
+    await expect(svc.assertLive('org1', 'sid-forged')).rejects.toThrow(/no longer valid/i)
+  })
+
+  it('refuses a session belonging to another organization', async () => {
+    // The row is live and the identifier is right; only the tenant differs.
+    const { svc } = liveService([{ ...LIVE, organizationId: 'org2' }])
+    await expect(svc.assertLive('org1', 'sid-a')).rejects.toThrow(/no longer valid/i)
+  })
+
+  it('leaves another live session of the same user alone', async () => {
+    const { svc } = liveService([
+      { ...LIVE, tokenId: 'sid-a', endedAt: new Date() },
+      { ...LIVE, tokenId: 'sid-b' },
+    ])
+    await expect(svc.assertLive('org1', 'sid-a')).rejects.toThrow(/no longer valid/i)
+    await expect(svc.assertLive('org1', 'sid-b')).resolves.toBeUndefined()
+  })
+
+  it('passes both scopes to the repository', async () => {
+    const { svc, calls } = liveService([LIVE])
+    await svc.assertLive('org1', 'sid-a')
+    expect(calls[0]).toEqual({ organizationId: 'org1', tokenId: 'sid-a' })
+  })
+
+  it('takes exactly two arguments, so neither scope can be defaulted away', async () => {
+    const { svc } = liveService([LIVE])
+    expect(svc.assertLive.length).toBe(2)
+  })
+
+  it('lets a lookup failure travel rather than turning it into a grant', async () => {
+    const repo = {
+      isLive: async () => {
+        throw new Error('connect ECONNREFUSED')
+      },
+    } as unknown as SessionRepository
+    const svc = createSessionService({
+      repo,
+      users: { findById: async () => null },
+      events: events(),
+    })
+
+    await expect(svc.assertLive('org1', 'sid-a')).rejects.toThrow(/ECONNREFUSED/)
+  })
+
+  it('says the same thing however the session failed', async () => {
+    // Revoked, unknown and another tenant's are one message. Which it was is
+    // information about a session the caller does not hold.
+    const { svc } = liveService([{ ...LIVE, endedAt: new Date() }])
+    const revoked = await svc.assertLive('org1', 'sid-a').catch((e: Error) => e.message)
+    const unknown = await svc.assertLive('org1', 'nope').catch((e: Error) => e.message)
+    const foreign = await svc.assertLive('org2', 'sid-a').catch((e: Error) => e.message)
+    expect(new Set([revoked, unknown, foreign]).size).toBe(1)
+  })
+})

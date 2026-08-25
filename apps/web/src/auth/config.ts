@@ -47,9 +47,17 @@ const sessionCookieName = useSecureCookies
     '__Host-authjs.session-token'
   : 'authjs.session-token'
 
+/**
+ * How long a session lives, in seconds.
+ *
+ * Named because two places need the same figure: the cookie's lifetime, and the
+ * `expiresAt` written on the session row at sign-in. Two literals would drift.
+ */
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8 // 8 hours
+
 export const authConfig = {
   pages: { signIn: '/login' },
-  session: { strategy: 'jwt', maxAge: 60 * 60 * 8 }, // 8 hours
+  session: { strategy: 'jwt', maxAge: SESSION_MAX_AGE_SECONDS },
   trustHost: true,
   useSecureCookies,
   cookies: {
@@ -84,6 +92,10 @@ export const authConfig = {
       // Only the identifier. No name, no contact details, no profile - a
       // session is not a place to cache an Account.
       session.user.accountId = (token.accountId as string | null | undefined) ?? null
+      // Which session this is, as opposed to which user. Carried so the server
+      // can ask whether it has been revoked; `null` when the claim is missing,
+      // which is a session that cannot be checked and so is not trusted.
+      session.user.sid = (token.sid as string | undefined) ?? null
       return session
     },
 
