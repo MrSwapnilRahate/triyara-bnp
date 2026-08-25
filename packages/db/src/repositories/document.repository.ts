@@ -136,6 +136,16 @@ export interface BuyerDocumentListResult {
 /** How many of a buyer's documents one portal page shows. */
 const DEFAULT_BUYER_DOCUMENT_LIMIT = 50
 
+/**
+ * What the portal may see of one buyer's documents.
+ *
+ * Shared by the list and the count so the overview and the documents page can
+ * never disagree about how many papers we hold.
+ */
+function buyerDocumentScope(organizationId: string, accountId: string): Prisma.DocumentWhereInput {
+  return { organizationId, accountId, deletedAt: null }
+}
+
 export interface DocumentRepository {
   create(ctx: MutationCtx, input: CreateDocumentInput): Promise<DocumentRecord>
   findById(
@@ -168,6 +178,7 @@ export interface DocumentRepository {
     accountId: string,
     limit?: number,
   ): Promise<BuyerDocumentListResult>
+  countDocumentsForBuyer(organizationId: string, accountId: string): Promise<number>
 }
 
 async function loadActive(tx: Prisma.TransactionClient, orgId: string, id: string) {
@@ -266,13 +277,14 @@ export const documentRepository: DocumentRepository = {
    * other caller input - there is no parameter through which to ask for another
    * account.
    */
+  /** How many documents sit on this account. Counted in the database. */
+  countDocumentsForBuyer(organizationId: string, accountId: string): Promise<number> {
+    return prisma.document.count({ where: buyerDocumentScope(organizationId, accountId) })
+  },
+
   async listDocumentsForBuyer(organizationId, accountId, limit = DEFAULT_BUYER_DOCUMENT_LIMIT) {
     const rows = await prisma.document.findMany({
-      where: {
-        organizationId,
-        accountId,
-        deletedAt: null,
-      },
+      where: buyerDocumentScope(organizationId, accountId),
       select: buyerDocumentSelect,
       // Newest first. `createdAt` is set on every row by the schema default, so
       // unlike a nullable date it cannot sort NULLs to the front.

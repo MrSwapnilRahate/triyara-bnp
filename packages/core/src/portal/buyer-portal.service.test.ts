@@ -268,6 +268,15 @@ function harness(
         created.push({ ...ctx, ...data })
         return { reference: 'QR-2026-000999' }
       },
+      async countPendingForBuyer(organizationId, buyerAccountId) {
+        calls.push({ organizationId, buyerId: buyerAccountId })
+        return intakeRows.filter(
+          (r) =>
+            matches(r.organizationId, organizationId) &&
+            matches(r.buyerAccountId, buyerAccountId) &&
+            PENDING_STATUSES.includes(r.status),
+        ).length
+      },
       async listPendingForBuyer(organizationId, buyerAccountId, limit = 50) {
         calls.push({ organizationId, buyerId: buyerAccountId })
         const found = intakeRows.filter(
@@ -294,6 +303,15 @@ function harness(
       },
     },
     documents: {
+      async countDocumentsForBuyer(organizationId, accountId) {
+        calls.push({ organizationId, buyerId: accountId })
+        return documentRows.filter(
+          (d) =>
+            matches(d.organizationId, organizationId) &&
+            matches(d.accountId, accountId) &&
+            d.deletedAt === null,
+        ).length
+      },
       async listDocumentsForBuyer(
         organizationId,
         accountId,
@@ -313,6 +331,15 @@ function harness(
       },
     },
     quotations: {
+      async countForBuyer(organizationId, buyerId) {
+        calls.push({ organizationId, buyerId })
+        return quotationRows.filter(
+          (q) =>
+            matches(q.organizationId, organizationId) &&
+            matches(q.buyerId, buyerId) &&
+            q.deletedAt === null,
+        ).length
+      },
       async findQuotationForBuyer(
         organizationId,
         buyerId,
@@ -350,6 +377,15 @@ function harness(
       },
     },
     rfqs: {
+      async countForBuyer(organizationId, buyerId) {
+        calls.push({ organizationId, buyerId })
+        return rows.filter(
+          (r) =>
+            matches(r.organizationId, organizationId) &&
+            matches(r.buyerId, buyerId) &&
+            r.deletedAt === null,
+        ).length
+      },
       async findForBuyer(organizationId, buyerId, rfqNumber): Promise<BuyerRfqDetail | null> {
         calls.push({ organizationId, buyerId })
         const found = rows.find(
@@ -1628,5 +1664,163 @@ describe('pending submissions are listed for the owning account only', () => {
     for (const leak of ['qr-internal-id', 'staff-1', 'tyre-kicker', 'Cold', 'staff-2']) {
       expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
     }
+  })
+})
+
+/**
+ * The overview summary.
+ *
+ * A count is only useful if it agrees with the page it links to, so the
+ * interesting assertions are not that the numbers are right in isolation but
+ * that they match what the corresponding list returns for the same party - and
+ * that they are scoped by the party rather than by anything a caller passes.
+ */
+describe('the summary counts only this party&rsquo;s own records', () => {
+  it('takes exactly one argument, so no account can be passed', () => {
+    const { service } = harness([])
+    expect(service.getSummary.length).toBe(1)
+  })
+
+  it('ignores a second argument entirely', async () => {
+    // `Function.length` does not count a parameter that has a default, so the
+    // arity check above passes for `(party, accountId = party.accountId)` - the
+    // exact shape a caller-controlled account would arrive in. This calls with
+    // an extra argument and proves it changes nothing.
+    const { service, calls } = harness([])
+    await (service.getSummary as (p: PortalPartyContext, ...rest: unknown[]) => Promise<unknown>)(
+      party(),
+      'acct-somebody-else',
+    )
+
+    expect(calls).toHaveLength(4)
+    for (const call of calls) {
+      expect(call).toEqual({ organizationId: ORG, buyerId: ACCOUNT })
+    }
+  })
+
+  it('counts the requirements, quotations and documents this account owns', async () => {
+    const { service } = harness(
+      [row(), row({ rfqNumber: 'RFQ-2' })],
+      [quotationRow()],
+      [],
+      [documentRow()],
+      [intakeRow()],
+    )
+    expect(await service.getSummary(party())).toEqual({
+      requirements: 2,
+      pendingRequirements: 1,
+      quotations: 1,
+      documents: 1,
+    })
+  })
+
+  it('agrees with the requirements list for the same party', async () => {
+    const { service } = harness([row(), row({ rfqNumber: 'RFQ-2' }), row({ rfqNumber: 'RFQ-3' })])
+    const summary = await service.getSummary(party())
+    const list = await service.listRequirements(party())
+    expect(summary.requirements).toBe(list.items.length)
+  })
+
+  it('agrees with the pending list for the same party', async () => {
+    const { service } = harness([], [], [], [], [intakeRow(), intakeRow({ status: 'IN_REVIEW' })])
+    const summary = await service.getSummary(party())
+    const list = await service.listPendingRequirements(party())
+    expect(summary.pendingRequirements).toBe(list.items.length)
+  })
+
+  it('agrees with the documents list for the same party', async () => {
+    const { service } = harness([], [], [], [documentRow(), documentRow({ title: 'IEC' })])
+    const summary = await service.getSummary(party())
+    const list = await service.listDocuments(party())
+    expect(summary.documents).toBe(list.items.length)
+  })
+
+  it('agrees with the quotations list for the same party', async () => {
+    const { service } = harness([], [quotationRow()], [], [])
+    const summary = await service.getSummary(party())
+    const list = await service.listQuotations(party())
+    expect(summary.quotations).toBe(list.items.length)
+  })
+
+  it('scopes every count to the party organization and account', async () => {
+    const { service, calls } = harness([])
+    await service.getSummary(party())
+    expect(calls).toHaveLength(4)
+    for (const call of calls) {
+      expect(call).toEqual({ organizationId: ORG, buyerId: ACCOUNT })
+    }
+  })
+
+  it('follows the signed-in party when it changes', async () => {
+    const { service, calls } = harness([])
+    await service.getSummary(party({ organizationId: 'org9', accountId: 'acct-9' }))
+    for (const call of calls) {
+      expect(call).toEqual({ organizationId: 'org9', buyerId: 'acct-9' })
+    }
+  })
+
+  it('counts nothing that belongs to another organization', async () => {
+    const { service } = harness(
+      [row({ organizationId: 'org2' })],
+      [quotationRow({ organizationId: 'org2' })],
+      [],
+      [documentRow({ organizationId: 'org2' })],
+      [intakeRow({ organizationId: 'org2' })],
+    )
+    expect(await service.getSummary(party())).toEqual({
+      requirements: 0,
+      pendingRequirements: 0,
+      quotations: 0,
+      documents: 0,
+    })
+  })
+
+  it('counts nothing that belongs to another account in the same organization', async () => {
+    const { service } = harness(
+      [row({ buyerId: 'acct-2' })],
+      [quotationRow({ buyerId: 'acct-2' })],
+      [],
+      [documentRow({ accountId: 'acct-2' })],
+      [intakeRow({ buyerAccountId: 'acct-2' })],
+    )
+    expect(await service.getSummary(party())).toEqual({
+      requirements: 0,
+      pendingRequirements: 0,
+      quotations: 0,
+      documents: 0,
+    })
+  })
+
+  it('counts nothing deleted', async () => {
+    const { service } = harness(
+      [row({ deletedAt: new Date() })],
+      [quotationRow({ deletedAt: new Date() })],
+      [],
+      [documentRow({ deletedAt: new Date() })],
+    )
+    const summary = await service.getSummary(party())
+    expect(summary.requirements).toBe(0)
+    expect(summary.quotations).toBe(0)
+    expect(summary.documents).toBe(0)
+  })
+
+  it('reports zero rather than refusing when the party has nothing', async () => {
+    const { service } = harness([])
+    expect(await service.getSummary(party())).toEqual({
+      requirements: 0,
+      pendingRequirements: 0,
+      quotations: 0,
+      documents: 0,
+    })
+  })
+
+  it('returns exactly the four approved keys', async () => {
+    const { service } = harness([])
+    expect(Object.keys(await service.getSummary(party())).sort()).toEqual([
+      'documents',
+      'pendingRequirements',
+      'quotations',
+      'requirements',
+    ])
   })
 })

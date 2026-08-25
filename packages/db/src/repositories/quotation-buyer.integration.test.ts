@@ -687,4 +687,53 @@ describe.skipIf(!process.env.DATABASE_URL)('quotationRepository buyer reads (int
       })
     })
   })
+
+  /**
+   * The overview count, against a real database.
+   *
+   * A count is only worth showing if it agrees with the page it links to, so
+   * every assertion here compares it against the corresponding list rather than
+   * a hard-coded figure - the two cannot drift apart as fixtures change, and a
+   * count built from a different scope fails immediately.
+   *
+   * The fixture already holds a second buyer in this tenant and a third in
+   * another, so a dropped predicate counts somebody else's rows rather than
+   * returning zero.
+   */
+  describe('countForBuyer matches the quotations list', () => {
+    it('counts exactly what the list returns', async () => {
+      const { items } = await quotationRepository.listQuotationsForBuyer(orgA, buyer1)
+      expect(await quotationRepository.countForBuyer(orgA, buyer1)).toBe(items.length)
+    })
+
+    it('counts each buyer separately, never the tenant', async () => {
+      const [oneList, twoList] = await Promise.all([
+        quotationRepository.listQuotationsForBuyer(orgA, buyer1),
+        quotationRepository.listQuotationsForBuyer(orgA, buyer2),
+      ])
+      const [oneCount, twoCount] = await Promise.all([
+        quotationRepository.countForBuyer(orgA, buyer1),
+        quotationRepository.countForBuyer(orgA, buyer2),
+      ])
+
+      expect(oneCount).toBe(oneList.items.length)
+      expect(twoCount).toBe(twoList.items.length)
+      // Both buyers hold rows in this tenant, so a count ignoring the buyer
+      // clause would return the same larger number for both.
+      expect(oneCount + twoCount).toBeGreaterThan(oneCount)
+    })
+
+    it('counts nothing across tenants', async () => {
+      expect(await quotationRepository.countForBuyer(orgB, buyer1)).toBe(0)
+      expect(await quotationRepository.countForBuyer(orgA, buyerInB)).toBe(0)
+    })
+
+    it('counts nothing for an empty buyer rather than the whole tenant', async () => {
+      expect(await quotationRepository.countForBuyer(orgA, '')).toBe(0)
+    })
+
+    it('counts nothing for an empty organization', async () => {
+      expect(await quotationRepository.countForBuyer('', buyer1)).toBe(0)
+    })
+  })
 })

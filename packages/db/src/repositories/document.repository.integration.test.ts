@@ -284,6 +284,49 @@ describe.skipIf(!process.env.DATABASE_URL)('documentRepository (integration)', (
       expect(page).not.toHaveProperty('nextCursor')
     })
 
+    it('counts exactly what the list returns', async () => {
+      // The overview tile and the documents page must never disagree. Compared
+      // against the list rather than a fixed number so the two cannot drift.
+      const { items } = await documentRepository.listDocumentsForBuyer(orgId, mine)
+      expect(await documentRepository.countDocumentsForBuyer(orgId, mine)).toBe(items.length)
+    })
+
+    it('counts each account separately, never the tenant', async () => {
+      const mineCount = await documentRepository.countDocumentsForBuyer(orgId, mine)
+      const siblingCount = await documentRepository.countDocumentsForBuyer(orgId, sibling)
+      const tenantTotal = await prisma.document.count({
+        where: { organizationId: orgId, deletedAt: null },
+      })
+
+      expect(siblingCount).toBe(1)
+      // The tenant holds both accounts' documents plus the soft-deleted one is
+      // excluded, so a count without the account clause could not equal either.
+      expect(tenantTotal).toBeGreaterThan(mineCount)
+      expect(tenantTotal).toBeGreaterThan(siblingCount)
+    })
+
+    it('counts nothing across tenants', async () => {
+      expect(await documentRepository.countDocumentsForBuyer(otherOrgId, mine)).toBe(0)
+      expect(await documentRepository.countDocumentsForBuyer(orgId, otherOrgAccount)).toBe(0)
+    })
+
+    it('counts nothing for an empty account rather than the whole tenant', async () => {
+      expect(await documentRepository.countDocumentsForBuyer(orgId, '')).toBe(0)
+    })
+
+    it('counts nothing for an empty organization', async () => {
+      expect(await documentRepository.countDocumentsForBuyer('', mine)).toBe(0)
+    })
+
+    it('does not count a soft-deleted document', async () => {
+      const { items } = await documentRepository.listDocumentsForBuyer(orgId, mine)
+      const count = await documentRepository.countDocumentsForBuyer(orgId, mine)
+      // The fixture holds a deleted document for this account; neither the list
+      // nor the count may include it.
+      expect(count).toBe(items.length)
+      expect(items.map((d) => d.title)).not.toContain(`Doc ${tag} DELETED`)
+    })
+
     it('does not report more when the page holds everything', async () => {
       const page = await documentRepository.listDocumentsForBuyer(orgId, mine, 50)
       expect(page.hasMore).toBe(false)

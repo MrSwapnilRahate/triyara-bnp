@@ -140,6 +140,21 @@ const BUYER_PENDING_STATUSES = ['NEW', 'IN_REVIEW', 'QUALIFIED'] as const
 
 const DEFAULT_BUYER_PENDING_LIMIT = 50
 
+/**
+ * What the portal may see of one buyer's enquiries still in triage.
+ *
+ * Shared by the list and the count so the overview and the requirements page
+ * agree. The status allow-list lives in here for the same reason it lives in the
+ * query at all: a count that included PROMOTED would tell the buyer about a
+ * requirement twice, once as an enquiry and once as the RFQ it became.
+ */
+function buyerPendingScope(
+  organizationId: string,
+  buyerAccountId: string,
+): Prisma.QuoteRequestWhereInput {
+  return { organizationId, buyerAccountId, status: { in: [...BUYER_PENDING_STATUSES] } }
+}
+
 export interface ReviewQuoteRequestData {
   status?: QuoteRequestStatus | undefined
   reviewNotes?: string | undefined
@@ -212,17 +227,18 @@ export const quoteRequestRepository = {
    * list exactly as the RFQ appears in the other one, and the same requirement
    * is never shown twice.
    */
+  /** How many enquiries this buyer has awaiting triage. Counted in the database. */
+  countPendingForBuyer(organizationId: string, buyerAccountId: string): Promise<number> {
+    return prisma.quoteRequest.count({ where: buyerPendingScope(organizationId, buyerAccountId) })
+  },
+
   async listPendingForBuyer(
     organizationId: string,
     buyerAccountId: string,
     limit = DEFAULT_BUYER_PENDING_LIMIT,
   ): Promise<BuyerPendingListResult> {
     const rows = await prisma.quoteRequest.findMany({
-      where: {
-        organizationId,
-        buyerAccountId,
-        status: { in: [...BUYER_PENDING_STATUSES] },
-      },
+      where: buyerPendingScope(organizationId, buyerAccountId),
       select: buyerPendingSelect,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,

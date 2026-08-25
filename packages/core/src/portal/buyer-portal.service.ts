@@ -239,6 +239,7 @@ export interface BuyerDocumentList {
 
 /** The narrow slice of the document repository this needs. Nothing wider. */
 export interface BuyerDocumentLookup {
+  countDocumentsForBuyer(organizationId: string, accountId: string): Promise<number>
   listDocumentsForBuyer(
     organizationId: string,
     accountId: string,
@@ -248,6 +249,7 @@ export interface BuyerDocumentLookup {
 
 /** The narrow slice of the quotation repository this needs. Nothing wider. */
 export interface BuyerQuotationLookup {
+  countForBuyer(organizationId: string, buyerId: string): Promise<number>
   listQuotationsForBuyer(
     organizationId: string,
     buyerId: string,
@@ -262,6 +264,7 @@ export interface BuyerQuotationLookup {
 
 /** The narrow slice of the RFQ repository this needs. Nothing wider. */
 export interface BuyerRfqLookup {
+  countForBuyer(organizationId: string, buyerId: string): Promise<number>
   listForBuyer(organizationId: string, buyerId: string, limit?: number): Promise<BuyerRfqListResult>
   findForBuyer(
     organizationId: string,
@@ -289,6 +292,23 @@ export interface BuyerPendingRequirementView {
 export interface BuyerPendingRequirementList {
   readonly items: BuyerPendingRequirementView[]
   readonly hasMore: boolean
+}
+
+/**
+ * How much of each thing this buyer has with us.
+ *
+ * Four numbers and nothing else. No money, no status breakdown, no supplier
+ * count - a summary is a way into the pages that hold the detail, not a second
+ * place for the detail to live, and every figure it carries is one more thing
+ * that can disagree with the page it links to.
+ */
+export interface BuyerPortalSummary {
+  /** RFQs we are sourcing against. */
+  readonly requirements: number
+  /** Enquiries sent but not yet triaged. */
+  readonly pendingRequirements: number
+  readonly quotations: number
+  readonly documents: number
 }
 
 /** What a buyer is told after their requirement lands. */
@@ -319,6 +339,7 @@ export interface BuyerIntakeLookup {
       requirements?: string | undefined
     },
   ): Promise<{ reference: string }>
+  countPendingForBuyer(organizationId: string, buyerAccountId: string): Promise<number>
   listPendingForBuyer(
     organizationId: string,
     buyerAccountId: string,
@@ -542,6 +563,37 @@ export function createBuyerPortalService({
      * off the context that `portalContextService.resolve` already proved -
      * approved, in this organization, and a buyer.
      */
+    /**
+     * How much of each thing this party has with us.
+     *
+     * Four counts, each run with the same scope object its list uses, so the
+     * overview can never claim a number the page it links to does not show.
+     * Counted in the database rather than by measuring a list: every one of
+     * those is capped at fifty, and a buyer with more would be told they had
+     * fewer.
+     *
+     * Issued together. They are independent reads of one party's own records and
+     * nothing here needs them consistent with each other to a transaction - a
+     * requirement promoted between two of these counts is a page refresh away
+     * from looking right, and paying for a transaction to avoid that would be
+     * paying for the wrong thing.
+     */
+    async getSummary(party: PortalPartyContext): Promise<BuyerPortalSummary> {
+      const [requirements, pendingRequirements, quotationCount, documentCount] = await Promise.all([
+        rfqs.countForBuyer(party.organizationId, party.accountId),
+        intake.countPendingForBuyer(party.organizationId, party.accountId),
+        quotations.countForBuyer(party.organizationId, party.accountId),
+        documents.countDocumentsForBuyer(party.organizationId, party.accountId),
+      ])
+
+      return {
+        requirements,
+        pendingRequirements,
+        quotations: quotationCount,
+        documents: documentCount,
+      }
+    },
+
     async listRequirements(party: PortalPartyContext): Promise<BuyerRequirementList> {
       const { items, hasMore } = await rfqs.listForBuyer(party.organizationId, party.accountId)
 

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { screen } from '@testing-library/react'
+import type { BuyerPortalSummary } from '@triyara/core'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -35,8 +36,19 @@ const FORBIDDEN_IDS = {
   userId: 'u1',
 }
 
-function renderOverview(over: Partial<PortalOverviewView> = {}) {
-  return renderWithProviders(<PortalOverview view={{ ...VIEW, ...over }} />, {
+/** Nothing with us yet, unless a test says otherwise. */
+const NO_SUMMARY: BuyerPortalSummary = {
+  requirements: 0,
+  pendingRequirements: 0,
+  quotations: 0,
+  documents: 0,
+}
+
+function renderOverview(
+  over: Partial<PortalOverviewView> = {},
+  summary: BuyerPortalSummary = NO_SUMMARY,
+) {
+  return renderWithProviders(<PortalOverview view={{ ...VIEW, ...over }} summary={summary} />, {
     roles: ['EXTERNAL_PARTY'],
   })
 }
@@ -101,7 +113,10 @@ describe('the display projection carries no identifiers', () => {
     // context holds. Nothing renders them, so nothing reaches the DOM - this is
     // what fails if somebody later spreads `party` into the markup.
     const { container } = renderWithProviders(
-      <PortalOverview view={{ ...VIEW, ...FORBIDDEN_IDS } as PortalOverviewView} />,
+      <PortalOverview
+        view={{ ...VIEW, ...FORBIDDEN_IDS } as PortalOverviewView}
+        summary={NO_SUMMARY}
+      />,
       { roles: ['EXTERNAL_PARTY'] },
     )
 
@@ -182,5 +197,78 @@ describe('the page reaches account data only through the portal context', () => 
     expect(code).toContain('export default async function Page()')
     expect(code).not.toContain('searchParams')
     expect(code).not.toContain('params')
+  })
+})
+
+/**
+ * The summary tiles.
+ *
+ * A count is a way in to a page, not a fact on its own, so what matters is that
+ * each number is shown against the right label and links to the page that will
+ * show the same rows. The numbers themselves are the service's business and are
+ * asserted there.
+ */
+const SUMMARY: BuyerPortalSummary = {
+  requirements: 3,
+  pendingRequirements: 1,
+  quotations: 2,
+  documents: 5,
+}
+
+describe('the overview summarises what the buyer has with us', () => {
+  it.each([
+    ['Requirements', '3', '/portal/requirements'],
+    ['Quotations', '2', '/portal/quotations'],
+    ['Documents', '5', '/portal/documents'],
+  ])('shows %s as %s and links to its page', (label, count, href) => {
+    renderOverview({}, SUMMARY)
+    const link = screen.getByRole('link', { name: new RegExp(label, 'i') })
+    expect(link).toHaveAttribute('href', href)
+    expect(link).toHaveTextContent(count)
+  })
+
+  it('says how many enquiries are still being reviewed', () => {
+    renderOverview({}, SUMMARY)
+    expect(screen.getByText(/1 awaiting review/i)).toBeInTheDocument()
+  })
+
+  it('stays silent about pending work when there is none', () => {
+    renderOverview({}, { ...SUMMARY, pendingRequirements: 0 })
+    expect(screen.queryByText(/awaiting review/i)).not.toBeInTheDocument()
+  })
+
+  it('shows an honest zero rather than hiding the tile', () => {
+    // A buyer with nothing yet should still see where things will appear.
+    renderOverview({}, { requirements: 0, pendingRequirements: 0, quotations: 0, documents: 0 })
+    const link = screen.getByRole('link', { name: /requirements/i })
+    expect(link).toHaveTextContent('0')
+  })
+
+  it('offers a way to send a new requirement', () => {
+    renderOverview({}, SUMMARY)
+    expect(screen.getByRole('link', { name: /new requirement/i })).toHaveAttribute(
+      'href',
+      '/portal/requirements/new',
+    )
+  })
+
+  it('has no accessibility violations with the tiles present', async () => {
+    const { container } = renderOverview({}, SUMMARY)
+    await expectNoAxeViolations(container)
+  })
+
+  it('renders no identifier even when the summary object carries some', () => {
+    const polluted = {
+      ...SUMMARY,
+      accountId: 'acct-internal-1',
+      organizationId: 'org-internal-1',
+      userId: 'u-internal-1',
+    } as unknown as BuyerPortalSummary
+
+    const { container } = renderOverview({}, polluted)
+    const rendered = container.innerHTML
+    for (const leak of ['acct-internal-1', 'org-internal-1', 'u-internal-1']) {
+      expect(rendered, `must not render ${leak}`).not.toContain(leak)
+    }
   })
 })

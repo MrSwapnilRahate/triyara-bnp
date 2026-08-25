@@ -159,6 +159,7 @@ export {
   type BuyerPendingRequirementView,
   type BuyerPortalDeps,
   type BuyerPortalService,
+  type BuyerPortalSummary,
   type BuyerQuotationChargeView,
   type BuyerQuotationDetailView,
   type BuyerQuotationLineView,

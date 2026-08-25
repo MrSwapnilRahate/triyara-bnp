@@ -1,4 +1,6 @@
+import type { BuyerPortalSummary } from '@triyara/core'
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@triyara/ui'
+import Link from 'next/link'
 
 /**
  * What the portal overview is allowed to show (TRY-BNP-PORTAL-VIEW).
@@ -31,16 +33,44 @@ export interface PortalOverviewView {
   readonly signedInAs: string
 }
 
-export function PortalOverview({ view }: { view: PortalOverviewView }) {
+export function PortalOverview({
+  view,
+  summary,
+}: {
+  view: PortalOverviewView
+  summary: BuyerPortalSummary
+}) {
   return (
     <div className="space-y-gap-lg">
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold text-content">Your TRIYARA portal</h1>
         <p className="text-content-muted">
-          You&rsquo;re signed in as {view.signedInAs}. Your requirements, quotations and documents
-          will appear here as we set them up with you.
+          You&rsquo;re signed in as {view.signedInAs}. Here is what you have with us.
         </p>
       </div>
+
+      {/* A way in to each page, carrying the one fact a summary can honestly
+          give: how many. Every figure is counted with the same scope its page
+          uses, so a tile and the page behind it cannot disagree. */}
+      <ul className="grid gap-gap sm:grid-cols-2 lg:grid-cols-4">
+        <Tile
+          href="/portal/requirements"
+          label="Requirements"
+          count={summary.requirements}
+          hint={
+            summary.pendingRequirements > 0
+              ? `${summary.pendingRequirements} awaiting review`
+              : undefined
+          }
+        />
+        <Tile href="/portal/quotations" label="Quotations" count={summary.quotations} />
+        <Tile href="/portal/documents" label="Documents" count={summary.documents} />
+        <Tile
+          href="/portal/requirements/new"
+          label="New requirement"
+          action="Tell us what you need"
+        />
+      </ul>
 
       <Card>
         <CardHeader>
@@ -71,5 +101,44 @@ export function PortalOverview({ view }: { view: PortalOverviewView }) {
         Your TRIYARA contact remains the best way to reach us in the meantime.
       </p>
     </div>
+  )
+}
+
+/**
+ * One way in to a page, with the count that page will show.
+ *
+ * A link rather than a figure on its own. A number the buyer cannot act on is
+ * an interruption; the point of the tile is the page behind it.
+ */
+function Tile({
+  href,
+  label,
+  count,
+  hint,
+  action,
+}: {
+  href: string
+  label: string
+  count?: number
+  hint?: string
+  action?: string
+}) {
+  return (
+    <li>
+      <Link
+        href={href}
+        className="focus-ring block h-full rounded-md border border-line bg-surface p-gutter transition-colors hover:border-accent"
+      >
+        <p className="text-2xs font-semibold uppercase tracking-[0.15em] text-content-subtle">
+          {label}
+        </p>
+        {action ? (
+          <p className="mt-gap-xs text-base font-medium text-content">{action}</p>
+        ) : (
+          <p className="mt-gap-xs text-2xl font-semibold text-content">{count}</p>
+        )}
+        {hint ? <p className="mt-1 text-sm text-content-muted">{hint}</p> : null}
+      </Link>
+    </li>
   )
 }
