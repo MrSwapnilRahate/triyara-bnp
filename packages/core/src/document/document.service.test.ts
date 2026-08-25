@@ -44,6 +44,10 @@ function fakeRepo(over: Partial<DocumentRepository> = {}): DocumentRepository {
     create: async () => makeDoc(),
     findById: async () => makeDoc(),
     list: async () => ({ items: [], nextCursor: null, hasMore: false }),
+    // Present only to satisfy `DocumentRepository`. The internal document
+    // service never reads a buyer-scoped list; the portal does, through its own
+    // service and its own account-scoped query.
+    listDocumentsForBuyer: async () => ({ items: [], hasMore: false }),
     mutate: async () => makeDoc({ version: 2 }),
     softDelete: async () => makeDoc({ deletedAt: new Date() }),
     restore: async () => makeDoc(),

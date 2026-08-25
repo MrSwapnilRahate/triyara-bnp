@@ -96,6 +96,46 @@ export interface ListDocumentsParams {
 
 const SORTABLE = new Set(['createdAt', 'title', 'expiryDate', 'status'])
 
+/**
+ * What a buyer may be told about a document on their own account.
+ *
+ * A separate select from `listSelect`, which is the internal projection: it
+ * carries `id`, `organizationId`, `accountId`, `supplierProfileId`, `version`
+ * and `deletedAt`, none of which is content. `detailSelect` goes further and
+ * adds `currentStorageKey` and `currentChecksum` - the path to the file itself
+ * and the hash of its bytes - along with `createdById` and `updatedById`, which
+ * name the TRIYARA staff who handled it.
+ *
+ * The file is described but not reachable. `currentOriginalFilename`,
+ * `currentFileSize` and `currentMimeType` say what was uploaded; the storage key
+ * that would fetch it is absent, and there is no download in this batch. A key
+ * in a payload is a key in the DOM.
+ */
+const buyerDocumentSelect = {
+  title: true,
+  type: true,
+  status: true,
+  issuedDate: true,
+  expiryDate: true,
+  currentOriginalFilename: true,
+  currentFileSize: true,
+  currentMimeType: true,
+  createdAt: true,
+} satisfies Prisma.DocumentSelect
+
+export type BuyerDocumentItem = Prisma.DocumentGetPayload<{
+  select: typeof buyerDocumentSelect
+}>
+
+export interface BuyerDocumentListResult {
+  items: BuyerDocumentItem[]
+  /** Whether the account holds more documents than were returned. No cursor. */
+  hasMore: boolean
+}
+
+/** How many of a buyer's documents one portal page shows. */
+const DEFAULT_BUYER_DOCUMENT_LIMIT = 50
+
 export interface DocumentRepository {
   create(ctx: MutationCtx, input: CreateDocumentInput): Promise<DocumentRecord>
   findById(
@@ -123,6 +163,11 @@ export interface DocumentRepository {
     input: NewVersionInput,
   ): Promise<DocumentRecord>
   markExpired(orgId: string): Promise<string[]>
+  listDocumentsForBuyer(
+    organizationId: string,
+    accountId: string,
+    limit?: number,
+  ): Promise<BuyerDocumentListResult>
 }
 
 async function loadActive(tx: Prisma.TransactionClient, orgId: string, id: string) {
@@ -199,6 +244,43 @@ export const documentRepository: DocumentRepository = {
       })
       return created
     })
+  },
+
+  /**
+   * The documents on one buyer's own account.
+   *
+   * Not `list`, which is the internal read and takes `accountId` as an OPTIONAL
+   * parameter spread in conditionally - `...(params.accountId ? { accountId } : {})`.
+   * Prisma omits a `where` key whose value is `undefined`, so calling that method
+   * without an account returns every document in the tenant. Correct for a staff
+   * screen that means "all of them"; catastrophic as a portal read, because the
+   * failure mode is silent and looks like success.
+   *
+   * Not `findById` either: it is scoped to `organizationId` and `id` with no
+   * account clause at all, so a guessed id would answer with somebody else's
+   * document the moment a portal caller could reach it.
+   *
+   * All three clauses are required arguments or constants written
+   * unconditionally into the `where`. `organizationId` and `accountId` both come
+   * from the resolved party and never from a URL, a query string, a body or any
+   * other caller input - there is no parameter through which to ask for another
+   * account.
+   */
+  async listDocumentsForBuyer(organizationId, accountId, limit = DEFAULT_BUYER_DOCUMENT_LIMIT) {
+    const rows = await prisma.document.findMany({
+      where: {
+        organizationId,
+        accountId,
+        deletedAt: null,
+      },
+      select: buyerDocumentSelect,
+      // Newest first. `createdAt` is set on every row by the schema default, so
+      // unlike a nullable date it cannot sort NULLs to the front.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    })
+
+    return { items: rows.slice(0, limit), hasMore: rows.length > limit }
   },
 
   findById(orgId, id, opts) {

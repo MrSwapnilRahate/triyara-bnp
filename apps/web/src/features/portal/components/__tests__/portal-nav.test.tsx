@@ -43,17 +43,17 @@ function currentLabel(): string | null {
 describe('the portal navigation offers the three screens the buyer has', () => {
   it('renders every item', () => {
     renderNav('/portal')
-    for (const label of ['Overview', 'Requirements', 'Quotations']) {
+    for (const label of ['Overview', 'Requirements', 'Quotations', 'Documents']) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
     }
   })
 
-  it('offers exactly three destinations, and no more', () => {
-    // The absences are the point: orders, shipments, messages, documents and
-    // anything supplier-shaped are not built, and a link that 404s teaches a
-    // buyer only that something exists they cannot have.
+  it('offers exactly four destinations, and no more', () => {
+    // The absences are the point: orders, shipments, messages and anything
+    // supplier-shaped are not built, and a link that 404s teaches a buyer only
+    // that something exists they cannot have.
     renderNav('/portal')
-    expect(screen.getAllByRole('link')).toHaveLength(3)
+    expect(screen.getAllByRole('link')).toHaveLength(4)
   })
 
   it('names a landmark a screen reader can jump to', () => {
@@ -63,7 +63,7 @@ describe('the portal navigation offers the three screens the buyer has', () => {
 
   it('announces how many destinations there are, as a list', () => {
     renderNav('/portal')
-    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+    expect(screen.getAllByRole('listitem')).toHaveLength(4)
   })
 })
 
@@ -129,13 +129,18 @@ describe('the active item tells the truth about where you are', () => {
     },
   )
 
+  it('marks Documents on the documents page', () => {
+    renderNav('/portal/documents')
+    expect(currentLabel()).toBe('Documents')
+  })
+
   it('leaves every other item unmarked', () => {
     renderNav('/portal/quotations')
     const unmarked = screen
       .getAllByRole('link')
       .filter((a) => a.textContent !== 'Quotations')
       .map((a) => a.getAttribute('aria-current'))
-    expect(unmarked).toEqual([null, null])
+    expect(unmarked).toEqual([null, null, null])
   })
 
   it('marks nothing on a portal route that is not one of the three', () => {
