@@ -8,6 +8,7 @@ import type {
   BuyerRfqListItem,
   BuyerRfqListResult,
 } from '@triyara/db'
+import { ForbiddenError } from '@triyara/lib'
 import { describe, expect, it } from 'vitest'
 
 import { createBuyerPortalService } from './buyer-portal.service'
@@ -213,15 +214,85 @@ function documentRow(over: Partial<DocumentRow> = {}): DocumentRow {
   } as DocumentRow
 }
 
+/** An intake row as `buyerPendingSelect` returns it, plus the scope columns. */
+interface IntakeRow {
+  organizationId: string
+  buyerAccountId: string | null
+  status: string
+  reference: string
+  product: string
+  quantity: string
+  createdAt: Date
+}
+
+function intakeRow(over: Partial<IntakeRow> = {}): IntakeRow {
+  return {
+    organizationId: ORG,
+    buyerAccountId: ACCOUNT,
+    status: 'NEW',
+    reference: 'QR-2026-000001',
+    product: 'Sona Masoori rice',
+    quantity: '2 x 20ft container',
+    createdAt: new Date('2026-03-01'),
+    ...over,
+  }
+}
+
+const PENDING_STATUSES = ['NEW', 'IN_REVIEW', 'QUALIFIED']
+
 function harness(
   rows: Row[],
   quotationRows: QuotationRow[] = [],
   detailRows: QuotationDetailRow[] = [],
   documentRows: DocumentRow[] = [],
+  intakeRows: IntakeRow[] = [],
+  contact: { name: string; email: string } | null = {
+    name: 'Priya Nair',
+    email: 'priya@buyer.test',
+  },
 ) {
   const calls: { organizationId: string; buyerId: string }[] = []
+  const created: Array<Record<string, unknown>> = []
+  const contactCalls: Array<{ organizationId: string; userId: string }> = []
+  const duplicateCalls: Array<Record<string, unknown>> = []
 
   const service = createBuyerPortalService({
+    contacts: {
+      async findPortalContact(organizationId, userId) {
+        contactCalls.push({ organizationId, userId })
+        return contact
+      },
+    },
+    intake: {
+      async create(ctx, data) {
+        created.push({ ...ctx, ...data })
+        return { reference: 'QR-2026-000999' }
+      },
+      async listPendingForBuyer(organizationId, buyerAccountId, limit = 50) {
+        calls.push({ organizationId, buyerId: buyerAccountId })
+        const found = intakeRows.filter(
+          (r) =>
+            matches(r.organizationId, organizationId) &&
+            matches(r.buyerAccountId, buyerAccountId) &&
+            PENDING_STATUSES.includes(r.status),
+        )
+        return {
+          items: found.slice(0, limit) as never,
+          hasMore: found.length > limit,
+        }
+      },
+      async findRecentDuplicateForBuyer(organizationId, buyerAccountId, product, since) {
+        duplicateCalls.push({ organizationId, buyerAccountId, product, since })
+        const found = intakeRows.find(
+          (r) =>
+            matches(r.organizationId, organizationId) &&
+            matches(r.buyerAccountId, buyerAccountId) &&
+            matches(r.product, product) &&
+            r.createdAt >= since,
+        )
+        return found ? { reference: found.reference } : null
+      },
+    },
     documents: {
       async listDocumentsForBuyer(
         organizationId,
@@ -303,7 +374,7 @@ function harness(
     },
   })
 
-  return { service, calls }
+  return { service, calls, created, contactCalls, duplicateCalls }
 }
 
 const APPROVED_KEYS = [
@@ -1298,5 +1369,264 @@ describe('what a document is allowed to carry', () => {
     const [doc] = (await service.listDocuments(party())).items
     expect(doc?.issuedDate).toBeNull()
     expect(doc?.expiryDate).toBeNull()
+  })
+})
+
+/**
+ * The portal's first write.
+ *
+ * The whole question is where the scopes come from. `submitRequirement` takes
+ * the resolved party and what the buyer typed, and the input type has no key for
+ * an organization, an account, a contact or a source - so these assert that the
+ * row is built from the party and that nothing smuggled into the input can
+ * reach it.
+ */
+const REQUIREMENT = {
+  product: 'Sona Masoori rice',
+  quantity: '2 x 20ft container',
+} as const
+
+describe('a submitted requirement is scoped by the party, never the input', () => {
+  it('takes exactly two arguments, so no account can be passed alongside', () => {
+    const { service } = harness([])
+    expect(service.submitRequirement.length).toBe(2)
+  })
+
+  it('writes the party organization', async () => {
+    const { service, created } = harness([])
+    await service.submitRequirement(party(), REQUIREMENT)
+    expect(created[0]?.organizationId).toBe(ORG)
+  })
+
+  it('writes the party account as the owner', async () => {
+    const { service, created } = harness([])
+    await service.submitRequirement(party(), REQUIREMENT)
+    expect(created[0]?.buyerAccountId).toBe(ACCOUNT)
+  })
+
+  it('records the signed-in user as the actor, not a system sentinel', async () => {
+    // The public path writes `system:public-quote-request` because nobody signed
+    // in. Here somebody did, and the audit trail should say who.
+    const { service, created } = harness([])
+    await service.submitRequirement(party(), REQUIREMENT)
+    expect(created[0]?.actorId).toBe(party().userId)
+  })
+
+  it('follows the signed-in party when it changes', async () => {
+    const { service, created } = harness([])
+    await service.submitRequirement(
+      party({ organizationId: 'org9', accountId: 'acct-9', userId: 'u9' }),
+      REQUIREMENT,
+    )
+    expect(created[0]).toMatchObject({
+      organizationId: 'org9',
+      buyerAccountId: 'acct-9',
+      actorId: 'u9',
+    })
+  })
+
+  it.each(['organizationId', 'buyerAccountId', 'contactName', 'contactEmail', 'source'])(
+    'ignores a caller-supplied %s',
+    async (key) => {
+      const { service, created } = harness([])
+      const smuggled = { ...REQUIREMENT, [key]: 'attacker-value' } as typeof REQUIREMENT
+      await service.submitRequirement(party(), smuggled)
+      expect(created[0]?.[key]).not.toBe('attacker-value')
+    },
+  )
+
+  it('marks the channel as the portal, and does not take it from the caller', async () => {
+    const { service, created } = harness([])
+    await service.submitRequirement(party(), REQUIREMENT)
+    expect(created[0]?.source).toBe('BUYER_PORTAL')
+  })
+})
+
+describe('contact identity comes from the database, not the session or the form', () => {
+  it('reads the contact scoped to the party organization and user', async () => {
+    const { service, contactCalls } = harness([])
+    await service.submitRequirement(party(), REQUIREMENT)
+    expect(contactCalls[0]).toEqual({ organizationId: ORG, userId: party().userId })
+  })
+
+  it('writes the name and address it found', async () => {
+    const { service, created } = harness([])
+    await service.submitRequirement(party(), REQUIREMENT)
+    expect(created[0]?.contactName).toBe('Priya Nair')
+    expect(created[0]?.contactEmail).toBe('priya@buyer.test')
+  })
+
+  it('refuses rather than inventing a contact when the user cannot be found', async () => {
+    // A row we cannot attribute to a person is an enquiry nobody can answer. A
+    // placeholder would put it in the queue looking answerable.
+    const { service, created } = harness([], [], [], [], [], null)
+    await expect(service.submitRequirement(party(), REQUIREMENT)).rejects.toThrow(ForbiddenError)
+    expect(created).toHaveLength(0)
+  })
+
+  it('takes the company from the resolved account, not the form', async () => {
+    const { service, created } = harness([])
+    await service.submitRequirement(party(), REQUIREMENT)
+    expect(created[0]?.companyName).toBe(party().companyName)
+  })
+})
+
+describe('the duplicate guard is scoped to one account', () => {
+  it('returns the existing reference instead of writing a second row', async () => {
+    const { service, created } = harness(
+      [],
+      [],
+      [],
+      [],
+      [
+        intakeRow({
+          product: REQUIREMENT.product,
+          createdAt: new Date(),
+          reference: 'QR-EXISTING',
+        }),
+      ],
+    )
+    const receipt = await service.submitRequirement(party(), REQUIREMENT)
+
+    expect(receipt).toEqual({ reference: 'QR-EXISTING', alreadySubmitted: true })
+    expect(created).toHaveLength(0)
+  })
+
+  it('checks against this account only, so one buyer cannot block another', async () => {
+    const { service, duplicateCalls } = harness([])
+    await service.submitRequirement(party(), REQUIREMENT)
+    expect(duplicateCalls[0]).toMatchObject({ organizationId: ORG, buyerAccountId: ACCOUNT })
+  })
+
+  it('does not treat another account&rsquo;s identical enquiry as a duplicate', async () => {
+    const { service, created } = harness(
+      [],
+      [],
+      [],
+      [],
+      [
+        intakeRow({
+          accountId: undefined,
+          buyerAccountId: 'acct-other',
+          product: REQUIREMENT.product,
+          createdAt: new Date(),
+        } as never),
+      ],
+    )
+    const receipt = await service.submitRequirement(party(), REQUIREMENT)
+
+    expect(receipt.alreadySubmitted).toBe(false)
+    expect(created).toHaveLength(1)
+  })
+
+  it('does not treat another organization&rsquo;s enquiry as a duplicate', async () => {
+    const { service, created } = harness(
+      [],
+      [],
+      [],
+      [],
+      [intakeRow({ organizationId: 'org2', product: REQUIREMENT.product, createdAt: new Date() })],
+    )
+    await service.submitRequirement(party(), REQUIREMENT)
+    expect(created).toHaveLength(1)
+  })
+
+  it('lets the same buyer ask again once the window has passed', async () => {
+    const { service, created } = harness(
+      [],
+      [],
+      [],
+      [],
+      [intakeRow({ product: REQUIREMENT.product, createdAt: new Date('2020-01-01') })],
+    )
+    const receipt = await service.submitRequirement(party(), REQUIREMENT)
+
+    expect(receipt.alreadySubmitted).toBe(false)
+    expect(created).toHaveLength(1)
+  })
+
+  it('looks back a bounded window rather than all of history', async () => {
+    const { service, duplicateCalls } = harness([])
+    await service.submitRequirement(party(), REQUIREMENT)
+    const since = duplicateCalls[0]!.since as Date
+    expect(since.getTime()).toBeGreaterThan(Date.now() - 60 * 60 * 1000)
+    expect(since.getTime()).toBeLessThanOrEqual(Date.now())
+  })
+})
+
+describe('pending submissions are listed for the owning account only', () => {
+  it('returns the account&rsquo;s own pending enquiries', async () => {
+    const { service } = harness([], [], [], [], [intakeRow()])
+    const { items } = await service.listPendingRequirements(party())
+    expect(items).toHaveLength(1)
+    expect(items[0]?.reference).toBe('QR-2026-000001')
+  })
+
+  it('never returns another organization&rsquo;s', async () => {
+    const { service } = harness([], [], [], [], [intakeRow({ organizationId: 'org2' })])
+    expect((await service.listPendingRequirements(party())).items).toEqual([])
+  })
+
+  it('never returns another account&rsquo;s in the same organization', async () => {
+    const { service } = harness([], [], [], [], [intakeRow({ buyerAccountId: 'acct-2' })])
+    expect((await service.listPendingRequirements(party())).items).toEqual([])
+  })
+
+  it('never returns an unattached public enquiry', async () => {
+    // A website submission with no account attached belongs to nobody yet, and
+    // "nobody" must not resolve to whoever happens to be asking.
+    const { service } = harness([], [], [], [], [intakeRow({ buyerAccountId: null })])
+    expect((await service.listPendingRequirements(party())).items).toEqual([])
+  })
+
+  it.each(['PROMOTED', 'REJECTED'])('drops a %s enquiry from the pending list', async (status) => {
+    const { service } = harness([], [], [], [], [intakeRow({ status })])
+    expect((await service.listPendingRequirements(party())).items).toEqual([])
+  })
+
+  it.each(['NEW', 'IN_REVIEW', 'QUALIFIED'])('keeps a %s enquiry visible', async (status) => {
+    const { service } = harness([], [], [], [], [intakeRow({ status })])
+    expect((await service.listPendingRequirements(party())).items).toHaveLength(1)
+  })
+
+  it('returns exactly the approved keys', async () => {
+    const { service } = harness([], [], [], [], [intakeRow()])
+    const [item] = (await service.listPendingRequirements(party())).items
+    expect(Object.keys(item!).sort()).toEqual(['product', 'quantity', 'reference', 'submittedAt'])
+  })
+
+  it.each([
+    'id',
+    'organizationId',
+    'buyerAccountId',
+    'status',
+    'reviewedById',
+    'reviewNotes',
+    'leadScore',
+    'contactEmail',
+    'createdById',
+    'rfqId',
+  ])('never carries %s', async (key) => {
+    const { service } = harness([], [], [], [], [intakeRow()])
+    const [item] = (await service.listPendingRequirements(party())).items
+    expect(item).not.toHaveProperty(key)
+  })
+
+  it('discloses no staff note or lead score even when the row holds them', async () => {
+    const polluted = {
+      ...intakeRow(),
+      id: 'qr-internal-id',
+      reviewedById: 'staff-1',
+      reviewNotes: 'Probably a tyre-kicker',
+      leadScore: 'Cold',
+      createdById: 'staff-2',
+    } as never
+
+    const { service } = harness([], [], [], [], [polluted])
+    const serialized = JSON.stringify((await service.listPendingRequirements(party())).items)
+
+    for (const leak of ['qr-internal-id', 'staff-1', 'tyre-kicker', 'Cold', 'staff-2']) {
+      expect(serialized, `must not disclose ${leak}`).not.toContain(leak)
+    }
   })
 })

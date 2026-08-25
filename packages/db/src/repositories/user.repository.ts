@@ -58,6 +58,27 @@ export const userRepository = {
     })
   },
 
+  /**
+   * The name and address to reach a signed-in person by.
+   *
+   * Organization-scoped, unlike `findById` above, which looks up an id alone
+   * because the JWT callback has no tenant to scope by yet. Anything reached
+   * from the portal carries a resolved tenant, and a lookup that ignores it is
+   * one refactor away from answering across tenants.
+   *
+   * Two columns, both NOT NULL on the model. Nothing else - roles, status,
+   * password hash and preferences are none of a quote request's business.
+   */
+  findPortalContact(
+    organizationId: string,
+    userId: string,
+  ): Promise<{ name: string; email: string } | null> {
+    return prisma.user.findFirst({
+      where: { id: userId, organizationId },
+      select: { name: true, email: true },
+    })
+  },
+
   async markLogin(id: string): Promise<void> {
     await prisma.user.update({ where: { id }, data: { lastLoginAt: new Date() } })
   },

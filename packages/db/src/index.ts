@@ -169,6 +169,8 @@ export {
   type TaxData,
 } from './repositories/quotation-sourcing.repository'
 export {
+  type BuyerPendingListResult,
+  type BuyerPendingRequirement,
   type CreateQuoteRequestData,
   type ListQuoteRequestsParams,
   type QuoteRequestListResult,

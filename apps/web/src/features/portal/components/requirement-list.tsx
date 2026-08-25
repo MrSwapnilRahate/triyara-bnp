@@ -1,4 +1,4 @@
-import type { BuyerRequirementList } from '@triyara/core'
+import type { BuyerPendingRequirementList, BuyerRequirementList } from '@triyara/core'
 import {
   Badge,
   Card,
@@ -22,14 +22,20 @@ import Link from 'next/link'
  * status, because TRIYARA sits between the two and the screen must not quietly
  * stop doing so.
  */
-export function RequirementList({ list }: { list: BuyerRequirementList }) {
-  if (list.items.length === 0) {
+export function RequirementList({
+  list,
+  pending,
+}: {
+  list: BuyerRequirementList
+  pending: BuyerPendingRequirementList
+}) {
+  if (list.items.length === 0 && pending.items.length === 0) {
     return (
       <div className="space-y-gap-lg">
         <Header />
         <EmptyState
           title="No requirements yet"
-          description="When you raise a requirement with your TRIYARA contact, it will appear here."
+          description="Tell us what you need and our sourcing team will take it from there."
         />
       </div>
     )
@@ -38,6 +44,39 @@ export function RequirementList({ list }: { list: BuyerRequirementList }) {
   return (
     <div className="space-y-gap-lg">
       <Header />
+
+      {/* Submitted first, and newest anyway. Something the buyer sent minutes
+          ago belongs above work that has been running for weeks. */}
+      {pending.items.length > 0 ? (
+        <ul className="space-y-gap">
+          {pending.items.map((p) => (
+            <li key={p.reference}>
+              <Card>
+                <CardHeader>
+                  {/* Not a link. There is no detail page for an enquiry nobody
+                      has looked at yet, and a link to a fuller version of what
+                      they just typed would promise one. */}
+                  <CardTitle as="h2">{p.product}</CardTitle>
+                  <CardDescription>
+                    {p.reference} &middot; sent {formatDate(p.submittedAt)}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <dl className="grid gap-gap-lg sm:grid-cols-3">
+                    <Field label="Status">
+                      {/* A different variant from the RFQ badge, deliberately.
+                          These two things are at different stages and must not
+                          read as the same kind of row. */}
+                      <Badge variant="outline">Submitted — under review</Badge>
+                    </Field>
+                    <Field label="Quantity">{p.quantity}</Field>
+                  </dl>
+                </CardContent>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <ul className="space-y-gap">
         {list.items.map((r) => (
@@ -99,11 +138,19 @@ export function RequirementList({ list }: { list: BuyerRequirementList }) {
 
 function Header() {
   return (
-    <div className="space-y-2">
-      <h1 className="text-2xl font-semibold text-content">Your requirements</h1>
-      <p className="text-content-muted">
-        What you have asked us to source, and where each one has got to.
-      </p>
+    <div className="flex flex-wrap items-start justify-between gap-gap">
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold text-content">Your requirements</h1>
+        <p className="text-content-muted">
+          What you have asked us to source, and where each one has got to.
+        </p>
+      </div>
+      <Link
+        href="/portal/requirements/new"
+        className="focus-ring text-on-accent rounded-md bg-accent px-gap py-gap-xs text-sm font-medium"
+      >
+        New requirement
+      </Link>
     </div>
   )
 }
