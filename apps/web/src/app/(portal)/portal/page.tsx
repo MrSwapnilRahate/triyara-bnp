@@ -6,6 +6,7 @@ import {
   PortalOverview,
   type PortalOverviewView,
 } from '@/features/portal/components/portal-overview'
+import { buyerPortalService } from '@/lib/buyer-portal-service'
 import { portalContextService } from '@/lib/portal-context-service'
 
 export const metadata: Metadata = { title: 'Partner Portal · Triyara BNP' }
@@ -49,6 +50,11 @@ export default async function Page() {
   const auth = await requireAuth()
   const party = await portalContextService.resolve(auth)
 
+  // Scoped by the same resolved party as every other portal read. Counted in the
+  // database rather than measured off a list, each with the scope its own page
+  // uses, so a tile cannot claim a number that page does not show.
+  const summary = await buyerPortalService.getSummary(party)
+
   // The display projection. Built field by field from two trusted sources and
   // never by spreading either: `party` carries identifiers that exist for
   // scoping and must not reach the DOM, and `auth.user` is the viewer's own
@@ -63,5 +69,5 @@ export default async function Page() {
     signedInAs: auth.user.name || auth.user.email,
   }
 
-  return <PortalOverview view={view} />
+  return <PortalOverview view={view} summary={summary} />
 }

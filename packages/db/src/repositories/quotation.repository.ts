@@ -415,7 +415,32 @@ function lineRows(
   })
 }
 
+/**
+ * What the portal may see of one buyer's offers.
+ *
+ * Shared by the list and the count so the two can never disagree. The status
+ * filter belongs in here rather than at either call site: a count that included
+ * DRAFT would tell the buyer about an offer nobody has sent them.
+ */
+function buyerQuotationScope(organizationId: string, buyerId: string): Prisma.QuotationWhereInput {
+  return {
+    organizationId,
+    buyerId,
+    status: { in: BUYER_VISIBLE_QUOTATION_STATUSES },
+    deletedAt: null,
+  }
+}
+
 export const quotationRepository = {
+  /**
+   * How many offers this buyer can see.
+   *
+   * Counted in the database, not by measuring the list, which is capped.
+   */
+  countForBuyer(organizationId: string, buyerId: string): Promise<number> {
+    return prisma.quotation.count({ where: buyerQuotationScope(organizationId, buyerId) })
+  },
+
   async create(
     ctx: MutationCtx,
     data: CreateQuotationData,
@@ -545,12 +570,7 @@ export const quotationRepository = {
     limit = DEFAULT_BUYER_QUOTATION_LIMIT,
   ): Promise<BuyerQuotationListResult> {
     const rows = await prisma.quotation.findMany({
-      where: {
-        organizationId,
-        buyerId,
-        status: { in: BUYER_VISIBLE_QUOTATION_STATUSES },
-        deletedAt: null,
-      },
+      where: buyerQuotationScope(organizationId, buyerId),
       select: buyerQuotationSelect,
       // Most recently sent first. `sentAt` is non-null for every status in the
       // buyer-visible set, since all of them follow the act of sending.

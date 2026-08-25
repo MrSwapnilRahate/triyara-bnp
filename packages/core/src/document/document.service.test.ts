@@ -48,6 +48,7 @@ function fakeRepo(over: Partial<DocumentRepository> = {}): DocumentRepository {
     // service never reads a buyer-scoped list; the portal does, through its own
     // service and its own account-scoped query.
     listDocumentsForBuyer: async () => ({ items: [], hasMore: false }),
+    countDocumentsForBuyer: async () => 0,
     mutate: async () => makeDoc({ version: 2 }),
     softDelete: async () => makeDoc({ deletedAt: new Date() }),
     restore: async () => makeDoc(),

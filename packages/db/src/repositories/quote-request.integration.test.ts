@@ -298,6 +298,56 @@ describe.skipIf(!process.env.DATABASE_URL)('quote request intake (integration)',
       }
     })
 
+    it('counts exactly what the list returns', async () => {
+      // The property that matters for the overview: the tile and the page it
+      // links to must never disagree. Compared against the list rather than a
+      // hard-coded figure, so the two cannot drift apart as fixtures change.
+      const { items } = await quoteRequestRepository.listPendingForBuyer(orgA, mine)
+      expect(await quoteRequestRepository.countPendingForBuyer(orgA, mine)).toBe(items.length)
+    })
+
+    it('counts each account separately, never the tenant', async () => {
+      // Both accounts hold pending enquiries in this organization. Each count
+      // must match that account's OWN list - dropping the account clause makes
+      // both equal the tenant total instead, which is strictly larger than
+      // either.
+      const [mineList, siblingList] = await Promise.all([
+        quoteRequestRepository.listPendingForBuyer(orgA, mine),
+        quoteRequestRepository.listPendingForBuyer(orgA, sibling),
+      ])
+      const [mineCount, siblingCount] = await Promise.all([
+        quoteRequestRepository.countPendingForBuyer(orgA, mine),
+        quoteRequestRepository.countPendingForBuyer(orgA, sibling),
+      ])
+
+      expect(mineCount).toBe(mineList.items.length)
+      expect(siblingCount).toBe(siblingList.items.length)
+
+      // The tenant genuinely holds more than either account sees, so a count
+      // that ignored the account could not pass both assertions above.
+      const tenantTotal = await prisma.quoteRequest.count({
+        where: { organizationId: orgA, status: { in: ['NEW', 'IN_REVIEW', 'QUALIFIED'] } },
+      })
+      expect(tenantTotal).toBeGreaterThan(mineCount)
+      expect(tenantTotal).toBeGreaterThan(siblingCount)
+    })
+
+    it('counts nothing across tenants', async () => {
+      expect(await quoteRequestRepository.countPendingForBuyer(orgB, mine)).toBe(0)
+      expect(await quoteRequestRepository.countPendingForBuyer(orgA, foreign)).toBe(0)
+    })
+
+    it('counts nothing for an empty account rather than the whole tenant', async () => {
+      // The fail-open shape: `...(buyerAccountId ? {...} : {})` counts every
+      // enquiry in the organization, including other buyers' and the unattached
+      // public ones.
+      expect(await quoteRequestRepository.countPendingForBuyer(orgA, '')).toBe(0)
+    })
+
+    it('counts nothing for an empty organization', async () => {
+      expect(await quoteRequestRepository.countPendingForBuyer('', mine)).toBe(0)
+    })
+
     it('reports hasMore without handing back a cursor', async () => {
       const page = await quoteRequestRepository.listPendingForBuyer(orgA, mine, 1)
       expect(page.items).toHaveLength(1)

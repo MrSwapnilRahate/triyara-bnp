@@ -237,6 +237,18 @@ export interface BuyerRfqListResult {
 /** How many of a buyer's RFQs one portal page shows. */
 const DEFAULT_BUYER_RFQ_LIMIT = 50
 
+/**
+ * What the portal may see of one buyer's requirements.
+ *
+ * Shared by the list and the count, and shared deliberately. Written out twice
+ * they would drift, and a summary that disagrees with the page it links to is
+ * worse than no summary: the buyer believes the smaller number and assumes
+ * something of theirs went missing.
+ */
+function buyerRfqScope(organizationId: string, buyerId: string): Prisma.RFQWhereInput {
+  return { organizationId, buyerId, deletedAt: null }
+}
+
 function conflictOnUnique(error: unknown): never {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
     throw new ConflictError('An RFQ with that number already exists.')
@@ -360,17 +372,25 @@ export const rfqRepository = {
    * would hand over an RFQ id - which the buyer-facing projection excludes.
    * Paging belongs with the detail view, where an identifier is needed anyway.
    */
+  /**
+   * How many requirements this buyer has with us.
+   *
+   * Same scope object as `listForBuyer`, so the number on the overview and the
+   * rows on the requirements page can never disagree. Counted in the database
+   * rather than by measuring the list, which is capped at fifty and would quietly
+   * under-report the moment a buyer had more.
+   */
+  countForBuyer(organizationId: string, buyerId: string): Promise<number> {
+    return prisma.rFQ.count({ where: buyerRfqScope(organizationId, buyerId) })
+  },
+
   async listForBuyer(
     organizationId: string,
     buyerId: string,
     limit = DEFAULT_BUYER_RFQ_LIMIT,
   ): Promise<BuyerRfqListResult> {
     const rows = await prisma.rFQ.findMany({
-      where: {
-        organizationId,
-        buyerId,
-        deletedAt: null,
-      },
+      where: buyerRfqScope(organizationId, buyerId),
       select: buyerListSelect,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       // One more than asked for, so "is there another page" is answered without
