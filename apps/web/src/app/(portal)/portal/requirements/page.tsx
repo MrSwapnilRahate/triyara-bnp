@@ -26,7 +26,13 @@ export const dynamic = 'force-dynamic'
 export default async function Page() {
   const auth = await requireAuth()
   const party = await portalContextService.resolve(auth)
-  const list = await buyerPortalService.listRequirements(party)
+  // Both reads are scoped by the same resolved party. Fetched together because
+  // they are two halves of one answer to "what have I got with you": an enquiry
+  // still in triage, and an RFQ we are already sourcing against.
+  const [list, pending] = await Promise.all([
+    buyerPortalService.listRequirements(party),
+    buyerPortalService.listPendingRequirements(party),
+  ])
 
-  return <RequirementList list={list} />
+  return <RequirementList list={list} pending={pending} />
 }

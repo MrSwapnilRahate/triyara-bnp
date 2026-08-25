@@ -166,4 +166,209 @@ describe.skipIf(!process.env.DATABASE_URL)('quote request intake (integration)',
       expect(promoted?.rfqId).toBeTruthy()
     })
   })
+
+  /**
+   * The buyer-portal reads, against a real database.
+   *
+   * `list` above is the trade desk's query: it takes `buyerAccountId` optionally
+   * and spreads it conditionally, which is right there and would be a disaster
+   * on a portal read, because a falsy account drops the clause and returns the
+   * whole tenant. These prove the portal's own queries carry both scopes
+   * unconditionally.
+   *
+   * The fixture puts two accounts in ONE organization and a third in another,
+   * every one of them with an enquiry for the same product, so a dropped
+   * predicate returns somebody else's row rather than an empty list - a mistake
+   * that shows up as data appearing, which is far easier to miss.
+   */
+  describe('portal reads are scoped to one account', () => {
+    const PRODUCT = 'Turmeric Fingers'
+    const mine = `acct-mine-${randomUUID().slice(0, 8)}`
+    const sibling = `acct-sibling-${randomUUID().slice(0, 8)}`
+    const foreign = `acct-foreign-${randomUUID().slice(0, 8)}`
+
+    beforeAll(async () => {
+      // Mine: one pending, one promoted, one rejected.
+      await quoteRequestRepository.create(
+        ctxFor(orgA),
+        enquiry({ product: PRODUCT, buyerAccountId: mine, source: 'BUYER_PORTAL' }),
+      )
+      const promoted = await quoteRequestRepository.create(
+        ctxFor(orgA),
+        enquiry({ product: 'Promoted Goods', buyerAccountId: mine }),
+      )
+      await quoteRequestRepository.markPromoted(
+        ctxFor(orgA),
+        promoted.id,
+        promoted.version,
+        `rfq-${randomUUID().slice(0, 8)}`,
+        mine,
+      )
+      const rejected = await quoteRequestRepository.create(
+        ctxFor(orgA),
+        enquiry({ product: 'Rejected Goods', buyerAccountId: mine }),
+      )
+      await quoteRequestRepository.review(ctxFor(orgA), rejected.id, rejected.version, {
+        status: 'REJECTED',
+      })
+
+      // Same tenant, different account. Same product on purpose.
+      await quoteRequestRepository.create(
+        ctxFor(orgA),
+        enquiry({ product: PRODUCT, buyerAccountId: sibling }),
+      )
+      // Different tenant.
+      await quoteRequestRepository.create(
+        ctxFor(orgB),
+        enquiry({ product: PRODUCT, buyerAccountId: foreign }),
+      )
+      // Unattached public submission in this tenant - belongs to nobody.
+      await quoteRequestRepository.create(ctxFor(orgA), enquiry({ product: PRODUCT }))
+    })
+
+    it('persists the account and the channel', async () => {
+      const { items } = await quoteRequestRepository.listPendingForBuyer(orgA, mine)
+      expect(items.some((i) => i.product === PRODUCT)).toBe(true)
+
+      const row = await prisma.quoteRequest.findFirst({
+        where: { organizationId: orgA, buyerAccountId: mine, product: PRODUCT },
+        select: { buyerAccountId: true, source: true, status: true },
+      })
+      expect(row?.buyerAccountId).toBe(mine)
+      expect(row?.source).toBe('BUYER_PORTAL')
+      expect(row?.status).toBe('NEW')
+    })
+
+    it('excludes another account in the same organization', async () => {
+      const { items } = await quoteRequestRepository.listPendingForBuyer(orgA, sibling)
+      const forMine = await quoteRequestRepository.listPendingForBuyer(orgA, mine)
+      // Both exist and both are for the same product - the only thing telling
+      // them apart is the account clause.
+      expect(items).toHaveLength(1)
+      expect(forMine.items.map((i) => i.product)).not.toContain('Rejected Goods')
+    })
+
+    it('excludes another organization', async () => {
+      expect((await quoteRequestRepository.listPendingForBuyer(orgB, mine)).items).toEqual([])
+      expect((await quoteRequestRepository.listPendingForBuyer(orgA, foreign)).items).toEqual([])
+    })
+
+    it('returns nothing for an empty account rather than the whole tenant', async () => {
+      // Written as `...(buyerAccountId ? { buyerAccountId } : {})` this returns
+      // every enquiry in the organization, including the unattached public one.
+      expect((await quoteRequestRepository.listPendingForBuyer(orgA, '')).items).toEqual([])
+    })
+
+    it('returns nothing for an empty organization', async () => {
+      expect((await quoteRequestRepository.listPendingForBuyer('', mine)).items).toEqual([])
+    })
+
+    it('never returns an unattached public enquiry', async () => {
+      const { items } = await quoteRequestRepository.listPendingForBuyer(orgA, mine)
+      // The unattached row has the same product; it is excluded because its
+      // account is NULL, not because of anything about its contents.
+      expect(items.filter((i) => i.product === PRODUCT)).toHaveLength(1)
+    })
+
+    it('drops a promoted enquiry, so the RFQ does not appear twice', async () => {
+      const { items } = await quoteRequestRepository.listPendingForBuyer(orgA, mine)
+      expect(items.map((i) => i.product)).not.toContain('Promoted Goods')
+    })
+
+    it('drops a rejected enquiry', async () => {
+      const { items } = await quoteRequestRepository.listPendingForBuyer(orgA, mine)
+      expect(items.map((i) => i.product)).not.toContain('Rejected Goods')
+    })
+
+    it('selects no internal or staff-only column', async () => {
+      const { items } = await quoteRequestRepository.listPendingForBuyer(orgA, mine)
+      expect(Object.keys(items[0]!).sort()).toEqual([
+        'createdAt',
+        'product',
+        'quantity',
+        'reference',
+      ])
+    })
+
+    it('fetches no contact details, staff note or lead score', async () => {
+      const { items } = await quoteRequestRepository.listPendingForBuyer(orgA, mine)
+      const serialized = JSON.stringify(items)
+      for (const leak of ['buyer@example.test', 'A Buyer', 'system:public-quote-request']) {
+        expect(serialized).not.toContain(leak)
+      }
+    })
+
+    it('reports hasMore without handing back a cursor', async () => {
+      const page = await quoteRequestRepository.listPendingForBuyer(orgA, mine, 1)
+      expect(page.items).toHaveLength(1)
+      expect(page).not.toHaveProperty('nextCursor')
+    })
+  })
+
+  describe('the duplicate guard cannot reach across accounts', () => {
+    const product = `Dup Goods ${randomUUID().slice(0, 8)}`
+    const one = `acct-dup-a-${randomUUID().slice(0, 8)}`
+    const two = `acct-dup-b-${randomUUID().slice(0, 8)}`
+    const since = () => new Date(Date.now() - 2 * 60 * 1000)
+
+    beforeAll(async () => {
+      await quoteRequestRepository.create(
+        ctxFor(orgA),
+        enquiry({ product, buyerAccountId: one, source: 'BUYER_PORTAL' }),
+      )
+    })
+
+    it('finds this account&rsquo;s own recent submission', async () => {
+      const found = await quoteRequestRepository.findRecentDuplicateForBuyer(
+        orgA,
+        one,
+        product,
+        since(),
+      )
+      expect(found?.reference).toMatch(/^QR-/)
+    })
+
+    it('does not let one buyer&rsquo;s enquiry suppress another&rsquo;s', async () => {
+      // Same tenant, same product, different account. If this matched, the
+      // second buyer would be told their requirement was already submitted and
+      // no row would be written for them.
+      const found = await quoteRequestRepository.findRecentDuplicateForBuyer(
+        orgA,
+        two,
+        product,
+        since(),
+      )
+      expect(found).toBeNull()
+    })
+
+    it('does not reach across tenants', async () => {
+      expect(
+        await quoteRequestRepository.findRecentDuplicateForBuyer(orgB, one, product, since()),
+      ).toBeNull()
+    })
+
+    it('does not match an empty account', async () => {
+      expect(
+        await quoteRequestRepository.findRecentDuplicateForBuyer(orgA, '', product, since()),
+      ).toBeNull()
+    })
+
+    it('ignores a submission older than the window', async () => {
+      const future = new Date(Date.now() + 60 * 1000)
+      expect(
+        await quoteRequestRepository.findRecentDuplicateForBuyer(orgA, one, product, future),
+      ).toBeNull()
+    })
+
+    it('does not match a different product', async () => {
+      expect(
+        await quoteRequestRepository.findRecentDuplicateForBuyer(
+          orgA,
+          one,
+          'Something Else Entirely',
+          since(),
+        ),
+      ).toBeNull()
+    })
+  })
 })

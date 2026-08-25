@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { screen } from '@testing-library/react'
-import type { BuyerRequirementList, BuyerRequirementView } from '@triyara/core'
+import type {
+  BuyerPendingRequirementList,
+  BuyerRequirementList,
+  BuyerRequirementView,
+} from '@triyara/core'
 import { describe, expect, it } from 'vitest'
 
 import { RequirementList } from '@/features/portal/components/requirement-list'
@@ -32,9 +36,17 @@ const ITEM: BuyerRequirementView = {
   createdAt: new Date('2026-08-01'),
 }
 
-function renderList(over: Partial<BuyerRequirementList> = {}) {
+/** No pending submissions unless a test says so - these assert the RFQ half. */
+const NO_PENDING: BuyerPendingRequirementList = { items: [], hasMore: false }
+
+function renderList(
+  over: Partial<BuyerRequirementList> = {},
+  pending: BuyerPendingRequirementList = NO_PENDING,
+) {
   const list: BuyerRequirementList = { items: [ITEM], hasMore: false, ...over }
-  return renderWithProviders(<RequirementList list={list} />, { roles: ['EXTERNAL_PARTY'] })
+  return renderWithProviders(<RequirementList list={list} pending={pending} />, {
+    roles: ['EXTERNAL_PARTY'],
+  })
 }
 
 describe('the requirement list shows the buyer their own records', () => {
@@ -106,7 +118,7 @@ describe('nothing from the other side of the intermediary is rendered', () => {
     } as unknown as BuyerRequirementView
 
     const { container } = renderWithProviders(
-      <RequirementList list={{ items: [polluted], hasMore: false }} />,
+      <RequirementList list={{ items: [polluted], hasMore: false }} pending={NO_PENDING} />,
       { roles: ['EXTERNAL_PARTY'] },
     )
 
@@ -186,5 +198,121 @@ describe('each requirement links to its own detail', () => {
       'href',
       '/portal/requirements/RFQ%2F2026%20001',
     )
+  })
+})
+
+/**
+ * Submitted enquiries, shown beside the RFQs.
+ *
+ * The two must not read as the same kind of row. An RFQ is work we have started;
+ * an enquiry under review is something nobody has looked at yet, and showing it
+ * with an RFQ's status and a link to a detail page would tell the buyer we are
+ * further along than we are.
+ */
+const PENDING = {
+  reference: 'QR-2026-000042',
+  product: 'Turmeric fingers',
+  quantity: '5 MT',
+  submittedAt: new Date('2026-08-20'),
+}
+
+function renderWithPending(items = [PENDING], listItems = [ITEM]) {
+  return renderWithProviders(
+    <RequirementList
+      list={{ items: listItems, hasMore: false }}
+      pending={{ items, hasMore: false }}
+    />,
+    { roles: ['EXTERNAL_PARTY'] },
+  )
+}
+
+describe('a submitted requirement appears while it is still being reviewed', () => {
+  it('shows what they asked for', () => {
+    renderWithPending()
+    expect(screen.getByText('Turmeric fingers')).toBeInTheDocument()
+    expect(screen.getByText('5 MT')).toBeInTheDocument()
+  })
+
+  it('shows the reference they can quote', () => {
+    renderWithPending()
+    expect(screen.getByText(/QR-2026-000042/)).toBeInTheDocument()
+  })
+
+  it('shows when they sent it', () => {
+    renderWithPending()
+    expect(screen.getByText(/20 Aug 2026/)).toBeInTheDocument()
+  })
+
+  it('says plainly that it is under review', () => {
+    renderWithPending()
+    expect(screen.getByText(/submitted — under review/i)).toBeInTheDocument()
+  })
+
+  it('is distinguishable from an RFQ rather than mixed in', () => {
+    // The RFQ carries its own number and status; the enquiry carries neither.
+    renderWithPending()
+    expect(screen.getByText(/RFQ-0001/)).toBeInTheDocument()
+    expect(screen.getByText(/QR-2026-000042/)).toBeInTheDocument()
+  })
+
+  it('does not link to a detail page that does not exist', () => {
+    renderWithPending()
+    const links = screen.queryAllByRole('link').map((a) => a.getAttribute('href'))
+    expect(links.some((h) => h?.includes('QR-2026-000042'))).toBe(false)
+  })
+
+  it('shows only the pending item when there is no RFQ yet', () => {
+    renderWithPending([PENDING], [])
+    expect(screen.getByText('Turmeric fingers')).toBeInTheDocument()
+    expect(screen.queryByText(/No requirements yet/)).not.toBeInTheDocument()
+  })
+
+  it('still offers the empty state when there is genuinely nothing', () => {
+    renderWithProviders(
+      <RequirementList
+        list={{ items: [], hasMore: false }}
+        pending={{ items: [], hasMore: false }}
+      />,
+      { roles: ['EXTERNAL_PARTY'] },
+    )
+    expect(screen.getByText('No requirements yet')).toBeInTheDocument()
+  })
+
+  it('offers a way to submit a new one', () => {
+    renderWithPending()
+    const link = screen.getByRole('link', { name: /new requirement/i })
+    expect(link).toHaveAttribute('href', '/portal/requirements/new')
+  })
+
+  it('has no accessibility violations with both kinds of row', async () => {
+    const { container } = renderWithPending()
+    await expectNoAxeViolations(container)
+  })
+
+  it('renders no internal field even when the object carries some', () => {
+    const polluted = {
+      ...PENDING,
+      id: 'qr-internal-id',
+      organizationId: 'org-internal',
+      buyerAccountId: 'acct-internal',
+      reviewedById: 'staff-1',
+      reviewNotes: 'Probably a tyre-kicker',
+      leadScore: 'Cold',
+      contactEmail: 'priya@buyer.test',
+    } as unknown as typeof PENDING
+
+    const { container } = renderWithPending([polluted], [])
+    const rendered = container.innerHTML
+
+    for (const leak of [
+      'qr-internal-id',
+      'org-internal',
+      'acct-internal',
+      'staff-1',
+      'tyre-kicker',
+      'priya@buyer.test',
+    ]) {
+      expect(rendered, `must not render ${leak}`).not.toContain(leak)
+    }
   })
 })

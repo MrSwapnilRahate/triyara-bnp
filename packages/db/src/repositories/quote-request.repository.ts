@@ -85,7 +85,60 @@ export interface CreateQuoteRequestData {
   preferredContact?: string | undefined
   leadScore?: string | undefined
   source?: string | undefined
+  /**
+   * The buyer this enquiry belongs to, when we already know.
+   *
+   * Public submissions leave it unset - an anonymous visitor has no account, and
+   * staff attach one during triage. A portal submission knows it from the
+   * resolved session, which is the only place it may ever come from: this is an
+   * ownership column, and an ownership column filled from a request payload is
+   * one buyer writing a record that reads as another buyer's.
+   */
+  buyerAccountId?: string | undefined
 }
+
+/**
+ * What a buyer may see of their own submitted enquiry.
+ *
+ * Four fields, and the omissions are the point. `id` and `organizationId` are
+ * internal handles; `reviewedById`, `reviewNotes`, `reviewedAt` and `leadScore`
+ * are staff working notes about this buyer - `leadScore` in particular is a
+ * private assessment of them as a lead, and `detailSelect` carries all of it.
+ * That projection is for the trade desk and must never reach the portal.
+ *
+ * `reference` is here because it is the one identifier the buyer needs: it is
+ * what they quote when they ring up, and it is drawn from a sequence rather than
+ * being a row id.
+ */
+const buyerPendingSelect = {
+  reference: true,
+  product: true,
+  quantity: true,
+  createdAt: true,
+} satisfies Prisma.QuoteRequestSelect
+
+export type BuyerPendingRequirement = Prisma.QuoteRequestGetPayload<{
+  select: typeof buyerPendingSelect
+}>
+
+export interface BuyerPendingListResult {
+  items: BuyerPendingRequirement[]
+  hasMore: boolean
+}
+
+/**
+ * The statuses a buyer is shown as "still with us".
+ *
+ * An allow-list, not `notIn`. PROMOTED is excluded because the RFQ now
+ * represents the same request and showing both would list one requirement
+ * twice; REJECTED is excluded because a refusal is a commercial decision the
+ * trade desk delivers, not something a screen should break to the buyer with no
+ * explanation. Adding a status to the enum leaves it invisible here until
+ * somebody decides what the buyer should be told, which is the safe default.
+ */
+const BUYER_PENDING_STATUSES = ['NEW', 'IN_REVIEW', 'QUALIFIED'] as const
+
+const DEFAULT_BUYER_PENDING_LIMIT = 50
 
 export interface ReviewQuoteRequestData {
   status?: QuoteRequestStatus | undefined
@@ -144,6 +197,68 @@ export const quoteRequestRepository = {
     const items = rows.slice(0, params.limit)
     const nextCursor = rows.length > params.limit ? encodeCursor(items[items.length - 1]!.id) : null
     return { items, nextCursor }
+  },
+
+  /**
+   * The buyer's own submitted enquiries, still in triage.
+   *
+   * Both scopes are required arguments. `list` above takes `buyerAccountId`
+   * optionally and spreads it conditionally, which is correct there - a member
+   * of staff legitimately lists the whole tenant - and would be a disaster here:
+   * a falsy account would drop the clause and hand this buyer every other
+   * buyer's enquiries, contact details and all.
+   *
+   * Status is filtered by allow-list so a promoted enquiry disappears from this
+   * list exactly as the RFQ appears in the other one, and the same requirement
+   * is never shown twice.
+   */
+  async listPendingForBuyer(
+    organizationId: string,
+    buyerAccountId: string,
+    limit = DEFAULT_BUYER_PENDING_LIMIT,
+  ): Promise<BuyerPendingListResult> {
+    const rows = await prisma.quoteRequest.findMany({
+      where: {
+        organizationId,
+        buyerAccountId,
+        status: { in: [...BUYER_PENDING_STATUSES] },
+      },
+      select: buyerPendingSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    })
+
+    return { items: rows.slice(0, limit), hasMore: rows.length > limit }
+  },
+
+  /**
+   * An enquiry this buyer already sent for the same product, moments ago.
+   *
+   * The duplicate guard, and it is scoped to one account on purpose. A guard
+   * keyed on product alone would let one buyer's enquiry suppress another's -
+   * turning a convenience into a way to block a competitor - so the account is a
+   * required argument and the window is short enough to catch a double-click
+   * without refusing a buyer who genuinely needs the same goods twice.
+   *
+   * Returns the existing reference so the caller can show the buyer what already
+   * landed rather than an error about something they did not do wrong.
+   */
+  async findRecentDuplicateForBuyer(
+    organizationId: string,
+    buyerAccountId: string,
+    product: string,
+    since: Date,
+  ): Promise<{ reference: string } | null> {
+    return prisma.quoteRequest.findFirst({
+      where: {
+        organizationId,
+        buyerAccountId,
+        product,
+        createdAt: { gte: since },
+      },
+      select: { reference: true },
+      orderBy: { createdAt: 'desc' },
+    })
   },
 
   async findById(organizationId: string, id: string): Promise<QuoteRequestRecord | null> {

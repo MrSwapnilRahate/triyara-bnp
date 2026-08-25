@@ -154,6 +154,9 @@ export {
   type BuyerDocumentList,
   type BuyerDocumentLookup,
   type BuyerDocumentView,
+  type BuyerIntakeLookup,
+  type BuyerPendingRequirementList,
+  type BuyerPendingRequirementView,
   type BuyerPortalDeps,
   type BuyerPortalService,
   type BuyerQuotationChargeView,
@@ -165,9 +168,11 @@ export {
   type BuyerRequirementDetail,
   type BuyerRequirementItemView,
   type BuyerRequirementList,
+  type BuyerRequirementReceipt,
   type BuyerRequirementView,
   type BuyerRfqLookup,
   createBuyerPortalService,
+  type PortalContactLookup,
 } from './portal/buyer-portal.service'
 export {
   createPortalContextService,

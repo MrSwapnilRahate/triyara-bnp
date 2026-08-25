@@ -1,6 +1,8 @@
 import type {
   BuyerDocumentItem,
   BuyerDocumentListResult,
+  BuyerPendingListResult,
+  BuyerPendingRequirement,
   BuyerQuotationDetail,
   BuyerQuotationItem,
   BuyerQuotationListResult,
@@ -9,6 +11,7 @@ import type {
   BuyerRfqListResult,
 } from '@triyara/db'
 import { ForbiddenError } from '@triyara/lib'
+import type { PortalRequirementDto } from '@triyara/validation'
 
 import type { PortalPartyContext } from './portal-context.service'
 
@@ -267,10 +270,110 @@ export interface BuyerRfqLookup {
   ): Promise<BuyerRfqDetail | null>
 }
 
+/**
+ * A requirement the buyer has sent us that is still in triage.
+ *
+ * Four fields, matching the projection exactly. It is deliberately NOT the same
+ * shape as `BuyerRequirementView`: an enquiry under review is not an RFQ, has no
+ * RFQ number, no priority, no incoterm and no deadline, and dressing it up as
+ * one would tell the buyer we have started sourcing when nobody has looked at it
+ * yet.
+ */
+export interface BuyerPendingRequirementView {
+  readonly reference: string
+  readonly product: string
+  readonly quantity: string
+  readonly submittedAt: Date
+}
+
+export interface BuyerPendingRequirementList {
+  readonly items: BuyerPendingRequirementView[]
+  readonly hasMore: boolean
+}
+
+/** What a buyer is told after their requirement lands. */
+export interface BuyerRequirementReceipt {
+  readonly reference: string
+  /** True when this matched a submission they had just made. */
+  readonly alreadySubmitted: boolean
+}
+
+/** The narrow slice of the intake repository this needs. Nothing wider. */
+export interface BuyerIntakeLookup {
+  create(
+    ctx: { actorId: string; organizationId: string; requestId?: string | undefined },
+    data: {
+      product: string
+      quantity: string
+      contactName: string
+      contactEmail: string
+      buyerAccountId?: string | undefined
+      source?: string | undefined
+      companyName?: string | undefined
+      country?: string | undefined
+      monthlyVolume?: string | undefined
+      packaging?: string | undefined
+      targetPrice?: string | undefined
+      destinationPort?: string | undefined
+      timeline?: string | undefined
+      requirements?: string | undefined
+    },
+  ): Promise<{ reference: string }>
+  listPendingForBuyer(
+    organizationId: string,
+    buyerAccountId: string,
+    limit?: number,
+  ): Promise<BuyerPendingListResult>
+  findRecentDuplicateForBuyer(
+    organizationId: string,
+    buyerAccountId: string,
+    product: string,
+    since: Date,
+  ): Promise<{ reference: string } | null>
+}
+
+/**
+ * Who the signed-in person is, read from the database rather than the token.
+ *
+ * `contactName` and `contactEmail` are NOT NULL on the row, and the session is
+ * the wrong source for them: `loadContext` maps a missing claim to `''`, so
+ * trusting it would write an empty string into a column whose whole purpose is
+ * to be a route back to the buyer. The `User` row has both as required columns.
+ */
+export interface PortalContactLookup {
+  findPortalContact(
+    organizationId: string,
+    userId: string,
+  ): Promise<{ name: string; email: string } | null>
+}
+
 export interface BuyerPortalDeps {
   rfqs: BuyerRfqLookup
   quotations: BuyerQuotationLookup
   documents: BuyerDocumentLookup
+  intake: BuyerIntakeLookup
+  contacts: PortalContactLookup
+}
+
+/**
+ * How long a repeat of the same product counts as the same submission.
+ *
+ * Long enough to absorb a double-click or an impatient reload, short enough that
+ * a buyer who genuinely needs the same goods again an hour later is not told
+ * they already asked.
+ */
+const DUPLICATE_WINDOW_MS = 2 * 60 * 1000
+
+/** The channel this enquiry arrived through. Never taken from the caller. */
+const PORTAL_SOURCE = 'BUYER_PORTAL'
+
+function toPendingRequirement(row: BuyerPendingRequirement): BuyerPendingRequirementView {
+  return {
+    reference: row.reference,
+    product: row.product,
+    quantity: row.quantity,
+    submittedAt: row.createdAt,
+  }
 }
 
 /**
@@ -421,7 +524,13 @@ function toItem(row: BuyerRfqDetail['items'][number]): BuyerRequirementItemView 
   }
 }
 
-export function createBuyerPortalService({ documents, quotations, rfqs }: BuyerPortalDeps) {
+export function createBuyerPortalService({
+  contacts,
+  documents,
+  intake,
+  quotations,
+  rfqs,
+}: BuyerPortalDeps) {
   return {
     /**
      * The requirements this party has raised with us.
@@ -437,6 +546,102 @@ export function createBuyerPortalService({ documents, quotations, rfqs }: BuyerP
       const { items, hasMore } = await rfqs.listForBuyer(party.organizationId, party.accountId)
 
       return { items: items.map(toRequirement), hasMore }
+    },
+
+    /**
+     * The requirements this party has sent us that nobody has triaged yet.
+     *
+     * Shown beside the RFQs rather than instead of them, so a buyer who submits
+     * something can see that it arrived. The two lists never overlap: an enquiry
+     * leaves this one at the moment it is promoted, which is the same moment the
+     * RFQ it became appears in the other.
+     *
+     * Same shape of guarantee as every other read here - both scopes off the
+     * resolved party, neither reachable by a caller.
+     */
+    async listPendingRequirements(party: PortalPartyContext): Promise<BuyerPendingRequirementList> {
+      const { items, hasMore } = await intake.listPendingForBuyer(
+        party.organizationId,
+        party.accountId,
+      )
+
+      return { items: items.map(toPendingRequirement), hasMore }
+    },
+
+    /**
+     * Records a requirement the buyer typed in the portal.
+     *
+     * The first write this portal has ever done, and the rules it follows are
+     * the ones the reads established. Two arguments: the resolved party, and
+     * what they asked for. Organization, account, contact name, contact email,
+     * company, country and source are all derived here from the party - none of
+     * them is a key on the input type, so there is no payload that can set one
+     * and no branch that reads one if it tries.
+     *
+     * It creates an INTAKE record and stops. No RFQ, at all, ever: raising one
+     * is a decision the trade desk makes about whether this is worth sourcing,
+     * and a buyer who could raise their own would be inside the commercial
+     * pipeline without anyone having agreed to put them there. That boundary is
+     * what keeps TRIYARA between the buyer and the supplier network, and it is
+     * why this calls the intake repository rather than the RFQ service.
+     *
+     * Nothing here asserts an ability. EXTERNAL_PARTY holds none and gains none:
+     * `create QuoteRequest` is absent from every role by design, because the
+     * only thing that has ever created an intake record is somebody submitting
+     * one about themselves.
+     */
+    async submitRequirement(
+      party: PortalPartyContext,
+      input: PortalRequirementDto,
+    ): Promise<BuyerRequirementReceipt> {
+      // Read before written, and read from the database. The row needs a name
+      // and an address that reach a real person; the session carries claims that
+      // may be stale and that `loadContext` will happily hand over as `''`.
+      const contact = await contacts.findPortalContact(party.organizationId, party.userId)
+      // No fallback. A submission we could not attribute to a person is an
+      // enquiry nobody can answer, and inventing a placeholder would put an
+      // unreachable record in the trade desk's queue looking exactly like a
+      // reachable one.
+      if (!contact) throw new ForbiddenError(REFUSED)
+
+      // Scoped to this account, so one buyer's repeat cannot suppress another's.
+      const duplicate = await intake.findRecentDuplicateForBuyer(
+        party.organizationId,
+        party.accountId,
+        input.product,
+        new Date(Date.now() - DUPLICATE_WINDOW_MS),
+      )
+      // Answered with the reference they already have rather than an error. The
+      // buyer did nothing wrong by clicking twice, and telling them it failed
+      // would invite a third attempt.
+      if (duplicate) return { reference: duplicate.reference, alreadySubmitted: true }
+
+      const created = await intake.create(
+        {
+          actorId: party.userId,
+          organizationId: party.organizationId,
+        },
+        {
+          // What they asked for.
+          product: input.product,
+          quantity: input.quantity,
+          monthlyVolume: input.monthlyVolume,
+          packaging: input.packaging,
+          targetPrice: input.targetPrice,
+          destinationPort: input.destinationPort,
+          timeline: input.timeline,
+          requirements: input.requirements,
+          // Who they are. Every one of these is server-derived.
+          contactName: contact.name,
+          contactEmail: contact.email,
+          companyName: party.companyName,
+          country: party.country ?? undefined,
+          buyerAccountId: party.accountId,
+          source: PORTAL_SOURCE,
+        },
+      )
+
+      return { reference: created.reference, alreadySubmitted: false }
     },
 
     /**

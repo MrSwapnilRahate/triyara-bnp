@@ -82,6 +82,40 @@ export const publicQuoteRequestSchema = z.object({
 export type PublicQuoteRequestDto = z.infer<typeof publicQuoteRequestSchema>
 
 /**
+ * A requirement submitted from inside the buyer portal.
+ *
+ * What the buyer is asking for, and nothing about who they are. Every identity
+ * and ownership field the row needs - organization, account, contact name,
+ * contact email, company, country, source - is filled from the resolved session
+ * on the server. None of them appears here, so there is no key for a crafted
+ * payload to set and no code path that reads one.
+ *
+ * `.strict()` rather than the default: Zod would otherwise drop unknown keys
+ * silently, and silence is the wrong answer to a request carrying
+ * `buyerAccountId`. Someone sending that is either probing or has misunderstood
+ * the contract, and both deserve a refusal rather than a quiet success that
+ * looks to them like it worked.
+ *
+ * `leadScore` is absent too. It is computed in the browser on the public form,
+ * which is exactly why an authenticated surface must not accept it - a buyer who
+ * can set their own priority has set their own priority.
+ */
+export const portalRequirementSchema = z
+  .object({
+    product: z.string().trim().min(1, 'Tell us which product you need.').max(200),
+    quantity: z.string().trim().min(1, 'Tell us roughly how much you need.').max(200),
+    monthlyVolume: optionalText(200),
+    packaging: optionalText(ANSWER),
+    targetPrice: optionalText(200),
+    destinationPort: optionalText(200),
+    timeline: optionalText(120),
+    requirements: optionalText(2000),
+  })
+  .strict()
+
+export type PortalRequirementDto = z.infer<typeof portalRequirementSchema>
+
+/**
  * Internal triage.
  *
  * Deliberately narrow: an operator moves the enquiry through its lifecycle,
