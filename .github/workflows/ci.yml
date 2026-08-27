@@ -119,6 +119,82 @@ jobs:
       - name: Integration tests - API routes
         run: pnpm --filter @triyara/web exec vitest run integration.test
 
+  e2e:
+    name: Registration flows (Playwright)
+    runs-on: ubuntu-latest
+    # The public registration wizards are client-rendered from end to end: no
+    # <form> element, no `required` attributes, no no-script fallback. Every
+    # other job in this pipeline can pass while both of them are broken in a
+    # browser, which is exactly what a production audit found - the flow could
+    # be checked as far as server-rendered HTML and no further.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: triyara
+          POSTGRES_PASSWORD: triyara
+          POSTGRES_DB: triyara_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # A database of this job's own. Registration is a write, and these tests
+      # leave real rows behind; they land here and nowhere else.
+      DATABASE_URL: postgresql://triyara:triyara@localhost:5432/triyara_e2e
+      AUTH_SECRET: ci-placeholder-secret-000000000000
+      NEXTAUTH_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prepare the database
+        run: |
+          pnpm --filter @triyara/db db:deploy
+          pnpm --filter @triyara/db db:seed
+
+      # `pnpm --filter @triyara/web build` runs that package's script alone, so
+      # the db package's own build - which is `prisma generate` - never fires,
+      # and the server starts without a query engine for this runner's
+      # platform. `migrate deploy` does not generate one either.
+      - name: Generate the Prisma client for this runner
+        run: pnpm --filter @triyara/db db:generate
+
+      # Chromium only. The suite pins one browser, and downloading the other two
+      # would add minutes for coverage nothing here asserts.
+      - name: Install the browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Builds and starts the app itself, via the config's webServer.
+      #
+      # Scoped to the registration specs. The rest of e2/ predates this job and
+      # has never run in CI - `pnpm test:e2e` could not load its config at all -
+      # so those specs are unproven here and would block this job on breakage
+      # that has nothing to do with registration. Widening the net is worth
+      # doing on its own, deliberately.
+      - name: Registration end-to-end tests
+        run: >-
+          pnpm test:e2e
+          e2e/registration-buyer.spec.ts
+          e2e/registration-supplier.spec.ts
+          e2e/registration-mobile.spec.ts
+
+      - name: Upload the report when something failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   security:
     name: Security scan
     runs-on: ubuntu-latest
