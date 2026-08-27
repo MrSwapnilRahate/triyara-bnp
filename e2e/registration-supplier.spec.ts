@@ -1,6 +1,6 @@
-import { expect, type Page, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-import { expectNoFlowErrors, watchForFlowErrors } from './support/runtime-errors'
+import { expect, test } from './support/fixtures'
 import { uniqueSupplier } from './support/test-data'
 
 /**
@@ -54,7 +54,6 @@ test.describe('supplier registration', () => {
   test.skip(!process.env.DATABASE_URL, 'requires a seeded database')
 
   test('loads, hydrates and opens on the first of six steps', async ({ page }) => {
-    const errors = watchForFlowErrors(page)
     await page.goto('/register/supplier')
 
     await expect(page.getByText('Step 1 of 6')).toBeVisible()
@@ -63,8 +62,6 @@ test.describe('supplier registration', () => {
     const companyName = page.getByLabel(/company name/i)
     await companyName.fill('Hydration Probe')
     await expect(companyName).toHaveValue('Hydration Probe')
-
-    expectNoFlowErrors(errors)
   })
 
   test('refuses to advance while the required company answers are missing', async ({ page }) => {
@@ -76,6 +73,20 @@ test.describe('supplier registration', () => {
     await expect(page.getByText('Select a business type.')).toBeVisible()
     await expect(page.getByText(/two-letter country code/i)).toBeVisible()
     await expect(page.getByText('Step 1 of 6')).toBeVisible()
+  })
+
+  test('clears the validation messages once the answers are given', async ({ page }) => {
+    const supplier = uniqueSupplier()
+    await page.goto('/register/supplier')
+    await page.getByRole('button', { name: /continue/i }).click()
+    await expect(page.getByText('Company name is required.')).toBeVisible()
+    await expect(page.getByText('Select a business type.')).toBeVisible()
+
+    await completeCompanyStep(page, supplier.companyName, supplier.legalName)
+
+    await expect(page.getByText('Company name is required.')).toBeHidden()
+    await expect(page.getByText('Select a business type.')).toBeHidden()
+    await expect(page.getByRole('heading', { name: 'Primary contact' })).toBeVisible()
   })
 
   test('constrains the country field to a two-letter code as it is typed', async ({ page }) => {
@@ -134,7 +145,12 @@ test.describe('supplier registration', () => {
     await expect(options.first()).toBeHidden()
   })
 
-  test('accepts the Indian trade identifiers on the company step', async ({ page }) => {
+  test('keeps the Indian trade identifiers after leaving the step and returning', async ({
+    page,
+  }) => {
+    // Advancing proves only that nothing was rejected - it would pass just as
+    // well if all four values were dropped on the floor. Coming back is what
+    // shows they were actually kept.
     const supplier = uniqueSupplier()
     await page.goto('/register/supplier')
 
@@ -144,9 +160,15 @@ test.describe('supplier registration', () => {
     await page.getByLabel(/employee count/i).fill('120')
 
     await completeCompanyStep(page, supplier.companyName, supplier.legalName)
-
-    // Cleared the step, so none of those four was rejected.
     await expect(page.getByRole('heading', { name: 'Primary contact' })).toBeVisible()
+
+    await page.getByRole('button', { name: /back/i }).click()
+    await expect(page.getByText('Step 1 of 6')).toBeVisible()
+
+    await expect(page.getByLabel(/gst number/i)).toHaveValue('29ABCDE1234F1Z5')
+    await expect(page.getByLabel(/iec number/i)).toHaveValue('0388014979')
+    await expect(page.getByLabel(/year established/i)).toHaveValue('2011')
+    await expect(page.getByLabel(/employee count/i)).toHaveValue('120')
   })
 
   test('walks every step, and Back returns with the answers intact', async ({ page }) => {
@@ -174,7 +196,6 @@ test.describe('supplier registration', () => {
   })
 
   test('submits through the UI and lands on the confirmation', async ({ page }) => {
-    const errors = watchForFlowErrors(page)
     const supplier = uniqueSupplier()
 
     await page.goto('/register/supplier')
@@ -188,8 +209,6 @@ test.describe('supplier registration', () => {
 
     await page.waitForURL('**/register/supplier/thank-you')
     await expect(page.getByRole('heading').first()).toBeVisible()
-
-    expectNoFlowErrors(errors)
   })
 
   test('disables the submit control while sending, so a second click cannot post again', async ({

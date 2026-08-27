@@ -156,17 +156,18 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      # Before anything that loads Prisma Client. `pnpm --filter @triyara/web
+      # build` runs that package's script alone, so the db package's own build -
+      # which is `prisma generate` - never fires, and the server would start
+      # without a query engine for this runner's platform. `migrate deploy` does
+      # not generate one either, and the seed loads the client.
+      - name: Generate the Prisma client for this runner
+        run: pnpm --filter @triyara/db db:generate
+
       - name: Prepare the database
         run: |
           pnpm --filter @triyara/db db:deploy
           pnpm --filter @triyara/db db:seed
-
-      # `pnpm --filter @triyara/web build` runs that package's script alone, so
-      # the db package's own build - which is `prisma generate` - never fires,
-      # and the server starts without a query engine for this runner's
-      # platform. `migrate deploy` does not generate one either.
-      - name: Generate the Prisma client for this runner
-        run: pnpm --filter @triyara/db db:generate
 
       # Chromium only. The suite pins one browser, and downloading the other two
       # would add minutes for coverage nothing here asserts.

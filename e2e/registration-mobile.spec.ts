@@ -1,6 +1,6 @@
-import { expect, type Page, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-import { expectNoFlowErrors, watchForFlowErrors } from './support/runtime-errors'
+import { expect, test } from './support/fixtures'
 
 /**
  * Both public wizards on a phone.
@@ -32,7 +32,6 @@ for (const registration of PAGES) {
     test.skip(!process.env.DATABASE_URL, 'requires a seeded database')
 
     test('loads on the first step without running off the side', async ({ page }) => {
-      const errors = watchForFlowErrors(page)
       await page.goto(registration.path)
 
       await expect(page.getByText(registration.firstStep)).toBeVisible()
@@ -42,8 +41,6 @@ for (const registration of PAGES) {
       // screen is. The threshold keeps this from failing on sub-pixel noise
       // while still catching anything a person would notice.
       expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1)
-
-      expectNoFlowErrors(errors)
     })
 
     test('the primary control is reachable and the form is usable', async ({ page }) => {

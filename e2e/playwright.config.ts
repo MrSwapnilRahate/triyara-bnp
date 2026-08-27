@@ -18,6 +18,13 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // Refuses an unsafe database before a server or a browser is started. See
+  // support/database-guard.ts - these tests write real registration rows.
+  globalSetup: './support/global-setup.ts',
+  // Written to the repository root, which is the path CI uploads on failure.
+  // Without a reporter that produces one, that upload found nothing and every
+  // CI failure had to be debugged from the log alone.
+  reporter: [['list'], ['html', { outputFolder: '../playwright-report', open: 'never' }]],
   use: { baseURL: 'http://localhost:3000', trace: 'on-first-retry' },
   webServer: {
     // A production build, not `next dev`. The application sends its own
@@ -61,7 +68,12 @@ export default defineConfig({
       // time, so the region has to be present for the build, not just the run.
       STORAGE_REGION: 'eu-west-1',
     },
-    reuseExistingServer: !process.env.CI,
+    // Never reused, not even locally. A server already on :3000 is almost
+    // certainly a development one reading apps/web/.env.local, and reusing it
+    // would run these tests - which submit real registrations - against
+    // whatever database that server happens to hold open, silently defeating
+    // the guard above. Paying for a build is the cheaper mistake.
+    reuseExistingServer: false,
     // A cold Next build is slow; the default two minutes is not enough.
     timeout: 300_000,
   },

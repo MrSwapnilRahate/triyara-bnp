@@ -1,6 +1,6 @@
-import { expect, type Page, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
-import { expectNoFlowErrors, watchForFlowErrors } from './support/runtime-errors'
+import { expect, test } from './support/fixtures'
 import { uniqueBuyer } from './support/test-data'
 
 /**
@@ -51,7 +51,6 @@ test.describe('buyer registration', () => {
   test.skip(!process.env.DATABASE_URL, 'requires a seeded database')
 
   test('loads, hydrates and opens on the first of five steps', async ({ page }) => {
-    const errors = watchForFlowErrors(page)
     await page.goto('/register/buyer')
 
     await expect(page.getByText('Step 1 of 5')).toBeVisible()
@@ -63,8 +62,6 @@ test.describe('buyer registration', () => {
     const companyName = page.getByLabel(/company name/i)
     await companyName.fill('Hydration Probe')
     await expect(companyName).toHaveValue('Hydration Probe')
-
-    expectNoFlowErrors(errors)
   })
 
   test('refuses to advance while the required company answers are missing', async ({ page }) => {
@@ -99,19 +96,30 @@ test.describe('buyer registration', () => {
     await expect(page.getByText('Step 2 of 5')).toBeVisible()
   })
 
-  test('drives a custom combobox with the keyboard and the mouse', async ({ page }) => {
+  test('drives a custom combobox with the mouse and with the keyboard', async ({ page }) => {
     // The business type control is a button, not a <select>. It is the one part
     // of this form most likely to break under hydration and the least likely to
-    // be caught by anything short of a browser.
+    // be caught by anything short of a browser - and a listbox that only a
+    // mouse can operate is a listbox half the people using it cannot.
     await page.goto('/register/buyer')
-
     const businessType = page.getByLabel(/business type/i)
+
+    // Mouse.
     await businessType.click()
     const option = page.getByRole('option').first()
-    const chosen = (await option.textContent())?.trim() ?? ''
+    const byMouse = (await option.textContent())?.trim() ?? ''
     await option.click()
+    await expect(businessType).toContainText(byMouse)
 
-    await expect(businessType).toContainText(chosen)
+    // Keyboard, from the control itself: open, move, commit.
+    await businessType.focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('option').first()).toBeVisible()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+
+    await expect(page.getByRole('option').first()).toBeHidden()
+    await expect(businessType).not.toBeEmpty()
   })
 
   test('walks every step, and Back returns with the answers intact', async ({ page }) => {
@@ -144,7 +152,6 @@ test.describe('buyer registration', () => {
   })
 
   test('submits through the UI and lands on the confirmation', async ({ page }) => {
-    const errors = watchForFlowErrors(page)
     const buyer = uniqueBuyer()
 
     await page.goto('/register/buyer')
@@ -162,8 +169,6 @@ test.describe('buyer registration', () => {
     // deterministic rather than a guess about how long the post takes.
     await page.waitForURL('**/register/buyer/thank-you')
     await expect(page.getByRole('heading').first()).toBeVisible()
-
-    expectNoFlowErrors(errors)
   })
 
   test('disables the submit control while sending, so a second click cannot post again', async ({
