@@ -1,14 +1,12 @@
 import { expect, test } from '@playwright/test'
 
+import { signInAsNewStaff } from './support/staff-fixture'
+
 test.describe('verification workflow', () => {
   test.skip(!process.env.DATABASE_URL, 'requires a seeded database')
 
   test('create verification, accept a document, approve', async ({ page, request }) => {
-    await page.goto('/login')
-    await page.getByPlaceholder('Email').fill('admin@triyaraexports.com')
-    await page.getByPlaceholder('Password').fill('ChangeMe!123')
-    await page.getByRole('button', { name: /sign in/i }).click()
-    await page.waitForURL(/dashboard/)
+    await signInAsNewStaff(page, 'verification')
 
     // account
     const accRes = await page.request.post('/api/v1/accounts', {

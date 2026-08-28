@@ -1,14 +1,12 @@
 import { expect, test } from '@playwright/test'
 
+import { signInAsNewStaff } from './support/staff-fixture'
+
 test.describe('buyer profile', () => {
   test.skip(!process.env.DATABASE_URL, 'requires a seeded database')
 
   test('create account, then create + populate its buyer profile', async ({ page }) => {
-    await page.goto('/login')
-    await page.getByPlaceholder('Email').fill('admin@triyaraexports.com')
-    await page.getByPlaceholder('Password').fill('ChangeMe!123')
-    await page.getByRole('button', { name: /sign in/i }).click()
-    await page.waitForURL(/dashboard/)
+    await signInAsNewStaff(page, 'buyer')
 
     const res = await page.request.post('/api/v1/accounts', {
       data: { legalName: `Buyer E2E ${Date.now()}` },
