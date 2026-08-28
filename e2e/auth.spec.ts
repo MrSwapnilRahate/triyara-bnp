@@ -22,6 +22,17 @@ test.describe('login flow', () => {
     await page.getByPlaceholder('Password').fill(admin.password)
     await page.getByRole('button', { name: /sign in/i }).click()
     await expect(page).toHaveURL(/\/dashboard/)
-    await expect(page.getByText('Roles')).toBeVisible()
+
+    // The staff dashboard specifically, not merely a page that rendered.
+    //
+    // This used to look for the text "Roles", which the dashboard has not shown
+    // for some time - the assertion outlived the screen it was written against.
+    // These three say what signing in as an administrator is supposed to get
+    // you: the dashboard's own heading, the figures list, which is behind the
+    // loaded-data branch and so proves the page fetched rather than framed
+    // itself, and the internal navigation a portal user is never shown.
+    await expect(page.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Key figures' })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible()
   })
 })
