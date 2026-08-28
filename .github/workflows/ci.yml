@@ -195,6 +195,7 @@ jobs:
           e2e/portal-buyer-journey.spec.ts
           e2e/portal-buyer-isolation.spec.ts
           e2e/portal-buyer-mobile.spec.ts
+          e2e/portal-buyer-deeplink.spec.ts
 
       - name: Upload the report when something failed
         if: failure()
