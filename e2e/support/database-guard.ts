@@ -1,8 +1,8 @@
 /**
- * Refuses to run the registration suite against anything but an E2E database.
+ * Refuses to run the suite against anything but an E2E database.
  *
- * These tests complete the public wizards for real, so every submitting test
- * leaves a row behind. Until this existed, a developer running `pnpm test:e2e`
+ * These tests complete the public wizards for real and provision real portal
+ * buyers, so every submitting test leaves a row behind. Until this existed, a developer running `pnpm test:e2e`
  * with their usual `DATABASE_URL` - or with a dev server already up on :3000
  * reading `apps/web/.env.local` - would write "UI Audit Test Buyer" records
  * into the database they work in every day. Nothing failed; the rows simply
@@ -56,10 +56,11 @@ export function assertE2EDatabase(connectionString: string | undefined): void {
   const name = databaseNameFrom(connectionString) ?? '<unparseable>'
   throw new Error(
     [
-      `Refusing to run the registration end-to-end tests against the database "${name}".`,
+      `Refusing to run the end-to-end tests against the database "${name}".`,
       '',
-      'These tests complete the public registration wizards for real, so each',
-      'submitting test writes an Account or Supplier row. They must therefore run',
+      'These tests complete the public registration wizards for real and provision',
+      'real portal buyers, so each submitting test writes an Account, Supplier or',
+      'User row. They must therefore run',
       'against a database kept for that purpose, and this one is not named like',
       'one - so it may well be the database you work in.',
       '',

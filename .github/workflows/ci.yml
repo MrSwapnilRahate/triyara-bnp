@@ -120,7 +120,7 @@ jobs:
         run: pnpm --filter @triyara/web exec vitest run integration.test
 
   e2e:
-    name: Registration flows (Playwright)
+    name: Browser journeys (Playwright)
     runs-on: ubuntu-latest
     # The public registration wizards are client-rendered from end to end: no
     # <form> element, no `required` attributes, no no-script fallback. Every
@@ -176,17 +176,25 @@ jobs:
 
       # Builds and starts the app itself, via the config's webServer.
       #
-      # Scoped to the registration specs. The rest of e2/ predates this job and
-      # has never run in CI - `pnpm test:e2e` could not load its config at all -
-      # so those specs are unproven here and would block this job on breakage
-      # that has nothing to do with registration. Widening the net is worth
-      # doing on its own, deliberately.
-      - name: Registration end-to-end tests
+      # Named specs rather than the whole directory. The rest of e2e/ predates
+      # this job and has never run in CI - `pnpm test:e2e` could not load its
+      # config at all - so those specs are unproven here and would block this
+      # job on breakage that has nothing to do with these flows. Widening the
+      # net further is worth doing on its own, deliberately.
+      #
+      # The portal specs each provision their own approved buyer through the
+      # real provisioning service and set the password through the UI, so they
+      # need the seeded organization and administrator that `db:seed` creates
+      # above. They write rows, which is why this job has a database of its own.
+      - name: Registration and portal end-to-end tests
         run: >-
           pnpm test:e2e
           e2e/registration-buyer.spec.ts
           e2e/registration-supplier.spec.ts
           e2e/registration-mobile.spec.ts
+          e2e/portal-buyer-journey.spec.ts
+          e2e/portal-buyer-isolation.spec.ts
+          e2e/portal-buyer-mobile.spec.ts
 
       - name: Upload the report when something failed
         if: failure()

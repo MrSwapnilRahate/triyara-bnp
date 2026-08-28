@@ -54,6 +54,13 @@ export default defineConfig({
       // transport constructs, the send fails, and the event bus swallows that
       // failure exactly as it is built to - so the row is still written and the
       // flow under test is the real one.
+      // Pinned to the port this server actually listens on. Auth.js builds its
+      // post-login redirect from this, and a developer's .env.local naming a
+      // different port (3100, say) is inherited straight through - so the
+      // browser is sent somewhere nothing is listening and login fails with a
+      // connection refused that looks nothing like an auth problem.
+      NEXTAUTH_URL: 'http://localhost:3000',
+      AUTH_URL: 'http://localhost:3000',
       RESEND_API_KEY: 'e2e-not-a-real-key',
       EMAIL_FROM: 'e2e@triyara.invalid',
       // Storage refuses the local filesystem provider in production for the
@@ -82,17 +89,20 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
       // The phone smoke tests belong to the mobile project; running them here
-      // as well would assert a small-screen layout on a desktop viewport.
-      testIgnore: /registration-mobile\.spec\.ts/,
+      // as well would assert a small-screen layout on a desktop viewport. The
+      // suffix is the convention rather than a list of filenames, so a new
+      // phone spec joins the right project by being named like one.
+      testIgnore: /-mobile\.spec\.ts/,
     },
-    // A phone, and deliberately scoped to the registration specs alone. Both
-    // public forms are long wizards and most of the traffic that reaches them
-    // arrives on a phone; the signed-in staff journeys are desktop work and
-    // running them twice would double the suite for no signal.
+    // A phone, and deliberately scoped to the specs written for one. The
+    // public wizards and the buyer portal are both read on phones - a buyer
+    // reaching the portal is usually following a link we emailed them - while
+    // the signed-in STAFF journeys are desktop work, and running those twice
+    // would double the suite for no signal.
     {
       name: 'mobile',
       use: { ...devices['Pixel 5'] },
-      testMatch: /registration-mobile\.spec\.ts/,
+      testMatch: /-mobile\.spec\.ts/,
     },
   ],
 })
