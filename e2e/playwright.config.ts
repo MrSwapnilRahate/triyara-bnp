@@ -63,17 +63,38 @@ export default defineConfig({
       AUTH_URL: 'http://localhost:3000',
       RESEND_API_KEY: 'e2e-not-a-real-key',
       EMAIL_FROM: 'e2e@triyara.invalid',
-      // Storage refuses the local filesystem provider in production for the
-      // same class of reason - files written there are lost on redeploy. The
-      // registration wizards can be completed without attaching anything, so
-      // nothing here is ever called; it exists so the module constructs.
+      // Real object storage, on this machine.
+      //
+      // These four used to be deliberately fake, on the reasoning that nothing
+      // would ever call them. Two specs did. Presigning is an offline
+      // signature, so it succeeded and handed the browser a URL at a bucket
+      // that does not exist; the PUT then failed at the network layer with
+      // "Failed to fetch", `documentService.create` found nothing to stat, and
+      // no document row was ever written. That took out the documents journey
+      // and the verification one behind it, which needs a document to accept.
+      //
+      // MinIO speaks the S3 API, so the application keeps its own storage
+      // architecture exactly: the same `s3` provider, the same presigned PUT
+      // from the browser, a real object, and a real `stat` that reads back the
+      // size and checksum the metadata row records. Nothing is mocked and the
+      // production guard in `createStorageFromEnv` is untouched - `s3` is a
+      // provider it already accepts anywhere.
+      //
+      // `STORAGE_ENDPOINT` also turns on path-style addressing in the SDK
+      // (`forcePathStyle` defaults to whether an endpoint is set), which is
+      // what MinIO serves, and `next.config.mjs` derives the CSP `connect-src`
+      // origin from it - so the browser is allowed to reach it at all. That
+      // policy is baked at build time, which is why these belong in the env
+      // shared by the build and the run rather than only the run.
+      //
+      // Credentials for a container that exists for the length of a test run
+      // and listens on localhost. See docker-compose.yml.
       STORAGE_PROVIDER: 's3',
-      STORAGE_BUCKET: 'e2e-not-a-real-bucket',
-      STORAGE_ACCESS_KEY_ID: 'e2e-not-a-real-key-id',
-      STORAGE_SECRET_ACCESS_KEY: 'e2e-not-a-real-secret',
-      // The bucket origin is baked into the Content-Security-Policy at build
-      // time, so the region has to be present for the build, not just the run.
-      STORAGE_REGION: 'eu-west-1',
+      STORAGE_ENDPOINT: 'http://localhost:9000',
+      STORAGE_BUCKET: 'triyara-e2e',
+      STORAGE_ACCESS_KEY_ID: 'e2eminio',
+      STORAGE_SECRET_ACCESS_KEY: 'e2eminio123',
+      STORAGE_REGION: 'us-east-1',
     },
     // Never reused, not even locally. A server already on :3000 is almost
     // certainly a development one reading apps/web/.env.local, and reusing it

@@ -17,13 +17,18 @@ test.describe('documents', () => {
     await page.getByRole('button', { name: /upload document/i }).click()
     await page.locator('select[name="accountId"]').selectOption(accountId)
     await page.locator('select[name="type"]').selectOption('GST')
-    await page.locator('input[name="title"]').fill('E2E GST')
+    // Unique, and asserted by that exact title. The documents list is not
+    // scoped to one account, so a fixed name matches every earlier run's row
+    // on a reused database and the assertion dies of strict mode instead of
+    // telling anyone what broke.
+    const title = `E2E GST ${Date.now()}`
+    await page.locator('input[name="title"]').fill(title)
     await page.locator('input[name="file"]').setInputFiles({
       name: 'gst.pdf',
       mimeType: 'application/pdf',
       buffer: Buffer.from('%PDF-1.4 e2e test file'),
     })
     await page.getByRole('button', { name: /^upload$/i }).click()
-    await expect(page.getByText('E2E GST')).toBeVisible()
+    await expect(page.getByText(title)).toBeVisible()
   })
 })

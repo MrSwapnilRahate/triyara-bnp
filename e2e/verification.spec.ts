@@ -34,7 +34,7 @@ test.describe('verification workflow', () => {
         storageKey: p.storageKey,
         accountId,
         type: 'GST',
-        title: 'GST Cert',
+        title: `GST Cert ${Date.now()}`,
         mimeType: 'application/pdf',
         originalFilename: 'gst.pdf',
       },
@@ -56,7 +56,14 @@ test.describe('verification workflow', () => {
       .first()
       .click()
     await page.getByRole('button', { name: /^approve$/i }).click()
-    await page.getByRole('button', { name: /^approve$/i }).click() // dialog confirm
+    // The confirmation, not the button that opened it. Once the dialog is up
+    // there are two controls called Approve, and asking for both is a strict
+    // mode violation - the dialog's lives inside the confirmation form, which
+    // the page's does not.
+    await page
+      .locator('form')
+      .getByRole('button', { name: /^approve$/i })
+      .click()
     await expect(page.getByText('VERIFIED')).toBeVisible()
   })
 })
