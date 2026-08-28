@@ -29,6 +29,9 @@ test.describe('documents', () => {
       buffer: Buffer.from('%PDF-1.4 e2e test file'),
     })
     await page.getByRole('button', { name: /^upload$/i }).click()
-    await expect(page.getByText(title)).toBeVisible()
+    // The row in the table, not merely the title somewhere on the page: the
+    // success message repeats it, so `getByText` matches twice and the
+    // assertion dies of strict mode instead of proving the document is listed.
+    await expect(page.getByRole('cell', { name: title })).toBeVisible()
   })
 })

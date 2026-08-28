@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 
+import { interactive } from './support/interactive'
 import { signInAsNewStaff } from './support/staff-fixture'
 
 test.describe('buyer profile', () => {
@@ -14,12 +15,14 @@ test.describe('buyer profile', () => {
     const accountId = (await res.json()).data.id as string
 
     await page.goto(`/accounts/${accountId}/buyer`)
-    await page.getByRole('button', { name: /create buyer profile/i }).click()
+    // The panel is server-rendered before React claims it; clicking too early
+    // submits through the browser instead and the component never hears back.
+    await (await interactive(page.getByRole('button', { name: /create buyer profile/i }))).click()
     await expect(page.getByRole('button', { name: /^overview$/i })).toBeVisible()
 
     await page.getByRole('button', { name: /^products$/i }).click()
     await page.getByPlaceholder('Product (e.g. Onion Powder)').fill('Dehydrated Onion')
-    await page.getByRole('button', { name: /add product/i }).click()
+    await (await interactive(page.getByRole('button', { name: /add product/i }))).click()
     await expect(page.getByText('Dehydrated Onion')).toBeVisible()
   })
 })
