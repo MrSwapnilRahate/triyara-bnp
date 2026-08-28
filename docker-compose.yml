@@ -11,5 +11,50 @@ services:
     volumes:
       - triyara_pg:/var/lib/postgresql/data
 
+  # Object storage for the end-to-end suite, speaking the S3 API.
+  #
+  # The documents journey is a presigned upload: the server signs a URL, the
+  # browser PUTs the file to storage directly, and only then does the
+  # application stat the object and write the metadata row. Pointed at
+  # credentials for a bucket that does not exist, the signature still succeeds
+  # and the PUT fails at the network layer - so the suite needs somewhere real
+  # to put bytes, not a stand-in for one.
+  #
+  # MinIO is that, and nothing about the application changes to accommodate it:
+  # the same `s3` provider, the same presigning, the same `stat`. Only
+  # STORAGE_ENDPOINT differs, which the SDK already supports and which
+  # `next.config.mjs` already turns into a Content-Security-Policy origin.
+  #
+  # Not persisted. A volume here would carry objects between runs, and the
+  # point of the bucket is that it starts empty.
+  minio:
+    image: minio/minio:latest
+    container_name: triyara-bnp-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: e2eminio
+      MINIO_ROOT_PASSWORD: e2eminio123
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Creates the bucket and exits. MinIO has no "create on first write", and the
+  # application does not create buckets either - correctly, since in production
+  # that is somebody's deliberate act with a retention policy attached.
+  minio-bucket:
+    image: minio/mc:latest
+    container_name: triyara-bnp-minio-bucket
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >-
+      sh -c "mc alias set e2e http://minio:9000 e2eminio e2eminio123 &&
+             mc mb --ignore-existing e2e/triyara-e2e"
+
 volumes:
   triyara_pg:

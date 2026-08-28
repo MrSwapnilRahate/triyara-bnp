@@ -1,14 +1,12 @@
 import { expect, test } from '@playwright/test'
 
+import { signInAsNewStaff } from './support/staff-fixture'
+
 test.describe('accounts', () => {
   test.skip(!process.env.DATABASE_URL, 'requires a seeded database')
 
   test('admin can create an account and see it in the table', async ({ page }) => {
-    await page.goto('/login')
-    await page.getByPlaceholder('Email').fill('admin@triyaraexports.com')
-    await page.getByPlaceholder('Password').fill('ChangeMe!123')
-    await page.getByRole('button', { name: /sign in/i }).click()
-    await page.waitForURL(/dashboard/)
+    await signInAsNewStaff(page, 'accounts')
 
     await page.goto('/accounts')
     await page.getByRole('button', { name: /new account/i }).click()

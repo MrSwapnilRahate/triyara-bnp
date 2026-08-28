@@ -171,6 +171,28 @@ jobs:
 
       # Chromium only. The suite pins one browser, and downloading the other two
       # would add minutes for coverage nothing here asserts.
+      # Object storage for the documents and verification journeys.
+      #
+      # Started as a container rather than a service container: MinIO needs
+      # `server /data` as its command, which the `services:` block cannot set
+      # cleanly, and the runner has Docker anyway. The bucket is created
+      # explicitly because neither MinIO nor the application creates one -
+      # correctly, since in production that is somebody's deliberate act.
+      - name: Start object storage
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=e2eminio -e MINIO_ROOT_PASSWORD=e2eminio123 \
+            minio/minio:latest server /data
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && break
+            sleep 2
+          done
+          aws --endpoint-url http://localhost:9000 s3 mb s3://triyara-e2e
+        env:
+          AWS_ACCESS_KEY_ID: e2eminio
+          AWS_SECRET_ACCESS_KEY: e2eminio123
+          AWS_DEFAULT_REGION: us-east-1
+
       - name: Install the browser
         run: pnpm exec playwright install --with-deps chromium
 
