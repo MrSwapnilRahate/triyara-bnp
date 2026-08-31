@@ -18,14 +18,14 @@ import {
   TabsList,
   TabsTrigger,
 } from '@triyara/ui'
-import { Pencil, ShieldCheck } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import Link from 'next/link'
 
 import { InlineQueryError } from '@/components/data/query-boundary'
 import { Can } from '@/lib/ability-context'
 
 import { useSupplier } from '../api/suppliers'
-import { expiringSoon, isExpired, type Supplier, type SupplierCertification } from '../types'
+import { expiringSoon, type Supplier } from '../types'
 import { SupplierCertificationsTab } from './supplier-certifications-tab'
 import { SupplierContactsTab } from './supplier-contacts-tab'
 import { SupplierDocumentsTab } from './supplier-documents-tab'
@@ -223,46 +223,6 @@ export function SupplierDetail({ id }: { id: string }) {
         </Tabs>
       }
     />
-  )
-}
-
-function CertificationRow({ certification }: { certification: SupplierCertification }) {
-  const expired = isExpired(certification)
-  const lapsingSoon =
-    !expired &&
-    certification.expiryDate !== null &&
-    new Date(certification.expiryDate).getTime() < Date.now() + 30 * 86_400_000
-
-  return (
-    <div className="flex items-start justify-between gap-gap-lg px-gutter py-gap-lg">
-      <div>
-        <p className="text-base font-medium text-content">{certification.type}</p>
-        <p className="text-xs text-content-muted">
-          {certification.certificateNumber ?? '—'}
-          {certification.issuedBy ? ` · ${certification.issuedBy}` : ''}
-        </p>
-      </div>
-      <div className="text-right">
-        {certification.expiryDate ? (
-          <p className="text-xs text-content-muted">
-            Expires {new Date(certification.expiryDate).toLocaleDateString()}
-          </p>
-        ) : (
-          <p className="text-xs text-content-subtle">No expiry</p>
-        )}
-        {expired ? (
-          <Badge tone="danger" size="sm" dot>
-            Expired
-          </Badge>
-        ) : lapsingSoon ? (
-          <Badge tone="warning" size="sm" dot>
-            Lapsing soon
-          </Badge>
-        ) : (
-          <StatusBadge status={certification.status} size="sm" />
-        )}
-      </div>
-    </div>
   )
 }
 
