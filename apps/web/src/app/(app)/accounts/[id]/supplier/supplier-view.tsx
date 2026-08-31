@@ -4,7 +4,7 @@ import type { SupplierProfileRecord } from '@triyara/db'
 import { MANUFACTURING_TYPES } from '@triyara/validation'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useActionState, useEffect, useState } from 'react'
+import { createContext, useActionState, useContext, useEffect, useState } from 'react'
 
 import {
   type ActionState,
@@ -33,11 +33,22 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]
 
-function useRefreshOnOk(state: ActionState) {
+/**
+ * Where a panel publishes the row its action just wrote. Mirrors the buyer
+ * screen: every mutation returns the updated profile and the screen settles on
+ * that, rather than on a re-rendered tree arriving inside the action response.
+ */
+const ProfileSink = createContext<(profile: SupplierProfileRecord) => void>(() => {})
+
+/** Publishes the action's result, then refreshes to reconcile with the server. */
+function useSettleOnOk(state: ActionState) {
   const router = useRouter()
+  const publish = useContext(ProfileSink)
   useEffect(() => {
-    if (state.ok) router.refresh()
-  }, [state, router])
+    if (!state.ok) return
+    if (state.profile) publish(state.profile)
+    router.refresh()
+  }, [state, router, publish])
 }
 
 export function SupplierProfileView({
@@ -53,56 +64,70 @@ export function SupplierProfileView({
 }) {
   const [tab, setTab] = useState<Tab>('overview')
 
+  // The row the last successful action returned. The server prop wins again as
+  // soon as a refresh lands with an equal or newer version; the accountId check
+  // keeps a row from one account from ever rendering under another.
+  const [written, setWritten] = useState<SupplierProfileRecord | null>(null)
+  const fresh =
+    written && written.accountId === accountId && (!profile || written.version >= profile.version)
+  const currentProfile = fresh ? written : profile
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/accounts" className="text-xs text-white/40 hover:text-gold">
-        &larr; Accounts
-      </Link>
-      <h1 className="mt-2 text-2xl font-bold text-gold">{accountName}</h1>
-      <p className="text-sm text-white/40">Supplier profile</p>
+    <ProfileSink.Provider value={setWritten}>
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <Link href="/accounts" className="text-xs text-white/40 hover:text-gold">
+          &larr; Accounts
+        </Link>
+        <h1 className="mt-2 text-2xl font-bold text-gold">{accountName}</h1>
+        <p className="text-sm text-white/40">Supplier profile</p>
 
-      {!profile ? (
-        <CreatePanel accountId={accountId} canWrite={canWrite} />
-      ) : (
-        <>
-          {profile.deletedAt ? (
-            <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
-              This supplier profile is deleted.
+        {!currentProfile ? (
+          <CreatePanel accountId={accountId} canWrite={canWrite} />
+        ) : (
+          <>
+            {currentProfile.deletedAt ? (
+              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+                This supplier profile is deleted.
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex flex-wrap gap-1 border-b border-white/10">
+              {TABS.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={`px-3 py-2 text-sm capitalize ${tab === t ? 'border-b-2 border-gold text-gold' : 'text-white/50 hover:text-white'}`}
+                >
+                  {t}
+                </button>
+              ))}
             </div>
-          ) : null}
 
-          <div className="mt-6 flex flex-wrap gap-1 border-b border-white/10">
-            {TABS.map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-3 py-2 text-sm capitalize ${tab === t ? 'border-b-2 border-gold text-gold' : 'text-white/50 hover:text-white'}`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+            <div className={tab === 'capabilities' ? 'mt-6' : 'hidden'}>
+              <CapabilitiesPanel
+                accountId={accountId}
+                profile={currentProfile}
+                canWrite={canWrite}
+              />
+            </div>
 
-          <div className={tab === 'capabilities' ? 'mt-6' : 'hidden'}>
-            <CapabilitiesPanel accountId={accountId} profile={profile} canWrite={canWrite} />
-          </div>
-
-          <EditForm
-            accountId={accountId}
-            profile={profile}
-            canWrite={canWrite}
-            hidden={tab === 'capabilities'}
-            tab={tab}
-          />
-        </>
-      )}
-    </div>
+            <EditForm
+              accountId={accountId}
+              profile={currentProfile}
+              canWrite={canWrite}
+              hidden={tab === 'capabilities'}
+              tab={tab}
+            />
+          </>
+        )}
+      </div>
+    </ProfileSink.Provider>
   )
 }
 
 function CreatePanel({ accountId, canWrite }: { accountId: string; canWrite: boolean }) {
   const [state, action, pending] = useActionState(createSupplierAction, {})
-  useRefreshOnOk(state)
+  useSettleOnOk(state)
   return (
     <div className="mt-8 rounded-xl border border-dashed border-white/15 py-12 text-center">
       <p className="text-sm text-white/50">No supplier profile yet for this account.</p>
@@ -133,7 +158,7 @@ function EditForm({
   tab: Tab
 }) {
   const [state, action, pending] = useActionState(updateSupplierAction, {})
-  useRefreshOnOk(state)
+  useSettleOnOk(state)
   const ro = !canWrite || !!profile.deletedAt
   const sec = (name: Tab) => (tab === name ? 'space-y-3' : 'hidden')
 
@@ -295,8 +320,8 @@ function DangerZone({
 }) {
   const [dState, del, dPending] = useActionState(deleteSupplierAction, {})
   const [rState, restore, rPending] = useActionState(restoreSupplierAction, {})
-  useRefreshOnOk(dState)
-  useRefreshOnOk(rState)
+  useSettleOnOk(dState)
+  useSettleOnOk(rState)
   if (!canWrite) return null
 
   return (
@@ -348,7 +373,7 @@ function CapabilitiesPanel({
   canWrite: boolean
 }) {
   const [state, add, pending] = useActionState(addProductAction, {})
-  useRefreshOnOk(state)
+  useSettleOnOk(state)
   const ro = !canWrite || !!profile.deletedAt
 
   return (
@@ -412,7 +437,7 @@ function RemoveProduct({
   productId: string
 }) {
   const [state, action, pending] = useActionState(removeProductAction, {})
-  useRefreshOnOk(state)
+  useSettleOnOk(state)
   return (
     <form action={action}>
       <input type="hidden" name="accountId" value={accountId} />

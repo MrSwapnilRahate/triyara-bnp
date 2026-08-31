@@ -1,12 +1,12 @@
 'use server'
 
 import type { SupplierServiceCtx } from '@triyara/core'
+import type { SupplierProfileRecord } from '@triyara/db'
 import {
   addSupplierProductSchema,
   createSupplierProfileSchema,
   updateSupplierProfileSchema,
 } from '@triyara/validation'
-import { revalidatePath } from 'next/cache'
 import { ZodError } from 'zod'
 
 import { requireAuth } from '@/auth/context'
@@ -15,6 +15,12 @@ import { supplierService } from '@/lib/supplier-service'
 export interface ActionState {
   ok?: boolean
   error?: string
+  /**
+   * The row this action just wrote, returned so the screen can settle on the
+   * server's own answer instead of waiting for a re-rendered tree. See
+   * `createSupplierAction` for why that wait is not safe to depend on.
+   */
+  profile?: SupplierProfileRecord
 }
 
 function toMessage(error: unknown): string {
@@ -76,14 +82,26 @@ function profileDto(fd: FormData) {
   }
 }
 
+/**
+ * Creates the profile and hands the new row straight back.
+ *
+ * Deliberately does NOT call `revalidatePath`, for the reason documented on the
+ * buyer equivalent: a Server Action that revalidates returns the re-rendered
+ * route inside its own response, React applies that tree in the transition that
+ * owns `useActionState`'s pending flag, and if the apply suspends the transition
+ * is parked - leaving the button on "Creating..." with the row already written.
+ *
+ * Returning the record lets the screen settle on data the action already has.
+ * `useSettleOnOk` still refreshes afterwards, so the server stays the source of
+ * truth; that refresh is reconciliation rather than the only path to the UI.
+ */
 export async function createSupplierAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   try {
     const auth = await requireAuth()
     const accountId = String(fd.get('accountId'))
     const dto = createSupplierProfileSchema.parse(profileDto(fd))
-    await supplierService.create(ctxAnd(auth), accountId, dto)
-    revalidatePath(`/accounts/${accountId}/supplier`)
-    return { ok: true }
+    const profile = await supplierService.create(ctxAnd(auth), accountId, dto)
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -95,9 +113,8 @@ export async function updateSupplierAction(_prev: ActionState, fd: FormData): Pr
     const accountId = String(fd.get('accountId'))
     const version = Number(fd.get('version'))
     const dto = updateSupplierProfileSchema.parse(profileDto(fd))
-    await supplierService.update(ctxAnd(auth), accountId, dto, version)
-    revalidatePath(`/accounts/${accountId}/supplier`)
-    return { ok: true }
+    const profile = await supplierService.update(ctxAnd(auth), accountId, dto, version)
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -107,9 +124,8 @@ export async function deleteSupplierAction(_prev: ActionState, fd: FormData): Pr
   try {
     const auth = await requireAuth()
     const accountId = String(fd.get('accountId'))
-    await supplierService.remove(ctxAnd(auth), accountId, Number(fd.get('version')))
-    revalidatePath(`/accounts/${accountId}/supplier`)
-    return { ok: true }
+    const profile = await supplierService.remove(ctxAnd(auth), accountId, Number(fd.get('version')))
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -122,9 +138,12 @@ export async function restoreSupplierAction(
   try {
     const auth = await requireAuth()
     const accountId = String(fd.get('accountId'))
-    await supplierService.restore(ctxAnd(auth), accountId, Number(fd.get('version')))
-    revalidatePath(`/accounts/${accountId}/supplier`)
-    return { ok: true }
+    const profile = await supplierService.restore(
+      ctxAnd(auth),
+      accountId,
+      Number(fd.get('version')),
+    )
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -141,9 +160,8 @@ export async function addProductAction(_prev: ActionState, fd: FormData): Promis
       moq: str(fd, 'productMoq'),
       leadTimeDays: num(fd, 'productLeadTime'),
     })
-    await supplierService.addProduct(ctxAnd(auth), accountId, dto, version)
-    revalidatePath(`/accounts/${accountId}/supplier`)
-    return { ok: true }
+    const profile = await supplierService.addProduct(ctxAnd(auth), accountId, dto, version)
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -154,14 +172,13 @@ export async function removeProductAction(_prev: ActionState, fd: FormData): Pro
     const auth = await requireAuth()
     const accountId = String(fd.get('accountId'))
     const version = Number(fd.get('version'))
-    await supplierService.removeProduct(
+    const profile = await supplierService.removeProduct(
       ctxAnd(auth),
       accountId,
       String(fd.get('productId')),
       version,
     )
-    revalidatePath(`/accounts/${accountId}/supplier`)
-    return { ok: true }
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }

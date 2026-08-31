@@ -4,7 +4,7 @@ import type { BuyerProfileRecord } from '@triyara/db'
 import { BUYER_TYPES, IMPORT_EXPERIENCES } from '@triyara/validation'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useActionState, useEffect, useState } from 'react'
+import { createContext, useActionState, useContext, useEffect, useState } from 'react'
 
 import {
   BuyerReviewPanel,
@@ -31,11 +31,33 @@ const ghost =
 const TABS = ['overview', 'products', 'markets', 'certifications', 'settings'] as const
 type Tab = (typeof TABS)[number]
 
-function useRefreshOnOk(state: ActionState) {
+/**
+ * Where a panel publishes the row its action just wrote.
+ *
+ * Every mutation here returns the updated profile, and the screen settles on
+ * that rather than on a re-rendered tree. See `createBuyerAction` for the
+ * measured reason: a Server Action that revalidates puts the new tree inside its
+ * own response, React applies it in the transition that owns `useActionState`'s
+ * pending flag, and if that apply suspends the transition is parked - leaving
+ * the button on "Creating..." forever with the row already written.
+ */
+const ProfileSink = createContext<(profile: BuyerProfileRecord) => void>(() => {})
+
+/**
+ * Publishes the action's result, then refreshes.
+ *
+ * The refresh is still here, so the server remains the source of truth and any
+ * change this screen did not make shows up. It is no longer the only way the
+ * user sees their own write.
+ */
+function useSettleOnOk(state: ActionState) {
   const router = useRouter()
+  const publish = useContext(ProfileSink)
   useEffect(() => {
-    if (state.ok) router.refresh()
-  }, [state, router])
+    if (!state.ok) return
+    if (state.profile) publish(state.profile)
+    router.refresh()
+  }, [state, router, publish])
 }
 
 export function BuyerProfileView({
@@ -54,59 +76,72 @@ export function BuyerProfileView({
 }) {
   const [tab, setTab] = useState<Tab>('overview')
 
+  // The row the last successful action returned. The server prop wins again as
+  // soon as a refresh lands with an equal or newer version. The accountId check
+  // is belt-and-braces: nothing currently navigates client-side from one
+  // account's buyer page to another's, so this state is torn down in between -
+  // but that is a routing fact, not an invariant of this component, and a stale
+  // row from a different account must never be able to render.
+  const [written, setWritten] = useState<BuyerProfileRecord | null>(null)
+  const fresh =
+    written && written.accountId === accountId && (!profile || written.version >= profile.version)
+  const currentProfile = fresh ? written : profile
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/accounts" className="text-xs text-white/40 hover:text-gold">
-        &larr; Accounts
-      </Link>
-      <h1 className="mt-2 text-2xl font-bold text-gold">{accountName}</h1>
-      <p className="text-sm text-white/40">Buyer profile</p>
+    <ProfileSink.Provider value={setWritten}>
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <Link href="/accounts" className="text-xs text-white/40 hover:text-gold">
+          &larr; Accounts
+        </Link>
+        <h1 className="mt-2 text-2xl font-bold text-gold">{accountName}</h1>
+        <p className="text-sm text-white/40">Buyer profile</p>
 
-      {/* Review sits above everything: on a self-registered account it is the
+        {/* Review sits above everything: on a self-registered account it is the
           only thing anyone should be doing here until a decision is taken. */}
-      <div className="mt-6">
-        <BuyerReviewPanel account={review} />
-      </div>
+        <div className="mt-6">
+          <BuyerReviewPanel account={review} />
+        </div>
 
-      {!profile ? (
-        <CreatePanel accountId={accountId} canWrite={canWrite} />
-      ) : (
-        <>
-          {profile.deletedAt ? (
-            <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
-              This buyer profile is deleted.
+        {!currentProfile ? (
+          <CreatePanel accountId={accountId} canWrite={canWrite} />
+        ) : (
+          <>
+            {currentProfile.deletedAt ? (
+              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+                This buyer profile is deleted.
+              </div>
+            ) : null}
+            <div className="mt-6 flex flex-wrap gap-1 border-b border-white/10">
+              {TABS.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={`px-3 py-2 text-sm capitalize ${tab === t ? 'border-b-2 border-gold text-gold' : 'text-white/50 hover:text-white'}`}
+                >
+                  {t}
+                </button>
+              ))}
             </div>
-          ) : null}
-          <div className="mt-6 flex flex-wrap gap-1 border-b border-white/10">
-            {TABS.map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-3 py-2 text-sm capitalize ${tab === t ? 'border-b-2 border-gold text-gold' : 'text-white/50 hover:text-white'}`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-          <div className={tab === 'products' ? 'mt-6' : 'hidden'}>
-            <ProductsPanel accountId={accountId} profile={profile} canWrite={canWrite} />
-          </div>
-          <EditForm
-            accountId={accountId}
-            profile={profile}
-            canWrite={canWrite}
-            hidden={tab === 'products'}
-            tab={tab}
-          />
-        </>
-      )}
-    </div>
+            <div className={tab === 'products' ? 'mt-6' : 'hidden'}>
+              <ProductsPanel accountId={accountId} profile={currentProfile} canWrite={canWrite} />
+            </div>
+            <EditForm
+              accountId={accountId}
+              profile={currentProfile}
+              canWrite={canWrite}
+              hidden={tab === 'products'}
+              tab={tab}
+            />
+          </>
+        )}
+      </div>
+    </ProfileSink.Provider>
   )
 }
 
 function CreatePanel({ accountId, canWrite }: { accountId: string; canWrite: boolean }) {
   const [state, action, pending] = useActionState(createBuyerAction, {})
-  useRefreshOnOk(state)
+  useSettleOnOk(state)
   return (
     <div className="mt-8 rounded-xl border border-dashed border-white/15 py-12 text-center">
       <p className="text-sm text-white/50">No buyer profile yet for this account.</p>
@@ -137,7 +172,7 @@ function EditForm({
   tab: Tab
 }) {
   const [state, action, pending] = useActionState(updateBuyerAction, {})
-  useRefreshOnOk(state)
+  useSettleOnOk(state)
   const ro = !canWrite || !!profile.deletedAt
   const sec = (name: Tab) => (tab === name ? 'space-y-3' : 'hidden')
 
@@ -231,8 +266,8 @@ function EditForm({
 function DangerZone({ profile, canWrite }: { profile: BuyerProfileRecord; canWrite: boolean }) {
   const [dState, del, dPending] = useActionState(deleteBuyerAction, {})
   const [rState, restore, rPending] = useActionState(restoreBuyerAction, {})
-  useRefreshOnOk(dState)
-  useRefreshOnOk(rState)
+  useSettleOnOk(dState)
+  useSettleOnOk(rState)
   if (!canWrite) return null
 
   return (
@@ -278,7 +313,7 @@ function ProductsPanel({
   canWrite: boolean
 }) {
   const [state, add, pending] = useActionState(addBuyerProductAction, {})
-  useRefreshOnOk(state)
+  useSettleOnOk(state)
   const ro = !canWrite || !!profile.deletedAt
   return (
     <div>
@@ -342,7 +377,7 @@ function RemoveProduct({
   productId: string
 }) {
   const [state, action, pending] = useActionState(removeBuyerProductAction, {})
-  useRefreshOnOk(state)
+  useSettleOnOk(state)
   return (
     <form action={action}>
       <input type="hidden" name="accountId" value={accountId} />
