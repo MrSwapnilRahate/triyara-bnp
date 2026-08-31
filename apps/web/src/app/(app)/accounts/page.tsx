@@ -1,29 +1,14 @@
-import { listAccountsQuerySchema } from '@triyara/validation'
-
-import { requireAuth } from '@/auth/context'
-import { accountService } from '@/lib/account-service'
-
 import { AccountsView } from './accounts-view'
 
-export const dynamic = 'force-dynamic'
-
-type SearchParams = Promise<Record<string, string | string[] | undefined>>
-
-export default async function AccountsPage({ searchParams }: { searchParams: SearchParams }) {
-  const auth = await requireAuth()
-  const sp = await searchParams
-  const query = listAccountsQuerySchema.parse(sp)
-  const requestId = crypto.randomUUID()
-  const result = await accountService.list({ ...auth, requestId }, query)
-
-  const canWrite = auth.ability.can('create', 'Account')
-
-  return (
-    <AccountsView
-      accounts={result.items}
-      nextCursor={result.nextCursor}
-      hasMore={result.hasMore}
-      canWrite={canWrite}
-    />
-  )
+/**
+ * Mounts the accounts screen, which fetches its own rows.
+ *
+ * The same shape as /suppliers. The list is still entirely the server's: the
+ * view calls GET /api/v1/accounts, which parses `listAccountsQuerySchema` and
+ * runs the same `accountService.list` this page used to call directly. What
+ * changes is only how the answer reaches the browser - over fetch, rather than
+ * an RSC tree that a mutation has to get re-applied.
+ */
+export default function AccountsPage() {
+  return <AccountsView />
 }
