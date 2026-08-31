@@ -106,27 +106,6 @@ export function useReplaceItems(id: string) {
 
 // ---- Charges and taxes ----
 
-export function useConditions(id: string | undefined) {
-  return useQuery({
-    queryKey: quotationKeys.conditions(id ?? ''),
-    enabled: Boolean(id),
-    queryFn: async ({
-      signal,
-    }): Promise<{ charges: QuotationCharge[]; taxes: QuotationTax[]; meta: ApiMeta }> => {
-      const result = await api.get<{ charges: QuotationCharge[]; taxes: QuotationTax[] }>(
-        `${BASE}/${id}/conditions`,
-        { signal },
-      )
-      return {
-        charges: result.data?.charges ?? [],
-        taxes: result.data?.taxes ?? [],
-        meta: result.meta,
-      }
-    },
-    staleTime: STALE_TIME.detail,
-  })
-}
-
 /**
  * Charges and taxes go together in one request because the API sets them
  * together and re-totals once. An empty array clears that side - it is the only

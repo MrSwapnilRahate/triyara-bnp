@@ -265,7 +265,3 @@ export async function createAccountForProvisioning(
       }),
   }
 }
-
-export async function disconnectFixtures(): Promise<void> {
-  await prisma.$disconnect()
-}

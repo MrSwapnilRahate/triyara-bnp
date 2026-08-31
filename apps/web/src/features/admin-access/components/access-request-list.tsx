@@ -25,7 +25,7 @@ import {
   TabsTrigger,
   useToast,
 } from '@triyara/ui'
-import { Download, Inbox, ShieldAlert } from 'lucide-react'
+import { Download, Inbox } from 'lucide-react'
 import { useState } from 'react'
 
 import { DebouncedSearch } from '@/components/data/debounced-search'
@@ -367,17 +367,5 @@ export function AccessRequestList() {
         </DialogContent>
       </Dialog>
     </>
-  )
-}
-
-/** Shown when the list endpoint refuses a non-super administrator. */
-export function NotSuperAdmin() {
-  return (
-    <EmptyState
-      variant="error"
-      icon={<ShieldAlert />}
-      title="Only the super administrator can review admin access requests"
-      description="Holding the administrator role is not enough. Ask the super administrator to decide."
-    />
   )
 }
