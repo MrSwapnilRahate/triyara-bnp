@@ -99,7 +99,3 @@ export async function signInAsNewStaff(page: Page, label: string): Promise<Staff
   await signInAsStaff(page, admin)
   return admin
 }
-
-export async function disconnectStaffFixtures(): Promise<void> {
-  await prisma.$disconnect()
-}

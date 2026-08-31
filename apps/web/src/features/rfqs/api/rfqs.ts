@@ -7,7 +7,6 @@ import type {
   ListRfqsQuery,
   RfqApprovalDto,
   RfqItemDto,
-  SubmitResponseDto,
   SupplierParticipationDto,
   UpdateRfqDto,
 } from '@triyara/validation'
@@ -131,18 +130,6 @@ export function useRestoreRfq() {
 
 // ---- Line items ----
 
-export function useRfqItems(id: string | undefined) {
-  return useQuery({
-    queryKey: rfqKeys.items(id ?? ''),
-    enabled: Boolean(id),
-    queryFn: async ({ signal }): Promise<{ items: RfqItem[]; meta: ApiMeta }> => {
-      const result = await api.get<RfqItem[]>(`${BASE}/${id}/items`, { signal })
-      return { items: result.data ?? [], meta: result.meta }
-    },
-    staleTime: STALE_TIME.detail,
-  })
-}
-
 /**
  * Replaces every line and cuts a revision. There is no per-line PATCH by
  * design: the RFQ owns its lines, and a partial edit of a document suppliers
@@ -233,30 +220,6 @@ export function useRfqResponses(
     },
     staleTime: STALE_TIME.list,
     placeholderData: (previous) => previous,
-  })
-}
-
-export function useSubmitResponse(id: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async ({
-      rfqSupplierId,
-      dto,
-    }: {
-      rfqSupplierId: string
-      dto: SubmitResponseDto
-    }) => {
-      const result = await api.post<{ lines: RfqResponse[] }>(
-        `${BASE}/${id}/responses${queryString({ rfqSupplierId })}`,
-        dto,
-      )
-      return result.data
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: rfqKeys.detail(id) })
-      void queryClient.invalidateQueries({ queryKey: rfqKeys.suppliers(id) })
-      void queryClient.invalidateQueries({ queryKey: [...rfqKeys.detail(id), 'responses'] })
-    },
   })
 }
 

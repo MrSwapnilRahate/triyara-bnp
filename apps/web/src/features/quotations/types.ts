@@ -201,11 +201,6 @@ export function isLapsed(quotation: Pick<QuotationListItem, 'validUntil' | 'stat
   return new Date(quotation.validUntil).getTime() < Date.now()
 }
 
-/** True when the caller is allowed to see cost and margin at all. */
-export function costVisible(quotation: Pick<Quotation, 'costTotal' | 'marginPercent'>): boolean {
-  return quotation.costTotal !== null || quotation.marginPercent !== null
-}
-
 export function formatMoney(amount: string | null, currency: string | null): string {
   if (amount === null) return '—'
   const value = Number(amount)

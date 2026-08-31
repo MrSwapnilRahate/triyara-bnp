@@ -8,10 +8,8 @@ import type {
   SupplierContactDto,
   SupplierDocumentDto,
   SupplierNoteDto,
-  SupplierOfferingDto,
   UpdateSupplierCertificationDto,
   UpdateSupplierContactDto,
-  UpdateSupplierDocumentDto,
   UpdateSupplierDto,
   UpdateSupplierNoteDto,
 } from '@triyara/validation'
@@ -105,20 +103,6 @@ export function useRestoreSupplier() {
   })
 }
 
-export function useDeleteSupplier() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async ({ id, version }: { id: string; version: number }) => {
-      await api.delete(`${BASE}/${id}`, version)
-      return id
-    },
-    onSuccess: (id) => {
-      queryClient.removeQueries({ queryKey: supplierKeys.detail(id) })
-      void queryClient.invalidateQueries({ queryKey: supplierKeys.all })
-    },
-  })
-}
-
 /**
  * Typeahead search. Enabled only from two characters, matching the API's own
  * minimum - firing a request the server will reject with 422 is pure noise.
@@ -182,21 +166,6 @@ export function useSupplierOfferings(
     },
     staleTime: STALE_TIME.list,
     placeholderData: (previous) => previous,
-  })
-}
-
-export function useAddSupplierOffering(supplierId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (dto: SupplierOfferingDto) => {
-      const result = await api.post<SupplierOffering>(`${BASE}/${supplierId}/products`, dto)
-      return result.data
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: [...supplierKeys.all, 'detail', supplierId, 'offerings'],
-      })
-    },
   })
 }
 
@@ -447,32 +416,6 @@ export function useReplaceSupplierDocument(supplierId: string) {
       const result = await api.patch<SupplierDocumentRow>(
         `${BASE}/${supplierId}/documents/${id}`,
         { storageKey: presigned.data.storageKey, mimeType: file.type },
-        version,
-      )
-      return result.data
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: supplierKeys.documents(supplierId) })
-      void queryClient.invalidateQueries({ queryKey: supplierKeys.detail(supplierId) })
-    },
-  })
-}
-
-export function useUpdateSupplierDocument(supplierId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async ({
-      id,
-      dto,
-      version,
-    }: {
-      id: string
-      dto: UpdateSupplierDocumentDto
-      version: number
-    }) => {
-      const result = await api.patch<SupplierDocumentRow>(
-        `${BASE}/${supplierId}/documents/${id}`,
-        dto,
         version,
       )
       return result.data

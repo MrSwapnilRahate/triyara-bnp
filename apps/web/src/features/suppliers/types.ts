@@ -178,11 +178,6 @@ export function expiringSoon(certifications: SupplierCertification[], days = 30)
   }).length
 }
 
-export function isExpired(certification: SupplierCertification): boolean {
-  if (!certification.expiryDate) return false
-  return new Date(certification.expiryDate).getTime() < Date.now()
-}
-
 /** A row of GET /api/suppliers/:id/documents. */
 export interface SupplierDocumentRow {
   id: string
