@@ -20,11 +20,17 @@ const btn =
 const ghost =
   'rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:text-white disabled:opacity-50'
 
-async function api(url: string, init: RequestInit): Promise<void> {
+/** What a mutation answered with. Every route here returns the updated record. */
+type MutationResult = { version?: number } | null
+
+async function api(url: string, init: RequestInit): Promise<MutationResult> {
   const res = await fetch(url, { credentials: 'include', ...init })
   const body = await res.json().catch(() => null)
   if (!res.ok || !body?.success)
     throw new Error(body?.errors?.[0]?.message ?? `Failed (${res.status})`)
+  // The envelope was being thrown away, which is where the stale version came
+  // from: the new one was in this response all along.
+  return (body.data ?? null) as MutationResult
 }
 
 type DialogKind = 'assign' | 'request' | 'approve' | 'reject' | 'suspend' | null
@@ -52,13 +58,40 @@ export function VerificationDetail({
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
   const [dialog, setDialog] = useState<DialogKind>(null)
-  const ifMatch = { 'if-match': `v${v.version}` }
 
-  async function run(fn: () => Promise<void>, okText: string) {
+  /**
+   * The version the next request will claim to have seen.
+   *
+   * It used to be `v.version` alone - the number the server rendered this page
+   * with. A mutation increments it, so between a successful action and the
+   * refreshed tree arriving, this component was still offering the old one. Act
+   * twice quickly and the second request said "I have seen v3" about a record
+   * already at v4, and the server correctly refused it: 412, "Precondition
+   * failed (stale version)", for an action that should simply have worked.
+   *
+   * Every mutation route already answers with the updated record, so the
+   * authoritative number is in the response we make. Adopting it there means
+   * correctness no longer waits on `router.refresh()`, which is a display
+   * concern and, as we learned the hard way, not something to depend on.
+   *
+   * The newer of the two wins. Our own mutation is ahead while a refresh is in
+   * flight; a refresh carrying somebody else's change is ahead of us. What this
+   * deliberately does not do is invent a version: if another actor moved the
+   * record and we have not seen it, we still send what we last knew and still
+   * get the 412 we should.
+   */
+  const [adopted, setAdopted] = useState(v.version)
+  const version = Math.max(adopted, v.version)
+  const ifMatch = { 'if-match': `v${version}` }
+
+  async function run(fn: () => Promise<MutationResult>, okText: string) {
     setBusy(true)
     setMsg(null)
     try {
-      await fn()
+      const updated = await fn()
+      // Before anything is re-enabled, so no control can be used against a
+      // version this component has already superseded.
+      if (typeof updated?.version === 'number') setAdopted(updated.version)
       setDialog(null)
       setMsg({ kind: 'ok', text: okText })
       router.refresh()
