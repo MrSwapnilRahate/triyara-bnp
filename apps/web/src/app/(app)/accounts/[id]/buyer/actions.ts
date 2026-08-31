@@ -1,12 +1,12 @@
 'use server'
 
 import type { BuyerServiceCtx } from '@triyara/core'
+import type { BuyerProfileRecord } from '@triyara/db'
 import {
   addBuyerProductSchema,
   createBuyerProfileSchema,
   updateBuyerProfileSchema,
 } from '@triyara/validation'
-import { revalidatePath } from 'next/cache'
 import { ZodError } from 'zod'
 
 import { requireAuth } from '@/auth/context'
@@ -15,6 +15,12 @@ import { buyerService } from '@/lib/buyer-service'
 export interface ActionState {
   ok?: boolean
   error?: string
+  /**
+   * The row this action just wrote, returned so the screen can settle on the
+   * server's own answer instead of waiting for a re-rendered tree. See
+   * `createBuyerAction` for why that wait is not safe to depend on.
+   */
+  profile?: BuyerProfileRecord
 }
 
 function toMessage(error: unknown): string {
@@ -58,14 +64,29 @@ function profileDto(fd: FormData) {
   }
 }
 
+/**
+ * Creates the profile and hands the new row straight back.
+ *
+ * Deliberately does NOT call `revalidatePath`. When a Server Action revalidates,
+ * Next returns the re-rendered route inside the action's own response, and React
+ * applies that tree in the same transition that owns `useActionState`'s pending
+ * flag. If applying it suspends, React parks the transition - correctly, since a
+ * transition must not replace visible content with a fallback - and waits for a
+ * ping that, measured here, does not always arrive. The row was written, the
+ * response arrived in full, and the button stayed on "Creating..." indefinitely.
+ *
+ * Returning the record instead lets the screen settle on data the action already
+ * has. `useSettleOnOk` still refreshes afterwards, so the server stays the
+ * source of truth; that refresh is now reconciliation rather than the only way
+ * the user ever sees their profile.
+ */
 export async function createBuyerAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   try {
     const auth = await requireAuth()
     const accountId = String(fd.get('accountId'))
     const dto = createBuyerProfileSchema.parse(profileDto(fd))
-    await buyerService.create(ctxAnd(auth), accountId, dto)
-    revalidatePath(`/accounts/${accountId}/buyer`)
-    return { ok: true }
+    const profile = await buyerService.create(ctxAnd(auth), accountId, dto)
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -77,9 +98,8 @@ export async function updateBuyerAction(_prev: ActionState, fd: FormData): Promi
     const accountId = String(fd.get('accountId'))
     const version = Number(fd.get('version'))
     const dto = updateBuyerProfileSchema.parse(profileDto(fd))
-    await buyerService.update(ctxAnd(auth), accountId, dto, version)
-    revalidatePath(`/accounts/${accountId}/buyer`)
-    return { ok: true }
+    const profile = await buyerService.update(ctxAnd(auth), accountId, dto, version)
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -89,9 +109,8 @@ export async function deleteBuyerAction(_prev: ActionState, fd: FormData): Promi
   try {
     const auth = await requireAuth()
     const accountId = String(fd.get('accountId'))
-    await buyerService.remove(ctxAnd(auth), accountId, Number(fd.get('version')))
-    revalidatePath(`/accounts/${accountId}/buyer`)
-    return { ok: true }
+    const profile = await buyerService.remove(ctxAnd(auth), accountId, Number(fd.get('version')))
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -101,9 +120,8 @@ export async function restoreBuyerAction(_prev: ActionState, fd: FormData): Prom
   try {
     const auth = await requireAuth()
     const accountId = String(fd.get('accountId'))
-    await buyerService.restore(ctxAnd(auth), accountId, Number(fd.get('version')))
-    revalidatePath(`/accounts/${accountId}/buyer`)
-    return { ok: true }
+    const profile = await buyerService.restore(ctxAnd(auth), accountId, Number(fd.get('version')))
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -123,9 +141,8 @@ export async function addBuyerProductAction(
       targetPrice: str(fd, 'targetPrice'),
       frequency: str(fd, 'frequency'),
     })
-    await buyerService.addProduct(ctxAnd(auth), accountId, dto, version)
-    revalidatePath(`/accounts/${accountId}/buyer`)
-    return { ok: true }
+    const profile = await buyerService.addProduct(ctxAnd(auth), accountId, dto, version)
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
@@ -139,9 +156,13 @@ export async function removeBuyerProductAction(
     const auth = await requireAuth()
     const accountId = String(fd.get('accountId'))
     const version = Number(fd.get('version'))
-    await buyerService.removeProduct(ctxAnd(auth), accountId, String(fd.get('productId')), version)
-    revalidatePath(`/accounts/${accountId}/buyer`)
-    return { ok: true }
+    const profile = await buyerService.removeProduct(
+      ctxAnd(auth),
+      accountId,
+      String(fd.get('productId')),
+      version,
+    )
+    return { ok: true, profile }
   } catch (error) {
     return { error: toMessage(error) }
   }
