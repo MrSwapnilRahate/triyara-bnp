@@ -18,8 +18,4 @@ export const catalogKeys = {
   categories: () => [...catalogKeys.all, 'categories'] as const,
   categoryList: (query: Partial<ListCategoriesQuery>) =>
     [...catalogKeys.categories(), 'list', query] as const,
-  category: (id: string) => [...catalogKeys.categories(), 'detail', id] as const,
-
-  specifications: () => [...catalogKeys.all, 'specifications'] as const,
-  tags: () => [...catalogKeys.all, 'tags'] as const,
 } as const
