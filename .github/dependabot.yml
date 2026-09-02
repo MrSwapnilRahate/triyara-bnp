@@ -28,6 +28,15 @@ updates:
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      # @sentry/server-utils 10.72.0 stopped declaring
+      # @apm-js-collab/code-transformer-bundler-plugins and vendored it instead,
+      # with a path that resolves to a non-file URL. Under pnpm's strict layout
+      # that throws `TypeError: The URL must be of scheme file` while loading the
+      # module, which fails the suite before any test runs. 10.73.0 ships the
+      # same packaging, so both lines are held back. Only these two minors are
+      # named: a later release that fixes the packaging is still proposed.
+      - dependency-name: '@sentry/nextjs'
+        versions: ['10.72.x', '10.73.x']
 
   - package-ecosystem: github-actions
     directory: '/'
