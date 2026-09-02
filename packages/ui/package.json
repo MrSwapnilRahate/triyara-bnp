@@ -28,7 +28,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.7"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.20",
