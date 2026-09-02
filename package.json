@@ -52,7 +52,15 @@
       "@prisma/engines",
       "prisma",
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "brace-expansion@1": "^1.1.18",
+      "fast-uri": "^3.1.5",
+      "js-yaml@3": "^3.15.1",
+      "js-yaml@4": "^4.3.1",
+      "browserslist": "^4.28.7",
+      "postcss": "^8.5.23"
+    }
   },
   "prisma": {
     "schema": "packages/db/prisma/schema.prisma"
