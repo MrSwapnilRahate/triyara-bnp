@@ -1,19 +1,29 @@
 'use client'
 
 import type { ActivityRecord } from '@triyara/db'
+import { Button, EmptyState, Input, Spinner } from '@triyara/ui'
 import { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } from '@triyara/validation'
+import { Activity, FileText, ShieldCheck, Truck, Users } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const field =
-  'rounded-lg border border-white/15 bg-navy/50 px-3 py-2 text-sm text-white focus:border-gold/60 focus:outline-none'
+import { FilterSelect } from '@/components/data/filter-select'
 
-const ENTITY_STYLE: Record<string, string> = {
-  Account: 'bg-blue-500/20 text-blue-300',
-  SupplierProfile: 'bg-teal-500/20 text-teal-300',
-  Document: 'bg-violet-500/20 text-violet-300',
-  Verification: 'bg-amber-500/20 text-amber-300',
+/**
+ * What each kind of record is, at a glance.
+ *
+ * The same icons the sidebar uses for these destinations, so the mark beside an
+ * entry means the same thing here as it does in the navigation. This replaces
+ * four hand-picked colour pairs whose only job was to be different from one
+ * another - the icon carries the meaning, and the shape does not depend on
+ * anybody being able to tell teal from violet.
+ */
+const ENTITY_ICON: Record<string, React.ReactNode> = {
+  Account: <Users />,
+  SupplierProfile: <Truck />,
+  Document: <FileText />,
+  Verification: <ShieldCheck />,
 }
 
 function relTime(iso: string | Date): string {
@@ -96,79 +106,103 @@ export function ActivityFeed({
   return (
     <div>
       {showFilters ? (
-        <div className="mb-5 flex flex-wrap gap-2">
-          <input
-            className={field}
-            placeholder="Search..."
+        <div className="mb-gap-lg flex flex-wrap items-center gap-gap">
+          <Input
+            type="search"
+            size="sm"
+            aria-label="Search activity"
+            placeholder="Search…"
             defaultValue={sp.get('q') ?? ''}
+            className="max-w-[14rem]"
             onKeyDown={(e) => {
               if (e.key === 'Enter') setParam('q', (e.target as HTMLInputElement).value)
             }}
           />
-          <select
-            className={field}
-            defaultValue={sp.get('entityType') ?? ''}
-            onChange={(e) => setParam('entityType', e.target.value)}
-          >
-            <option value="">All entities</option>
-            {ACTIVITY_ENTITY_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <select
-            className={field}
-            defaultValue={sp.get('activityType') ?? ''}
-            onChange={(e) => setParam('activityType', e.target.value)}
-          >
-            <option value="">All actions</option>
-            {ACTIVITY_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <FilterSelect
+            label="Entity"
+            allLabel="All entities"
+            value={sp.get('entityType') ?? undefined}
+            onChange={(value) => setParam('entityType', value ?? '')}
+            options={ACTIVITY_ENTITY_TYPES.map((t) => ({ value: t, label: t }))}
+            className="w-44"
+          />
+          <FilterSelect
+            label="Action"
+            allLabel="All actions"
+            value={sp.get('activityType') ?? undefined}
+            onChange={(value) => setParam('activityType', value ?? '')}
+            options={ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ') }))}
+            className="w-44"
+          />
         </div>
       ) : null}
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-white/15 py-16 text-center text-sm text-white/40">
-          No activity yet. Actions across accounts, suppliers, documents and verifications will
-          appear here.
+        <div className="rounded-md border border-line bg-surface">
+          <EmptyState
+            icon={<Activity />}
+            title="No activity yet"
+            description="Actions across accounts, suppliers, documents and verifications will appear here."
+          />
         </div>
       ) : (
-        <ol className="space-y-2">
+        <ol className="space-y-gap-xs">
           {items.map((a) => {
             const href = linkFor(a)
-            const card = (
-              <div className="flex items-start gap-3 rounded-lg border border-white/10 px-4 py-3 transition-colors hover:border-white/20">
-                <span
-                  className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${ENTITY_STYLE[a.entityType] ?? 'bg-white/10 text-white/60'}`}
-                >
-                  {a.entityType.charAt(0)}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-white">{a.description}</p>
-                  <p className="text-xs text-white/40">
-                    {a.actorType === 'system' ? 'system' : 'a user'} &middot; {relTime(a.createdAt)}
-                    <span className="ml-2 font-mono text-white/25">{a.eventName}</span>
-                  </p>
+
+            return (
+              <li key={a.id}>
+                {/* `relative` anchors the stretched link below: the whole row is
+                    clickable, while the accessible name stays the description
+                    rather than the row's every word run together. */}
+                <div className="relative flex items-start gap-gap rounded-md border border-line bg-surface px-gap-lg py-gap transition-colors duration-fast hover:border-line-strong">
+                  <span
+                    aria-hidden="true"
+                    className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-content-subtle [&_svg]:size-3.5"
+                  >
+                    {ENTITY_ICON[a.entityType] ?? <Activity />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base text-content">
+                      {href ? (
+                        <Link
+                          href={href}
+                          className="focus-ring after:absolute after:inset-0 hover:underline"
+                        >
+                          {a.description}
+                        </Link>
+                      ) : (
+                        a.description
+                      )}
+                    </p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-gap-xs text-xs text-content-subtle">
+                      <span>{a.actorType === 'system' ? 'system' : 'a user'}</span>
+                      <span aria-hidden="true">&middot;</span>
+                      <time dateTime={new Date(a.createdAt).toISOString()}>
+                        {relTime(a.createdAt)}
+                      </time>
+                      <span className="font-mono">{a.eventName}</span>
+                    </p>
+                  </div>
                 </div>
-              </div>
+              </li>
             )
-            return <li key={a.id}>{href ? <Link href={href}>{card}</Link> : card}</li>
           })}
         </ol>
       )}
 
       <div ref={sentinel} className="h-8" />
-      {loading ? <p className="py-2 text-center text-xs text-white/40">Loading...</p> : null}
+      {loading ? (
+        <p className="flex items-center justify-center gap-gap py-gap text-xs text-content-subtle">
+          <Spinner size="xs" label={null} />
+          Loading more…
+        </p>
+      ) : null}
       {cursor && !loading ? (
-        <div className="mt-2 text-center">
-          <button onClick={() => void loadMore()} className="text-sm text-white/60 hover:text-gold">
+        <div className="mt-gap-xs flex justify-center">
+          <Button variant="secondary" size="sm" onClick={() => void loadMore()}>
             Load more
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>
