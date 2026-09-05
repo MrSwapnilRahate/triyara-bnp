@@ -46,6 +46,14 @@ export {
   createAdminUsersService,
 } from './admin/admin-users.service'
 export {
+  avatarPath,
+  type AvatarService,
+  type AvatarServiceCtx,
+  type AvatarServiceDeps,
+  avatarStorageKey,
+  createAvatarService,
+} from './admin/avatar.service'
+export {
   createEmailVerificationService,
   type EmailVerificationCtx,
   type EmailVerificationDeps,

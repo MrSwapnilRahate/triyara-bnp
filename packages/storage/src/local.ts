@@ -4,7 +4,13 @@ import { mkdir, readFile, stat as fsStat, unlink, writeFile } from 'node:fs/prom
 import { dirname, join } from 'node:path'
 import type { Readable } from 'node:stream'
 
-import { assertSafeKey, type ObjectStat, type PresignedUpload, type StorageProvider } from './types'
+import {
+  assertSafeKey,
+  type ObjectStat,
+  type PresignedUpload,
+  type StorageObject,
+  type StorageProvider,
+} from './types'
 
 // Local filesystem provider that faithfully mirrors presigned-upload semantics using
 // short-lived HMAC-signed URLs (no session needed for the direct PUT/GET). This makes
@@ -109,6 +115,21 @@ export class LocalStorageProvider implements StorageProvider {
 
   readStream(key: string): Readable {
     return createReadStream(this.full(key))
+  }
+
+  /**
+   * The interface's byte read, on top of the stream this provider already had.
+   *
+   * `contentType` is null and cannot be otherwise: this provider writes bare
+   * files with no sidecar metadata, so the type an upload declared is not
+   * recoverable from disk. The caller sniffs instead. That is acceptable
+   * because this provider is development-only - `createStorageFromEnv`
+   * refuses to select it in production.
+   */
+  async readObject(key: string): Promise<StorageObject | null> {
+    const path = this.full(key)
+    if (!existsSync(path)) return null
+    return { bytes: new Uint8Array(await readFile(path)), contentType: null }
   }
 
   async delete(key: string): Promise<void> {

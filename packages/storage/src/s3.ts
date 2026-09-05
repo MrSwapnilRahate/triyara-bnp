@@ -7,7 +7,7 @@ import {
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
-import type { ObjectStat, PresignedUpload, StorageProvider } from './types'
+import type { ObjectStat, PresignedUpload, StorageObject, StorageProvider } from './types'
 
 export interface S3Config {
   region: string
@@ -90,6 +90,25 @@ export class S3CompatibleStorage implements StorageProvider {
       )
       return { size: res.ContentLength ?? 0, checksum: (res.ETag ?? '').replace(/"/g, '') }
     } catch {
+      return null
+    }
+  }
+
+  async readObject(storageKey: string): Promise<StorageObject | null> {
+    try {
+      const res = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: storageKey }),
+      )
+      if (!res.Body) return null
+      // `transformToByteArray` is the SDK's own helper for exactly this: it
+      // consumes the platform stream and hands back bytes, so no Node stream
+      // type escapes the provider.
+      const bytes = await res.Body.transformToByteArray()
+      return { bytes, contentType: res.ContentType ?? null }
+    } catch {
+      // A missing key raises NoSuchKey. `stat` above already flattens its
+      // errors the same way, so this stays consistent with it: absent and
+      // unreadable are the same answer to a caller that can only render or not.
       return null
     }
   }

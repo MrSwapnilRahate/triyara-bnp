@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { ASSIGNABLE_ROLES, grantableRoleSchema } from './auth'
+import { ALLOWED_MIME_TYPES } from './document'
 
 // Administration contracts (TRY-BNP-ADMIN-01): the audit trail, organization
 // settings and the caller's own profile.
@@ -63,6 +64,69 @@ export type UpdateOrganizationDto = z.infer<typeof updateOrganizationSchema>
 
 // ---- Profile ----
 
+// ---- Avatar ----
+
+/**
+ * The app-relative form an uploaded avatar is stored as.
+ *
+ * Constrained to the avatar route rather than "any path". A field that accepted
+ * an arbitrary relative path would be a way to point one user's avatar at some
+ * other endpoint of this API, which the browser would then fetch with the
+ * viewer's cookies attached.
+ */
+const AVATAR_PATH = /^\/api\/v1\/users\/[A-Za-z0-9_-]{1,64}\/avatar$/
+
+/**
+ * Where an avatar image lives: an absolute URL, or this app's avatar path.
+ *
+ * ADDITIVE ON PURPOSE. Every value written before avatars could be uploaded is
+ * an absolute URL, and narrowing this would invalidate stored rows on the next
+ * profile save. The path form is what the upload flow writes, and it cannot be
+ * expressed by `.url()` at all - a relative reference is not a URL.
+ *
+ * Worth recording why the path form had to exist: the app serves its own CSP
+ * with `img-src 'self'`, so an image on the storage host is refused whether it
+ * is linked directly or arrived at through a redirect. Same-origin is the only
+ * way an `<img>` renders here, and same-origin cannot be an absolute URL
+ * without baking this deployment's hostname into the database.
+ */
+export const avatarUrlSchema = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((value) => AVATAR_PATH.test(value) || z.string().url().safeParse(value).success, {
+    message: 'Must be an absolute URL or this application’s avatar path.',
+  })
+
+/** Avatars are displayed at 96px at most, so the cap is generous already. */
+export const AVATAR_MAX_BYTES = 2 * 1024 * 1024
+
+/**
+ * The image subset of the platform's upload allow-list.
+ *
+ * Derived from `ALLOWED_MIME_TYPES` rather than retyped, so a format can never
+ * be accepted for an avatar that the rest of the platform refuses to store.
+ */
+export const AVATAR_MIME_TYPES = ALLOWED_MIME_TYPES.filter((mime) =>
+  mime.startsWith('image/'),
+) as unknown as readonly ['image/png', 'image/jpeg', 'image/webp']
+
+export const avatarMimeSchema = z.enum(AVATAR_MIME_TYPES)
+export type AvatarMimeType = z.infer<typeof avatarMimeSchema>
+
+/**
+ * What the client may say about the file it is about to upload.
+ *
+ * Neither field is trusted: the size is re-checked against the stored object on
+ * confirmation, because a presigned PUT to S3 or R2 does not enforce one. There
+ * is deliberately no user or account id here - both are taken from the session.
+ */
+export const presignAvatarSchema = z.object({
+  mimeType: avatarMimeSchema,
+  sizeBytes: z.number().int().positive().max(AVATAR_MAX_BYTES),
+})
+export type PresignAvatarDto = z.infer<typeof presignAvatarSchema>
+
 /**
  * A user may change their own display name and nothing else. Email is the login
  * identifier and roles are granted by an administrator, so neither is editable
@@ -71,7 +135,7 @@ export type UpdateOrganizationDto = z.infer<typeof updateOrganizationSchema>
  */
 export const updateProfileSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
-  avatarUrl: z.string().trim().url().max(2000).nullish(),
+  avatarUrl: avatarUrlSchema.nullish(),
   /**
    * UI choices the server stores but never interprets - density, default
    * landing tab, and so on. Free-form so adding one needs no migration;

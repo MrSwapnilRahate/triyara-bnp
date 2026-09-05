@@ -69,6 +69,7 @@ function fakeStorage(stat: ObjectStat | null = { size: 5, checksum: 'abc' }): St
     }),
     createDownloadUrl: async () => '/dl',
     stat: async () => stat,
+    readObject: async () => null,
     delete: async () => undefined,
   }
 }
