@@ -1,6 +1,32 @@
 'use client'
 
 import type { ReviewerOption, VerificationHistoryItem, VerificationRecord } from '@triyara/db'
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Label,
+  PageHeader,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  StatusBadge,
+  Textarea,
+} from '@triyara/ui'
+import { ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -12,13 +38,6 @@ type DocItem = {
   status: string
   expiryDate: Date | string | null
 }
-
-const field =
-  'w-full rounded-lg border border-white/15 bg-navy/50 px-3 py-2 text-sm text-white focus:border-gold/60 focus:outline-none'
-const btn =
-  'rounded-lg bg-gold px-3 py-1.5 text-sm font-semibold text-navy hover:bg-gold-light disabled:opacity-50'
-const ghost =
-  'rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:text-white disabled:opacity-50'
 
 /** What a mutation answered with. Every route here returns the updated record. */
 type MutationResult = { version?: number } | null
@@ -34,6 +53,22 @@ async function api(url: string, init: RequestInit): Promise<MutationResult> {
 }
 
 type DialogKind = 'assign' | 'request' | 'approve' | 'reject' | 'suspend' | null
+
+const DIALOG_TITLE: Record<Exclude<DialogKind, null>, string> = {
+  assign: 'Assign reviewer',
+  request: 'Request documents',
+  approve: 'Approve verification',
+  reject: 'Reject verification',
+  suspend: 'Suspend verification',
+}
+
+const DIALOG_SUBMIT: Record<Exclude<DialogKind, null>, string> = {
+  assign: 'Assign',
+  request: 'Request',
+  approve: 'Approve',
+  reject: 'Reject',
+  suspend: 'Suspend',
+}
 
 export function VerificationDetail({
   verification: v,
@@ -115,389 +150,384 @@ export function VerificationDetail({
   const reviewByDoc = new Map(v.reviews.map((r) => [r.documentId, r.status]))
   const s = v.status
 
+  function onDialogSubmit(fd: FormData) {
+    if (dialog === 'assign')
+      void run(
+        () => post('/assign', { reviewerId: String(fd.get('reviewerId')) }),
+        'Reviewer assigned',
+      )
+    if (dialog === 'request')
+      void run(
+        () => post('/request-documents', { reason: String(fd.get('reason')) }),
+        'Documents requested',
+      )
+    if (dialog === 'approve')
+      void run(
+        () => post('/approve', { expiresInDays: Number(fd.get('expiresInDays')) || 365 }),
+        'Verification approved',
+      )
+    if (dialog === 'reject')
+      void run(() => post('/reject', { reason: String(fd.get('reason')) }), 'Verification rejected')
+    if (dialog === 'suspend')
+      void run(
+        () => post('/suspend', { reason: String(fd.get('reason')) }),
+        'Verification suspended',
+      )
+  }
+
+  const meta: Array<{ label: string; value: React.ReactNode }> = []
+  if (v.decision) meta.push({ label: 'Decision', value: v.decision })
+  if (v.expiresAt)
+    meta.push({ label: 'Valid to', value: new Date(v.expiresAt).toLocaleDateString() })
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/verifications" className="text-xs text-white/40 hover:text-gold">
-        &larr; Verification queue
-      </Link>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gold">{accountName}</h1>
-          <p className="text-sm text-white/40">
-            Status <span className="font-semibold text-white">{s}</span>
-            {v.decision ? <> &middot; {v.decision}</> : null}
-            {v.expiresAt ? (
-              <> &middot; valid to {new Date(v.expiresAt).toLocaleDateString()}</>
-            ) : null}
-          </p>
-        </div>
-      </div>
-      {msg ? (
-        <p className={`mt-2 text-sm ${msg.kind === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
-          {msg.text}
-        </p>
-      ) : null}
-
-      {/* Action bar */}
-      <div className="mt-5 flex flex-wrap gap-2">
-        {canUpdate && (s === 'DRAFT' || s === 'DOCUMENTS_REQUESTED') ? (
-          <button
-            className={btn}
-            disabled={busy}
-            onClick={() => void run(() => post('/submit'), 'Submitted for review')}
+    <>
+      <PageHeader
+        title={accountName}
+        status={<StatusBadge status={s} />}
+        breadcrumb={
+          <Link
+            href="/verifications"
+            className="focus-ring inline-flex items-center gap-gap-xs text-xs text-content-muted hover:text-content"
           >
-            Submit
-          </button>
-        ) : null}
-        {canUpdate && ['PENDING_REVIEW', 'DOCUMENTS_REQUESTED', 'IN_REVIEW'].includes(s) ? (
-          <button className={ghost} onClick={() => setDialog('assign')}>
-            Assign reviewer
-          </button>
-        ) : null}
-        {canUpdate && ['PENDING_REVIEW', 'IN_REVIEW'].includes(s) ? (
-          <button className={ghost} onClick={() => setDialog('request')}>
-            Request documents
-          </button>
-        ) : null}
-        {canVerify && s === 'IN_REVIEW' ? (
-          <button className={btn} onClick={() => setDialog('approve')}>
-            Approve
-          </button>
-        ) : null}
-        {canVerify && ['PENDING_REVIEW', 'DOCUMENTS_REQUESTED', 'IN_REVIEW'].includes(s) ? (
-          <button
-            className="rounded-lg border border-red-500/40 px-3 py-1.5 text-sm text-red-300 hover:bg-red-500/10"
-            onClick={() => setDialog('reject')}
-          >
-            Reject
-          </button>
-        ) : null}
-        {canVerify && s === 'VERIFIED' ? (
-          <button className={ghost} onClick={() => setDialog('suspend')}>
-            Suspend
-          </button>
-        ) : null}
-        {canUpdate && ['SUSPENDED', 'REJECTED', 'EXPIRED'].includes(s) ? (
-          <button
-            className={ghost}
-            disabled={busy}
-            onClick={() => void run(() => post('/reopen'), 'Reopened')}
-          >
-            Reopen
-          </button>
-        ) : null}
-      </div>
-
-      {/* Required documents checklist */}
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold text-white">Required documents</h2>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {v.requiredDocumentTypes.map((t) => (
-            <span
-              key={t}
-              className={`rounded-full border px-3 py-1 text-xs ${acceptedTypes.has(t) ? 'border-green-500/40 text-green-400' : 'border-white/15 text-white/50'}`}
-            >
-              {t} {acceptedTypes.has(t) ? '✓' : ''}
-            </span>
-          ))}
-        </div>
-
-        <h2 className="mt-6 text-sm font-semibold text-white">
-          Document checklist ({documents.length})
-        </h2>
-        <ul className="mt-2 space-y-2">
-          {documents.length === 0 ? (
-            <li className="text-sm text-white/40">
-              This account has no documents. Upload them under Documents.
-            </li>
-          ) : null}
-          {documents.map((d) => {
-            const state = reviewByDoc.get(d.id) ?? 'PENDING'
-            return (
-              <li
-                key={d.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm"
+            <ChevronLeft aria-hidden="true" className="size-3.5" />
+            Verification queue
+          </Link>
+        }
+        {...(meta.length > 0 ? { meta } : {})}
+        actions={
+          <>
+            {canUpdate && (s === 'DRAFT' || s === 'DOCUMENTS_REQUESTED') ? (
+              <Button
+                variant="primary"
+                disabled={busy}
+                onClick={() => void run(() => post('/submit'), 'Submitted for review')}
               >
-                <span className="text-white">
-                  <span className="text-white/40">[{d.type}]</span> {d.title}
-                  <span
-                    className={`ml-2 text-xs ${state === 'ACCEPTED' ? 'text-green-400' : state === 'REJECTED' ? 'text-red-400' : 'text-white/40'}`}
-                  >
-                    {state}
-                  </span>
-                </span>
-                {canVerify && ['IN_REVIEW', 'PENDING_REVIEW', 'DOCUMENTS_REQUESTED'].includes(s) ? (
-                  <span className="flex gap-2">
-                    <a
-                      className={ghost}
-                      href={`/api/v1/documents/${d.id}/download?disposition=inline`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      View
-                    </a>
-                    <button
-                      className={ghost}
-                      disabled={busy}
-                      onClick={() =>
-                        void run(
-                          () => post('/review-document', { documentId: d.id, status: 'ACCEPTED' }),
-                          'Marked accepted',
-                        )
-                      }
-                    >
-                      Accept
-                    </button>
-                    <button
-                      className={ghost}
-                      disabled={busy}
-                      onClick={() =>
-                        void run(
-                          () => post('/review-document', { documentId: d.id, status: 'REJECTED' }),
-                          'Marked rejected',
-                        )
-                      }
-                    >
-                      Reject
-                    </button>
-                  </span>
-                ) : (
-                  <a
-                    className={ghost}
-                    href={`/api/v1/documents/${d.id}/download?disposition=inline`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View
-                  </a>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      </section>
+                Submit
+              </Button>
+            ) : null}
+            {canUpdate && ['PENDING_REVIEW', 'DOCUMENTS_REQUESTED', 'IN_REVIEW'].includes(s) ? (
+              <Button variant="secondary" onClick={() => setDialog('assign')}>
+                Assign reviewer
+              </Button>
+            ) : null}
+            {canUpdate && ['PENDING_REVIEW', 'IN_REVIEW'].includes(s) ? (
+              <Button variant="secondary" onClick={() => setDialog('request')}>
+                Request documents
+              </Button>
+            ) : null}
+            {canVerify && s === 'IN_REVIEW' ? (
+              <Button variant="primary" onClick={() => setDialog('approve')}>
+                Approve
+              </Button>
+            ) : null}
+            {canVerify && ['PENDING_REVIEW', 'DOCUMENTS_REQUESTED', 'IN_REVIEW'].includes(s) ? (
+              <Button variant="danger" onClick={() => setDialog('reject')}>
+                Reject
+              </Button>
+            ) : null}
+            {canVerify && s === 'VERIFIED' ? (
+              <Button variant="secondary" onClick={() => setDialog('suspend')}>
+                Suspend
+              </Button>
+            ) : null}
+            {canUpdate && ['SUSPENDED', 'REJECTED', 'EXPIRED'].includes(s) ? (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void run(() => post('/reopen'), 'Reopened')}
+              >
+                Reopen
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
-      {/* Notes */}
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold text-white">Review notes</h2>
-        {canNote ? (
-          <form
-            className="mt-2 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              const input = e.currentTarget.elements.namedItem('body') as HTMLInputElement
-              const body = input.value.trim()
-              if (body)
-                void run(() => post('/notes', { body }), 'Note added').then(
-                  () => (input.value = ''),
-                )
-            }}
-          >
-            <input name="body" placeholder="Add a note..." className={field} />
-            <button className={btn} disabled={busy}>
-              Add
-            </button>
-          </form>
-        ) : null}
-        <ul className="mt-3 space-y-2">
-          {v.notes.length === 0 ? <li className="text-sm text-white/40">No notes yet.</li> : null}
-          {v.notes.map((n) => (
-            <li
-              key={n.id}
-              className="rounded-lg border border-white/10 px-3 py-2 text-sm text-white/70"
-            >
-              {n.body}
-              <span className="ml-2 text-xs text-white/30">
-                {new Date(n.createdAt).toLocaleString()}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="mx-auto flex max-w-4xl flex-col gap-gutter p-gutter">
+        {msg ? <Alert tone={msg.kind === 'ok' ? 'success' : 'danger'}>{msg.text}</Alert> : null}
 
-      {/* History timeline */}
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold text-white">History</h2>
-        <ol className="mt-3 space-y-2 border-l border-white/10 pl-4">
-          {history.map((h) => (
-            <li key={h.id} className="relative text-sm text-white/60">
-              <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-gold" />
-              <span className="text-white">{h.toStatus}</span>
-              <span className="text-white/30">
-                {' '}
-                &middot; {h.action.replace('verification.', '')}
-              </span>
-              {h.reason ? <span className="text-white/40"> &middot; {h.reason}</span> : null}
-              <span className="ml-2 text-xs text-white/30">
-                {new Date(h.createdAt).toLocaleString()}
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2">Required documents</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-wrap gap-gap">
+              {v.requiredDocumentTypes.map((t) => (
+                <li key={t}>
+                  <Badge tone={acceptedTypes.has(t) ? 'success' : 'neutral'} variant="outline">
+                    {t}
+                    {acceptedTypes.has(t) ? <span className="sr-only"> accepted</span> : null}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
 
-      {/* Dialogs */}
-      {dialog ? (
-        <Modal onClose={() => setDialog(null)}>
-          {dialog === 'assign' ? (
-            <DialogForm
-              title="Assign reviewer"
-              submitLabel="Assign"
-              busy={busy}
-              onSubmit={(fd) =>
-                void run(
-                  () => post('/assign', { reviewerId: String(fd.get('reviewerId')) }),
-                  'Reviewer assigned',
-                )
-              }
-            >
-              <select name="reviewerId" required className={field} defaultValue="">
-                <option value="" disabled>
-                  Select reviewer
-                </option>
-                {reviewers.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({r.roleNames.join('/')})
-                  </option>
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2">Document checklist ({documents.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {documents.length === 0 ? (
+              <p className="text-base text-content-muted">
+                This account has no documents. Upload them under Documents.
+              </p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {documents.map((d) => {
+                  const state = reviewByDoc.get(d.id) ?? 'PENDING'
+                  return (
+                    <li
+                      key={d.id}
+                      className="flex flex-wrap items-center justify-between gap-gap py-gap"
+                    >
+                      <span className="flex min-w-0 flex-wrap items-center gap-gap">
+                        <span className="font-mono text-xs text-content-subtle">{d.type}</span>
+                        <span className="truncate text-base text-content">{d.title}</span>
+                        <StatusBadge status={state} size="sm" />
+                      </span>
+                      {canVerify &&
+                      ['IN_REVIEW', 'PENDING_REVIEW', 'DOCUMENTS_REQUESTED'].includes(s) ? (
+                        <span className="flex shrink-0 gap-gap-xs">
+                          <Button asChild variant="ghost" size="sm">
+                            <a
+                              href={`/api/v1/documents/${d.id}/download?disposition=inline`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View
+                            </a>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() =>
+                              void run(
+                                () =>
+                                  post('/review-document', {
+                                    documentId: d.id,
+                                    status: 'ACCEPTED',
+                                  }),
+                                'Marked accepted',
+                              )
+                            }
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() =>
+                              void run(
+                                () =>
+                                  post('/review-document', {
+                                    documentId: d.id,
+                                    status: 'REJECTED',
+                                  }),
+                                'Marked rejected',
+                              )
+                            }
+                          >
+                            Reject
+                          </Button>
+                        </span>
+                      ) : (
+                        <Button asChild variant="ghost" size="sm">
+                          <a
+                            href={`/api/v1/documents/${d.id}/download?disposition=inline`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View
+                          </a>
+                        </Button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2">Review notes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {canNote ? (
+              <form
+                className="mb-gap-lg flex gap-gap"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  const input = e.currentTarget.elements.namedItem('body') as HTMLInputElement
+                  const body = input.value.trim()
+                  if (body)
+                    void run(() => post('/notes', { body }), 'Note added').then(
+                      () => (input.value = ''),
+                    )
+                }}
+              >
+                <Label htmlFor="verification-note" className="sr-only">
+                  Add a note
+                </Label>
+                <Input id="verification-note" name="body" placeholder="Add a note…" />
+                <Button variant="primary" disabled={busy}>
+                  Add
+                </Button>
+              </form>
+            ) : null}
+            {v.notes.length === 0 ? (
+              <p className="text-base text-content-muted">No notes yet.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {v.notes.map((n) => (
+                  <li key={n.id} className="py-gap">
+                    <p className="text-base text-content">{n.body}</p>
+                    <p className="mt-0.5 text-xs text-content-subtle">
+                      <time dateTime={new Date(n.createdAt).toISOString()}>
+                        {new Date(n.createdAt).toLocaleString()}
+                      </time>
+                    </p>
+                  </li>
                 ))}
-              </select>
-            </DialogForm>
-          ) : null}
-          {dialog === 'request' ? (
-            <DialogForm
-              title="Request documents"
-              submitLabel="Request"
-              busy={busy}
-              onSubmit={(fd) =>
-                void run(
-                  () => post('/request-documents', { reason: String(fd.get('reason')) }),
-                  'Documents requested',
-                )
-              }
-            >
-              <textarea
-                name="reason"
-                required
-                placeholder="What is needed?"
-                className={field}
-                rows={3}
-              />
-            </DialogForm>
-          ) : null}
-          {dialog === 'approve' ? (
-            <DialogForm
-              title="Approve verification"
-              submitLabel="Approve"
-              busy={busy}
-              onSubmit={(fd) =>
-                void run(
-                  () => post('/approve', { expiresInDays: Number(fd.get('expiresInDays')) || 365 }),
-                  'Verification approved',
-                )
-              }
-            >
-              <label className="text-xs text-white/40">
-                Valid for (days)
-                <input
-                  name="expiresInDays"
-                  type="number"
-                  defaultValue={365}
-                  className={`${field} mt-1`}
-                />
-              </label>
-            </DialogForm>
-          ) : null}
-          {dialog === 'reject' ? (
-            <DialogForm
-              title="Reject verification"
-              submitLabel="Reject"
-              busy={busy}
-              onSubmit={(fd) =>
-                void run(
-                  () => post('/reject', { reason: String(fd.get('reason')) }),
-                  'Verification rejected',
-                )
-              }
-            >
-              <textarea
-                name="reason"
-                required
-                placeholder="Reason for rejection"
-                className={field}
-                rows={3}
-              />
-            </DialogForm>
-          ) : null}
-          {dialog === 'suspend' ? (
-            <DialogForm
-              title="Suspend verification"
-              submitLabel="Suspend"
-              busy={busy}
-              onSubmit={(fd) =>
-                void run(
-                  () => post('/suspend', { reason: String(fd.get('reason')) }),
-                  'Verification suspended',
-                )
-              }
-            >
-              <textarea
-                name="reason"
-                required
-                placeholder="Reason for suspension"
-                className={field}
-                rows={3}
-              />
-            </DialogForm>
-          ) : null}
-        </Modal>
-      ) : null}
-    </div>
-  )
-}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
 
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-navy-elevated p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2">History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ol className="space-y-gap-lg border-l border-line pl-gap-lg">
+              {history.map((h) => (
+                <li key={h.id} className="relative">
+                  <span
+                    aria-hidden="true"
+                    className="absolute -left-[21px] top-1.5 size-2 rounded-full bg-accent"
+                  />
+                  <p className="flex flex-wrap items-baseline gap-gap-xs">
+                    <span className="text-base font-medium text-content">{h.toStatus}</span>
+                    <span className="text-xs text-content-subtle">
+                      {h.action.replace('verification.', '')}
+                    </span>
+                  </p>
+                  {h.reason ? (
+                    <p className="mt-0.5 text-xs text-content-muted">{h.reason}</p>
+                  ) : null}
+                  <p className="mt-0.5 text-xs text-content-subtle">
+                    <time dateTime={new Date(h.createdAt).toISOString()}>
+                      {new Date(h.createdAt).toLocaleString()}
+                    </time>
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
       </div>
-    </div>
-  )
-}
 
-function DialogForm({
-  title,
-  submitLabel,
-  busy,
-  onSubmit,
-  children,
-}: {
-  title: string
-  submitLabel: string
-  busy: boolean
-  onSubmit: (fd: FormData) => void
-  children: React.ReactNode
-}) {
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSubmit(new FormData(e.currentTarget))
-      }}
-    >
-      <h2 className="text-lg font-bold text-gold">{title}</h2>
-      <div className="mt-4 space-y-3">{children}</div>
-      <div className="mt-5 flex justify-end">
-        <button className={btn} disabled={busy}>
-          {busy ? 'Working...' : submitLabel}
-        </button>
-      </div>
-    </form>
+      <Dialog open={dialog !== null} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent className="max-w-md">
+          {dialog ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                onDialogSubmit(new FormData(e.currentTarget))
+              }}
+            >
+              <DialogHeader>
+                <DialogTitle>{DIALOG_TITLE[dialog]}</DialogTitle>
+              </DialogHeader>
+              <DialogBody className="grid gap-gap-lg">
+                {dialog === 'assign' ? (
+                  <>
+                    <Label htmlFor="assign-reviewer" required>
+                      Reviewer
+                    </Label>
+                    {/* Radix renders a hidden native <select> for `name`, so the
+                        FormData contract above is unchanged. */}
+                    <Select name="reviewerId" required>
+                      <SelectTrigger id="assign-reviewer">
+                        <SelectValue placeholder="Select reviewer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {reviewers.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name} ({r.roleNames.join('/')})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </>
+                ) : null}
+
+                {dialog === 'request' ? (
+                  <>
+                    <Label htmlFor="request-reason" required>
+                      What is needed?
+                    </Label>
+                    <Textarea id="request-reason" name="reason" required rows={3} />
+                  </>
+                ) : null}
+
+                {dialog === 'approve' ? (
+                  <>
+                    <Label htmlFor="approve-days">Valid for (days)</Label>
+                    <Input
+                      id="approve-days"
+                      name="expiresInDays"
+                      type="number"
+                      defaultValue={365}
+                    />
+                  </>
+                ) : null}
+
+                {dialog === 'reject' ? (
+                  <>
+                    <Label htmlFor="reject-reason" required>
+                      Reason for rejection
+                    </Label>
+                    <Textarea id="reject-reason" name="reason" required rows={3} />
+                  </>
+                ) : null}
+
+                {dialog === 'suspend' ? (
+                  <>
+                    <Label htmlFor="suspend-reason" required>
+                      Reason for suspension
+                    </Label>
+                    <Textarea id="suspend-reason" name="reason" required rows={3} />
+                  </>
+                ) : null}
+              </DialogBody>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setDialog(null)}
+                  disabled={busy}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant={dialog === 'reject' ? 'danger' : 'primary'}
+                  disabled={busy}
+                  loading={busy}
+                >
+                  {DIALOG_SUBMIT[dialog]}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

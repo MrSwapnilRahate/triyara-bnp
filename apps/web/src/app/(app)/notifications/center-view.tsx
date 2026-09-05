@@ -1,16 +1,32 @@
 'use client'
 
 import type { NotificationFeedItem, PreferenceRecord } from '@triyara/db'
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  Input,
+  PageHeader,
+  Spinner,
+  Switch,
+} from '@triyara/ui'
 import { NOTIFICATION_FILTERS, NOTIFICATION_TYPES } from '@triyara/validation'
+import { BellOff } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
-const field =
-  'rounded-lg border border-white/15 bg-navy/50 px-3 py-2 text-sm text-white focus:border-gold/60 focus:outline-none'
-const ghost = 'rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:text-white'
+import { FilterSelect } from '@/components/data/filter-select'
 
-const PRIORITY: Record<string, string> = { HIGH: 'text-amber-400', URGENT: 'text-red-400' }
+/**
+ * Priority tones. Only HIGH and URGENT are shown at all - NORMAL and LOW carry
+ * no badge, so the ones that do stand out instead of becoming wallpaper.
+ */
+const PRIORITY_TONE: Record<string, 'warning' | 'danger'> = { HIGH: 'warning', URGENT: 'danger' }
 
 async function patch(url: string): Promise<void> {
   await fetch(url, { method: 'PATCH', credentials: 'include' })
@@ -55,6 +71,7 @@ export function NotificationCenter({
   const [loading, setLoading] = useState(false)
   const [showPrefs, setShowPrefs] = useState(false)
   const sentinel = useRef<HTMLDivElement>(null)
+  const prefsPanelId = useId()
 
   useEffect(() => {
     setItems(initialItems)
@@ -109,139 +126,214 @@ export function NotificationCenter({
     ;(groups.get(b) ?? groups.set(b, []).get(b)!).push(it)
   }
 
+  const activeFilter = sp.get('filter') ?? 'all'
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gold">Notifications</h1>
-        <div className="flex gap-2">
-          <button className={ghost} onClick={() => setShowPrefs((v) => !v)}>
-            Preferences
-          </button>
-          <button
-            className={ghost}
-            onClick={() => void act(() => patch('/api/v1/notifications/read-all'))}
-          >
-            Mark all read
-          </button>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title="Notifications"
+        description="Everything the platform has raised for your organization, newest first."
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => setShowPrefs((v) => !v)}
+              aria-expanded={showPrefs}
+              aria-controls={prefsPanelId}
+            >
+              Preferences
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void act(() => patch('/api/v1/notifications/read-all'))}
+            >
+              Mark all read
+            </Button>
+          </>
+        }
+      />
 
-      {showPrefs ? (
-        <PreferencesPanel preferences={preferences} onSaved={() => router.refresh()} />
-      ) : null}
+      <div className="p-gutter">
+        <div className="mx-auto max-w-3xl">
+          {showPrefs ? (
+            <PreferencesPanel
+              id={prefsPanelId}
+              preferences={preferences}
+              onSaved={() => router.refresh()}
+            />
+          ) : null}
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        {NOTIFICATION_FILTERS.map((fl) => (
-          <button
-            key={fl}
-            onClick={() => setParam('filter', fl === 'all' ? '' : fl)}
-            className={`rounded-lg px-3 py-1.5 text-sm capitalize ${(sp.get('filter') ?? 'all') === fl ? 'bg-gold text-navy' : 'border border-white/15 text-white/60 hover:text-white'}`}
-          >
-            {fl}
-          </button>
-        ))}
-        <select
-          className={field}
-          defaultValue={sp.get('type') ?? ''}
-          onChange={(e) => setParam('type', e.target.value)}
-        >
-          <option value="">All types</option>
-          {NOTIFICATION_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-        <input
-          className={field}
-          placeholder="Search..."
-          defaultValue={sp.get('q') ?? ''}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') setParam('q', (e.target as HTMLInputElement).value)
-          }}
-        />
-      </div>
-
-      {items.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-dashed border-white/15 py-16 text-center text-sm text-white/40">
-          Nothing here. Notifications appear as things happen across the platform.
-        </div>
-      ) : (
-        [...groups.entries()].map(([bucket, group]) => (
-          <section key={bucket} className="mt-6">
-            <h2 className="mb-2 text-xs uppercase tracking-widest text-white/40">{bucket}</h2>
-            <ul className="space-y-2">
-              {group.map((it) => {
-                const n = it.notification
-                const href = linkFor(n)
-                const unread = !it.readAt
-                const inner = (
-                  <div
-                    className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${unread ? 'border-gold/30 bg-gold/[0.04]' : 'border-white/10'}`}
+          <div className="mt-gap-lg flex flex-wrap items-center gap-gap">
+            <div
+              role="group"
+              aria-label="Filter by read state"
+              className="inline-flex rounded-sm border border-line bg-surface p-0.5"
+            >
+              {NOTIFICATION_FILTERS.map((fl) => {
+                const active = activeFilter === fl
+                return (
+                  <button
+                    key={fl}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setParam('filter', fl === 'all' ? '' : fl)}
+                    className={
+                      active
+                        ? 'focus-ring rounded-xs bg-accent px-2.5 py-1 text-xs font-medium capitalize text-accent-fg'
+                        : 'focus-ring rounded-xs px-2.5 py-1 text-xs capitalize text-content-muted hover:bg-surface-sunken hover:text-content'
+                    }
                   >
-                    {unread ? (
-                      <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-gold" />
-                    ) : (
-                      <span className="mt-1.5 h-2 w-2 flex-shrink-0" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-white">
-                        {n.title}
-                        {n.priority !== 'NORMAL' && n.priority !== 'LOW' ? (
-                          <span className={`ml-2 text-xs ${PRIORITY[n.priority] ?? ''}`}>
-                            {n.priority}
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="text-xs text-white/50">{n.body}</p>
-                      <p className="text-xs text-white/30">
-                        {relTime(it.createdAt)} &middot;{' '}
-                        <span className="font-mono">{n.eventName}</span>
-                      </p>
-                    </div>
-                    <div className="flex flex-shrink-0 gap-1">
-                      {unread ? (
-                        <button
-                          className={ghost}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            void act(() => patch(`/api/v1/notifications/${it.id}/read`))
-                          }}
-                        >
-                          Read
-                        </button>
-                      ) : null}
-                      {!it.archivedAt ? (
-                        <button
-                          className={ghost}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            void act(() => patch(`/api/v1/notifications/${it.id}/archive`))
-                          }}
-                        >
-                          Archive
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
+                    {fl}
+                  </button>
                 )
-                return <li key={it.id}>{href ? <Link href={href}>{inner}</Link> : inner}</li>
               })}
-            </ul>
-          </section>
-        ))
-      )}
+            </div>
 
-      <div ref={sentinel} className="h-8" />
-      {loading ? <p className="py-2 text-center text-xs text-white/40">Loading...</p> : null}
-    </div>
+            <FilterSelect
+              label="Type"
+              allLabel="All types"
+              value={sp.get('type') ?? undefined}
+              onChange={(value) => setParam('type', value ?? '')}
+              options={NOTIFICATION_TYPES.map((t) => ({ value: t, label: t }))}
+              className="w-40"
+            />
+
+            <Input
+              type="search"
+              size="sm"
+              aria-label="Search notifications"
+              placeholder="Search…"
+              defaultValue={sp.get('q') ?? ''}
+              className="max-w-[14rem]"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setParam('q', (e.target as HTMLInputElement).value)
+              }}
+            />
+          </div>
+
+          {items.length === 0 ? (
+            <div className="mt-gap-lg rounded-md border border-line bg-surface">
+              <EmptyState
+                icon={<BellOff />}
+                title="No notifications"
+                description="Notifications appear here as things happen across the platform."
+              />
+            </div>
+          ) : (
+            [...groups.entries()].map(([bucket, group]) => (
+              <section key={bucket} className="mt-section">
+                <h2 className="mb-gap text-2xs font-medium uppercase tracking-wide text-content-subtle">
+                  {bucket}
+                </h2>
+                <ul className="space-y-gap-xs">
+                  {group.map((it) => {
+                    const n = it.notification
+                    const href = linkFor(n)
+                    const unread = !it.readAt
+
+                    return (
+                      <li key={it.id}>
+                        {/* `relative` anchors the stretched link below. Actions are
+                            siblings of the link rather than children of it: a button
+                            inside an anchor is invalid markup and unreachable by
+                            keyboard in the order a user expects. */}
+                        <div
+                          className={
+                            unread
+                              ? 'relative flex items-start gap-gap rounded-md border border-line bg-accent-subtle px-gap-lg py-gap'
+                              : 'relative flex items-start gap-gap rounded-md border border-line bg-surface px-gap-lg py-gap'
+                          }
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={
+                              unread
+                                ? 'mt-1.5 size-2 shrink-0 rounded-full bg-accent'
+                                : 'mt-1.5 size-2 shrink-0'
+                            }
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="flex flex-wrap items-center gap-gap">
+                              {href ? (
+                                <Link
+                                  href={href}
+                                  className="focus-ring text-base font-medium text-content after:absolute after:inset-0"
+                                >
+                                  {n.title}
+                                </Link>
+                              ) : (
+                                <span className="text-base font-medium text-content">
+                                  {n.title}
+                                </span>
+                              )}
+                              {unread ? <span className="sr-only">Unread</span> : null}
+                              {PRIORITY_TONE[n.priority] ? (
+                                <Badge tone={PRIORITY_TONE[n.priority]} size="sm">
+                                  {n.priority}
+                                </Badge>
+                              ) : null}
+                            </p>
+                            <p className="mt-0.5 text-xs text-content-muted">{n.body}</p>
+                            <p className="mt-0.5 text-xs text-content-subtle">
+                              <time dateTime={new Date(it.createdAt).toISOString()}>
+                                {relTime(it.createdAt)}
+                              </time>{' '}
+                              &middot; <span className="font-mono">{n.eventName}</span>
+                            </p>
+                          </div>
+                          {/* Above the stretched link so these stay clickable. */}
+                          <div className="relative z-raised flex shrink-0 gap-gap-xs">
+                            {unread ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  void act(() => patch(`/api/v1/notifications/${it.id}/read`))
+                                }
+                              >
+                                Read
+                              </Button>
+                            ) : null}
+                            {!it.archivedAt ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  void act(() => patch(`/api/v1/notifications/${it.id}/archive`))
+                                }
+                              >
+                                Archive
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            ))
+          )}
+
+          <div ref={sentinel} className="h-8" />
+          {loading ? (
+            <p className="flex items-center justify-center gap-gap py-gap text-xs text-content-subtle">
+              <Spinner size="xs" label={null} />
+              Loading more…
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </>
   )
 }
 
 function PreferencesPanel({
+  id,
   preferences,
   onSaved,
 }: {
+  id: string
   preferences: PreferenceRecord[]
   onSaved: () => void
 }) {
@@ -270,36 +362,37 @@ function PreferencesPanel({
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-white/10 p-4">
-      <p className="text-xs uppercase tracking-widest text-white/40">Preferences (per type)</p>
-      <ul className="mt-3 space-y-2">
-        {prefs.map((p) => (
-          <li key={p.type} className="flex items-center justify-between text-sm">
-            <span className="text-white/80">{p.type}</span>
-            <span className="flex gap-4">
-              <label className="flex items-center gap-1 text-white/60">
-                <input
-                  type="checkbox"
-                  checked={p.enabled}
-                  onChange={() => toggle(p.type, 'enabled')}
-                />{' '}
-                enabled
-              </label>
-              <label className="flex items-center gap-1 text-white/60">
-                <input type="checkbox" checked={p.muted} onChange={() => toggle(p.type, 'muted')} />{' '}
-                muted
-              </label>
-            </span>
-          </li>
-        ))}
-      </ul>
-      <button
-        className="mt-4 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-navy hover:bg-gold-light disabled:opacity-50"
-        disabled={saving}
-        onClick={() => void save()}
-      >
-        {saving ? 'Saving...' : 'Save preferences'}
-      </button>
-    </div>
+    <Card id={id}>
+      <CardHeader>
+        <CardTitle as="h2">Preferences</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y divide-line">
+          {prefs.map((p) => (
+            <li
+              key={p.type}
+              className="flex flex-wrap items-center justify-between gap-gap-lg py-gap"
+            >
+              <span className="text-base text-content">{p.type}</span>
+              <span className="flex items-center gap-gutter">
+                <label className="flex items-center gap-gap text-xs text-content-muted">
+                  <Switch checked={p.enabled} onCheckedChange={() => toggle(p.type, 'enabled')} />
+                  Enabled
+                </label>
+                <label className="flex items-center gap-gap text-xs text-content-muted">
+                  <Switch checked={p.muted} onCheckedChange={() => toggle(p.type, 'muted')} />
+                  Muted
+                </label>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-gap-lg flex">
+          <Button variant="primary" loading={saving} disabled={saving} onClick={() => void save()}>
+            {saving ? 'Saving…' : 'Save preferences'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

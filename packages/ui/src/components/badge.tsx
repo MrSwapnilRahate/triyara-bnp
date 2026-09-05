@@ -90,6 +90,11 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   PENDING_APPROVAL: 'warning',
   PENDING_REVIEW: 'warning',
   PENDING: 'warning',
+  // Verification. Both mean "somebody must act before this can settle", which is
+  // what `warning` says everywhere else on the platform. SUSPENDED is not
+  // `danger`: a suspended verification is recoverable, a rejected one is not.
+  DOCUMENTS_REQUESTED: 'warning',
+  SUSPENDED: 'warning',
   UNDER_NEGOTIATION: 'warning',
   IN_PROGRESS: 'info',
   EVALUATING: 'info',
