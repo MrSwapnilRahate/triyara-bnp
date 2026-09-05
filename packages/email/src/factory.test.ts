@@ -6,7 +6,7 @@ import { createEmailTransportFromEnv } from './factory'
 // with no key configured the app runs perfectly and nobody outside the team
 // ever hears back.
 
-const KEYS = ['NODE_ENV', 'NEXT_PHASE', 'RESEND_API_KEY', 'EMAIL_FROM'] as const
+const KEYS = ['NODE_ENV', 'NEXT_PHASE', 'RESEND_API_KEY', 'EMAIL_FROM', 'VERCEL_ENV'] as const
 
 const original = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]))
 
@@ -71,5 +71,55 @@ describe('createEmailTransportFromEnv', () => {
     // Someone testing real delivery locally should get real delivery.
     env({ NODE_ENV: 'development', RESEND_API_KEY: 're_key', EMAIL_FROM: 'TRIYARA <a@b.com>' })
     expect(createEmailTransportFromEnv(logger).name).toBe('resend')
+  })
+})
+
+// A preview deployment is a branch build the team alone reaches. Requiring real
+// credentials there did not protect anyone: the transport is built at module
+// scope, so an unconfigured preview threw during import and took sign-in,
+// password reset and the session endpoint down with it - the whole of auth
+// answering 500. What matters below is that relaxing this did not follow the
+// guard into the production deployment.
+describe('preview deployments', () => {
+  it('logs instead of sending when no key is configured', () => {
+    env({ NODE_ENV: 'production', VERCEL_ENV: 'preview' })
+    expect(createEmailTransportFromEnv(logger).name).toBe('log')
+  })
+
+  it('still uses Resend when the preview IS configured', () => {
+    // Giving one preview real credentials stays possible; it just is not the
+    // price of the branch booting.
+    env({
+      NODE_ENV: 'production',
+      VERCEL_ENV: 'preview',
+      RESEND_API_KEY: 're_key',
+      EMAIL_FROM: 'TRIYARA <a@b.com>',
+    })
+    expect(createEmailTransportFromEnv(logger).name).toBe('resend')
+  })
+
+  it('does NOT relax the production deployment', () => {
+    env({ NODE_ENV: 'production', VERCEL_ENV: 'production' })
+    expect(() => createEmailTransportFromEnv(logger)).toThrow(/silently never arrive/i)
+  })
+
+  it('does not relax a deployment whose VERCEL_ENV is absent', () => {
+    // System variables can be switched off. Reading that as "preview" would
+    // disable the guard on production, so the guard has to win by default.
+    env({ NODE_ENV: 'production' })
+    expect(() => createEmailTransportFromEnv(logger)).toThrow(/silently never arrive/i)
+  })
+
+  it('matches only the exact value, not anything preview-ish', () => {
+    for (const value of ['Preview', 'PREVIEW', 'previews', 'development', 'staging', '1']) {
+      env({ NODE_ENV: 'production', VERCEL_ENV: value })
+      expect(() => createEmailTransportFromEnv(logger)).toThrow(/silently never arrive/i)
+    }
+  })
+
+  it('still names the missing variables on production', () => {
+    env({ NODE_ENV: 'production', VERCEL_ENV: 'production' })
+    expect(() => createEmailTransportFromEnv(logger)).toThrow(/RESEND_API_KEY/)
+    expect(() => createEmailTransportFromEnv(logger)).toThrow(/EMAIL_FROM/)
   })
 })
