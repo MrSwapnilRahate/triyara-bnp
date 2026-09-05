@@ -74,7 +74,12 @@ export type UpdateOrganizationDto = z.infer<typeof updateOrganizationSchema>
  * other endpoint of this API, which the browser would then fetch with the
  * viewer's cookies attached.
  */
-const AVATAR_PATH = /^\/api\/v1\/users\/[A-Za-z0-9_-]{1,64}\/avatar$/
+// The `?v=` suffix is the stored object's checksum, written by the confirm step.
+// It is what makes a replaced photo a different URL: the path alone never
+// changes, so without it a browser holding a cached copy has no way to know the
+// bytes behind it did. Optional, so a value written before versioning existed
+// stays valid.
+const AVATAR_PATH = /^\/api\/v1\/users\/[A-Za-z0-9_-]{1,64}\/avatar(\?v=[A-Za-z0-9]{1,64})?$/
 
 /**
  * Where an avatar image lives: an absolute URL, or this app's avatar path.

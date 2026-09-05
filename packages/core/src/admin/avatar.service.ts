@@ -32,9 +32,36 @@ export function avatarStorageKey(organizationId: string, userId: string): string
   return `${organizationId}/avatars/${userId}`
 }
 
-/** The public path an avatar is served from, and the value stored in `avatarUrl`. */
-export function avatarPath(userId: string): string {
-  return `/api/v1/users/${userId}/avatar`
+/**
+ * The public path an avatar is served from, and the value stored in `avatarUrl`.
+ *
+ * `version` is the stored object's checksum, and it is the whole reason a
+ * replacement is visible. The key is deterministic, so the path never changes -
+ * which means a browser that has the old bytes cached under `max-age` has
+ * nothing to tell it they are stale, and keeps showing the previous photo until
+ * the entry expires. Putting the checksum in the URL makes new bytes a new
+ * address, so the change is visible immediately and survives a reload, because
+ * the versioned URL is what was persisted rather than something the client
+ * assembled and forgot.
+ *
+ * Derived from the object rather than from a clock or a counter: the same image
+ * uploaded twice yields the same URL and stays cached, and no state has to be
+ * kept anywhere to know what version this is.
+ */
+export function avatarPath(userId: string, version?: string): string {
+  const path = `/api/v1/users/${userId}/avatar`
+  return version ? `${path}?v=${version}` : path
+}
+
+/**
+ * A checksum reduced to something safe to put in a URL.
+ *
+ * S3 returns an ETag, which for a multipart upload carries a `-N` suffix, and
+ * the local provider returns a sha256. Both are trimmed to hex so the value
+ * matches the path the profile contract accepts.
+ */
+function versionFrom(checksum: string): string {
+  return checksum.replace(/[^A-Za-z0-9]/g, '').slice(0, 16) || 'v'
 }
 
 export function createAvatarService({ users, storage }: AvatarServiceDeps) {
@@ -84,7 +111,10 @@ export function createAvatarService({ users, storage }: AvatarServiceDeps) {
         )
       }
 
-      const avatarUrl = avatarPath(ctx.user.id)
+      // Versioned with the checksum `stat` just read, so the URL that gets
+      // persisted already identifies these bytes rather than the ones it
+      // replaced.
+      const avatarUrl = avatarPath(ctx.user.id, versionFrom(stat.checksum))
       await users.updateProfile(ctx.user.id, { avatarUrl })
       return { avatarUrl }
     },

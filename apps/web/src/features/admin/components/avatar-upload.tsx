@@ -31,6 +31,16 @@ export function AvatarUpload({ avatarUrl, name }: { avatarUrl: string | null; na
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  /**
+   * What the live region last had to say.
+   *
+   * A single value on purpose. Reading `upload.isSuccess` and
+   * `remove.isSuccess` side by side announced whichever had ever succeeded,
+   * not what just happened: remove a photo and upload another, and the region
+   * still said "Profile photo removed." while a photo was plainly set. One
+   * operation happens at a time, so one message describes it.
+   */
+  const [announcement, setAnnouncement] = useState<string | null>(null)
 
   // An object URL is a live handle, not a string: leaving it un-revoked keeps
   // the file in memory for as long as the document lives.
@@ -46,6 +56,7 @@ export function AvatarUpload({ avatarUrl, name }: { avatarUrl: string | null; na
   function onPick(file: File | undefined) {
     if (!file) return
     setError(null)
+    setAnnouncement(null)
 
     if (!(AVATAR_MIME_TYPES as readonly string[]).includes(file.type)) {
       setError(`That file is not an image this platform accepts. Use ${TYPE_LABEL}.`)
@@ -64,23 +75,28 @@ export function AvatarUpload({ avatarUrl, name }: { avatarUrl: string | null; na
     upload.mutate(file, {
       onError: (err) => {
         const described = describeApiError(err)
-        setError(described.description ?? described.title)
+        const message = described.description ?? described.title
+        setError(message)
+        setAnnouncement(message)
         // Back to the stored photo, so a failed upload never leaves a picture
         // on screen that is not actually saved.
         setPreview(null)
         URL.revokeObjectURL(objectUrl)
       },
       onSuccess: () => {
+        setAnnouncement('Profile photo updated.')
         setPreview(null)
         URL.revokeObjectURL(objectUrl)
       },
     })
   }
 
-  // Cache-bust on the client only. The stored path never changes, so without
-  // this the browser would keep showing the previous photo from its own cache
-  // until the entry expired.
-  const src = preview ?? (avatarUrl ? `${avatarUrl}?v=${upload.submittedAt || 0}` : undefined)
+  // No cache-busting here any more. `avatarUrl` arrives already versioned by
+  // the checksum of the stored object, so a replacement is a different URL by
+  // the time it reaches this component - and stays one after a reload, which
+  // the old `?v={submittedAt}` could not manage: that value reset to 0 on
+  // remount and handed the browser back the address it had cached.
+  const src = preview ?? avatarUrl ?? undefined
 
   return (
     <div className="flex flex-wrap items-center gap-gap-lg">
@@ -137,11 +153,15 @@ export function AvatarUpload({ avatarUrl, name }: { avatarUrl: string | null; na
               loading={remove.isPending}
               onClick={() => {
                 setError(null)
+                setAnnouncement(null)
                 remove.mutate(undefined, {
                   onError: (err) => {
                     const described = describeApiError(err)
-                    setError(described.description ?? described.title)
+                    const message = described.description ?? described.title
+                    setError(message)
+                    setAnnouncement(message)
                   },
+                  onSuccess: () => setAnnouncement('Profile photo removed.'),
                 })
               }}
             >
@@ -158,8 +178,7 @@ export function AvatarUpload({ avatarUrl, name }: { avatarUrl: string | null; na
         {/* Announced rather than shown as a banner: the photo changing is its
             own confirmation for anyone who can see it. */}
         <p aria-live="polite" className="sr-only">
-          {upload.isSuccess ? 'Profile photo updated.' : ''}
-          {remove.isSuccess ? 'Profile photo removed.' : ''}
+          {announcement ?? ''}
         </p>
       </div>
     </div>

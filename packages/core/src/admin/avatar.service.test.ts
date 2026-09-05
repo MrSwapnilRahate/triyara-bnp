@@ -100,8 +100,9 @@ describe('uploading my own photo', () => {
 
     const result = await svc.confirm(ctx())
 
-    expect(result.avatarUrl).toBe('/api/v1/users/user-1/avatar')
-    expect(updateProfile).toHaveBeenCalledWith(USER, { avatarUrl: '/api/v1/users/user-1/avatar' })
+    expect(result.avatarUrl).toMatch(/^\/api\/v1\/users\/user-1\/avatar\?v=/)
+    expect(result.avatarUrl).not.toMatch(/^https?:/)
+    expect(updateProfile).toHaveBeenCalledWith(USER, { avatarUrl: result.avatarUrl })
   })
 
   it('refuses to confirm when nothing was actually uploaded', async () => {
@@ -110,6 +111,64 @@ describe('uploading my own photo', () => {
 
     await expect(svc.confirm(ctx())).rejects.toThrow(/upload before confirming/i)
     expect(updateProfile).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A replaced photo has to become visible, and the object key deliberately does
+ * not change - so the URL is the only thing that can carry the difference.
+ * Without this the browser kept serving the previous image from its own cache
+ * for the whole `max-age`, and a reload did not help because the client-side
+ * cache-bust reset on remount.
+ */
+describe('the stored URL is versioned by the object itself', () => {
+  it('carries the checksum of the bytes that were stored', async () => {
+    const { provider } = storageDouble({ size: 10, checksum: 'abcdef0123456789beyond' })
+    const { svc } = service(provider)
+
+    const { avatarUrl } = await svc.confirm(ctx())
+
+    expect(avatarUrl).toBe('/api/v1/users/user-1/avatar?v=abcdef0123456789')
+  })
+
+  it('changes when the image changes, which is what makes a replacement visible', async () => {
+    const first = await service(
+      storageDouble({ size: 10, checksum: 'aaaa1111' }).provider,
+    ).svc.confirm(ctx())
+    const second = await service(
+      storageDouble({ size: 10, checksum: 'bbbb2222' }).provider,
+    ).svc.confirm(ctx())
+
+    expect(first.avatarUrl).not.toBe(second.avatarUrl)
+  })
+
+  it('stays the same for identical bytes, so an unchanged photo stays cached', async () => {
+    const a = await service(storageDouble({ size: 10, checksum: 'same9999' }).provider).svc.confirm(
+      ctx(),
+    )
+    const b = await service(storageDouble({ size: 10, checksum: 'same9999' }).provider).svc.confirm(
+      ctx(),
+    )
+
+    expect(a.avatarUrl).toBe(b.avatarUrl)
+  })
+
+  it('survives an S3 multipart ETag, which is not plain hex', async () => {
+    const { provider } = storageDouble({ size: 10, checksum: 'd41d8cd98f00b204e9800998ecf8427e-3' })
+    const { svc } = service(provider)
+
+    const { avatarUrl } = await svc.confirm(ctx())
+
+    expect(avatarUrl).toBe('/api/v1/users/user-1/avatar?v=d41d8cd98f00b204')
+  })
+
+  it('is cleared entirely on removal, so the fallback is initials', async () => {
+    const { provider } = storageDouble()
+    const { svc, updateProfile } = service(provider)
+
+    await svc.remove(ctx())
+
+    expect(updateProfile).toHaveBeenCalledWith(USER, { avatarUrl: null })
   })
 })
 
@@ -171,6 +230,19 @@ describe('the avatarUrl contract stays backward compatible', () => {
 
   it('accepts the app-relative avatar path the upload flow writes', () => {
     expect(updateProfileSchema.safeParse({ avatarUrl: avatarPath('user-1') }).success).toBe(true)
+  })
+
+  it('accepts the versioned path, which is what confirm now stores', () => {
+    expect(
+      updateProfileSchema.safeParse({ avatarUrl: avatarPath('user-1', 'abc123') }).success,
+    ).toBe(true)
+  })
+
+  it('refuses a query that is not the version token', () => {
+    expect(
+      updateProfileSchema.safeParse({ avatarUrl: '/api/v1/users/user-1/avatar?next=/admin' })
+        .success,
+    ).toBe(false)
   })
 
   it('accepts null, which is how a photo is cleared', () => {

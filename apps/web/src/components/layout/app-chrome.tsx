@@ -18,6 +18,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { type ReactNode, useMemo, useState } from 'react'
 
+import { useProfile } from '@/features/admin/api/admin'
 import { useAbility } from '@/lib/ability-context'
 
 import { Brand } from './brand'
@@ -53,6 +54,17 @@ export function AppChrome({ user, organization, signOutSlot, children }: AppChro
   const pathname = usePathname() ?? '/'
   const ability = useAbility()
   const { theme, setTheme, density, setDensity } = useTheme()
+  // The photo comes from the profile query rather than from the server-rendered
+  // `user` prop, and deliberately so. `AuthUser` carries no avatar - putting one
+  // there would mean changing the session token, which is not this feature's to
+  // touch - and a value passed down at render time would go stale the moment a
+  // photo is uploaded, because nothing re-runs the layout. This is the same
+  // `/api/v1/me` the profile screen reads, on the same query key, so the avatar
+  // mutations already invalidate it and the top bar follows automatically.
+  // React Query caches it, so this costs one request per session, not per page.
+  const profile = useProfile()
+  const avatarUrl = profile.data?.avatarUrl ?? null
+
   const [collapsed, setCollapsed] = useSidebarCollapsed()
   const drawer = useNavDrawer()
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -100,6 +112,7 @@ export function AppChrome({ user, organization, signOutSlot, children }: AppChro
                 name={user.name}
                 email={user.email}
                 roles={user.roles}
+                {...(avatarUrl ? { avatarUrl } : {})}
                 theme={theme}
                 onThemeChange={setTheme}
                 density={density}
