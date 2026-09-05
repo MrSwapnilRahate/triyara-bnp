@@ -140,6 +140,65 @@ export function useUpdateProfile() {
 }
 
 /**
+ * Uploads a new profile photo for the signed-in user.
+ *
+ * Three steps, and they are the same three every other upload on this platform
+ * makes: ask the server for a target, PUT the bytes straight at storage, then
+ * tell the server it landed. Nothing here names a user - the server derives the
+ * object key from the session, so there is no id to get wrong or to tamper with.
+ *
+ * The profile is invalidated rather than patched from the response. The photo
+ * is served from a URL that does not change between uploads, so what has to be
+ * refreshed is the browser's copy of the IMAGE, and re-reading the profile is
+ * what makes every Avatar on the page re-request it.
+ */
+export function useUploadAvatar() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const presigned = await api.post<{
+        uploadUrl: string
+        method: string
+        headers: Record<string, string>
+      }>(`${BASE}/me/avatar/presign`, {
+        mimeType: file.type,
+        sizeBytes: file.size,
+      })
+
+      const uploaded = await fetch(presigned.data.uploadUrl, {
+        method: 'PUT',
+        headers: presigned.data.headers,
+        body: file,
+        // The local provider's upload target is same-origin and expects the
+        // session cookie; a presigned S3 URL ignores it.
+        credentials: 'include',
+      })
+      if (!uploaded.ok) throw new Error('The image could not be uploaded to storage.')
+
+      const confirmed = await api.put<{ avatarUrl: string }>(`${BASE}/me/avatar`, {})
+      return confirmed.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.profile() })
+    },
+  })
+}
+
+/** Removes the photo and the stored object. */
+export function useRemoveAvatar() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const result = await api.delete<{ avatarUrl: null }>(`${BASE}/me/avatar`)
+      return result.data
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.profile() })
+    },
+  })
+}
+
+/**
  * Own verification standing.
  *
  * `/me` does not carry it - verification lives on the security profile, a

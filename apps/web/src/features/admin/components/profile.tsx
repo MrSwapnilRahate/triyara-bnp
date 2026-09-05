@@ -37,6 +37,7 @@ import { describeApiError } from '@/lib/api-error'
 
 import { useChangePassword, useProfile, useUpdateProfile } from '../api/admin'
 import type { Profile as ProfileRecord } from '../types'
+import { AvatarUpload } from './avatar-upload'
 import { EmailVerificationCard } from './email-verification-card'
 
 /**
@@ -101,7 +102,6 @@ function ProfileForm({ me }: { me: ProfileRecord }) {
     resolver: zodResolver(updateProfileSchema),
     defaultValues: {
       name: me.name ?? '',
-      avatarUrl: me.avatarUrl,
       preferences: me.preferences ?? {},
     },
   })
@@ -173,30 +173,7 @@ function ProfileForm({ me }: { me: ProfileRecord }) {
                 <CardTitle as="h2">Identity</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-gap-lg">
-                <div className="flex items-center gap-gap-lg">
-                  <Avatar
-                    size="lg"
-                    {...(watch('avatarUrl') ? { src: watch('avatarUrl') as string } : {})}
-                    name={me.name ?? me.email}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <Label htmlFor="avatarUrl">Avatar URL</Label>
-                    <Input
-                      id="avatarUrl"
-                      className="mt-gap-xs"
-                      placeholder="https://…"
-                      {...register('avatarUrl', {
-                        setValueAs: (v: unknown) => (v === '' ? null : v),
-                      })}
-                      invalid={Boolean(errors.avatarUrl)}
-                    />
-                    {errors.avatarUrl ? (
-                      <p className="mt-gap-xs text-xs text-danger" role="alert">
-                        {errors.avatarUrl.message}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
+                <AvatarUpload avatarUrl={me.avatarUrl} name={me.name ?? me.email} />
 
                 <div>
                   <Label htmlFor="name" required>
