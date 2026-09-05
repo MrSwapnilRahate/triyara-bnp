@@ -104,6 +104,17 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   VIEWED: 'info',
   SUBMITTED: 'info',
 
+  // Account relationship (TRY-BNP-ACCOUNT). The whole enum is mapped rather
+  // than the part that happens to be missing: an unmapped member falls back to
+  // neutral, and a blacklisted counterparty rendering the same grey as a
+  // prospect is the one confusion this map exists to prevent. PREFERRED is
+  // `accent` rather than a second `success` so it stays distinguishable from
+  // ACTIVE, which it outranks.
+  PROSPECT: 'neutral',
+  PREFERRED: 'accent',
+  DORMANT: 'warning',
+  BLACKLISTED: 'danger',
+
   // Settled, good
   APPROVED: 'success',
   ACCEPTED: 'success',

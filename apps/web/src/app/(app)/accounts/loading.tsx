@@ -1,11 +1,16 @@
+import { Skeleton, SkeletonTable } from '@triyara/ui'
+
+/** Mirrors the accounts table so nothing shifts when data lands. */
 export default function Loading() {
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <div className="h-8 w-48 animate-pulse rounded bg-white/10" />
-      <div className="mt-6 space-y-2">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="h-11 animate-pulse rounded bg-white/5" />
-        ))}
+    <div role="status" aria-label="Loading accounts">
+      <div className="border-b border-line bg-surface px-gutter py-gap-lg">
+        <Skeleton className="h-7 w-40" />
+      </div>
+      <div className="p-gutter">
+        <div className="rounded-md border border-line bg-surface">
+          <SkeletonTable rows={8} columns={7} />
+        </div>
       </div>
     </div>
   )

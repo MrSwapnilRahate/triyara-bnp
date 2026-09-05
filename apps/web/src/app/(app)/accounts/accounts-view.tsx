@@ -1,9 +1,33 @@
 'use client'
 
 import type { AccountRecord } from '@triyara/db'
+import {
+  Button,
+  Checkbox,
+  DataTable,
+  DataTableCell,
+  DataTableHead,
+  DataTableHeaderCell,
+  DataTableLayout,
+  DataTableRow,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  EmptyState,
+  Input,
+  Label,
+  NativeSelect,
+  PageHeader,
+  SkeletonTable,
+  StatusBadge,
+} from '@triyara/ui'
 import { RELATIONSHIP_STATUSES, type RelationshipStatus } from '@triyara/validation'
+import { AlertTriangle, Users } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 
 import {
   useAccounts,
@@ -14,20 +38,6 @@ import {
   useUpdateAccount,
 } from '@/features/accounts/api/accounts'
 import { useAbility } from '@/lib/ability-context'
-
-const field =
-  'w-full rounded-lg border border-white/15 bg-navy/50 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-gold/60 focus:outline-none'
-const btn =
-  'rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-navy hover:bg-gold-light disabled:opacity-50'
-const ghost = 'rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70 hover:text-white'
-
-const STATUS_STYLES: Record<string, string> = {
-  PROSPECT: 'bg-white/10 text-white/60',
-  ACTIVE: 'bg-blue-500/15 text-blue-300',
-  PREFERRED: 'bg-green-500/15 text-green-300',
-  DORMANT: 'bg-amber-500/15 text-amber-300',
-  BLACKLISTED: 'bg-red-500/15 text-red-300',
-}
 
 /** Trimmed field, or undefined when blank - the shape the DTOs expect. */
 function str(fd: FormData, key: string): string | undefined {
@@ -89,191 +99,160 @@ export function AccountsView() {
       return n
     })
 
+  // The layout renders `state` INSTEAD of the table, so it must be undefined
+  // once there are rows - otherwise the table never appears.
+  let state: React.ReactNode
+  if (error)
+    state = (
+      <EmptyState
+        variant="error"
+        icon={<AlertTriangle />}
+        title="Could not load accounts"
+        description={message(error)}
+      />
+    )
+  else if (isPending) state = <SkeletonTable rows={8} columns={7} />
+  else if (accounts.length === 0)
+    state = (
+      <EmptyState
+        icon={<Users />}
+        title="No accounts match these filters"
+        description="Adjust the filters above, or create the first account."
+        {...(canWrite
+          ? {
+              action: (
+                <Button variant="primary" onClick={() => setDialog({ type: 'create' })}>
+                  Create the first account
+                </Button>
+              ),
+            }
+          : {})}
+      />
+    )
+
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gold">Accounts</h1>
-        {canWrite ? (
-          <button className={btn} onClick={() => setDialog({ type: 'create' })}>
-            New account
-          </button>
-        ) : null}
-      </div>
+    <>
+      <PageHeader
+        title="Accounts"
+        description="Every counterparty this organization deals with, and where each one stands."
+        actions={
+          canWrite ? (
+            <Button variant="primary" onClick={() => setDialog({ type: 'create' })}>
+              New account
+            </Button>
+          ) : null
+        }
+      />
 
-      {/* Filters */}
-      <form
-        className="mt-6 flex flex-wrap items-end gap-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          const fd = new FormData(e.currentTarget)
-          setParam({
-            q: String(fd.get('q') ?? ''),
-            country: String(fd.get('country') ?? ''),
-            relationshipStatus: String(fd.get('relationshipStatus') ?? ''),
-            ownerId: String(fd.get('ownerId') ?? ''),
-            includeDeleted: fd.get('includeDeleted') ? 'true' : '',
-            cursor: undefined,
-          })
-        }}
-      >
-        <input
-          name="q"
-          defaultValue={params.get('q') ?? ''}
-          placeholder="Search name"
-          className={`${field} w-48`}
-        />
-        <input
-          name="country"
-          defaultValue={params.get('country') ?? ''}
-          placeholder="Country (ISO2)"
-          className={`${field} w-32`}
-        />
-        <select
-          name="relationshipStatus"
-          defaultValue={params.get('relationshipStatus') ?? ''}
-          className={`${field} w-40`}
+      <div className="p-gutter">
+        {/* Deliberately unconstrained in height, like the documents and
+            verifications tables. Capping it makes the layout's flex column
+            squeeze the toolbar - which wraps to four rows on a phone - down to
+            its `min-h-12`, and the filters then overlap the first rows. */}
+        <DataTableLayout
+          toolbar={<Filters params={params} onApply={setParam} />}
+          {...(selected.size > 0
+            ? {
+                selectionBar: (
+                  <BulkToolbar ids={[...selected]} onDone={() => setSelected(new Set())} />
+                ),
+              }
+            : {})}
+          {...(state ? { state } : {})}
+          footer={
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setParam({ cursor: undefined })}>
+                First page
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!nextCursor}
+                onClick={() => nextCursor && setParam({ cursor: nextCursor })}
+              >
+                Next
+              </Button>
+            </>
+          }
         >
-          <option value="">Any status</option>
-          {RELATIONSHIP_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <input
-          name="ownerId"
-          defaultValue={params.get('ownerId') ?? ''}
-          placeholder="Owner id"
-          className={`${field} w-40`}
-        />
-        <label className="flex items-center gap-2 text-xs text-white/50">
-          <input
-            type="checkbox"
-            name="includeDeleted"
-            defaultChecked={params.get('includeDeleted') === 'true'}
-          />
-          Include deleted
-        </label>
-        <button className={ghost} type="submit">
-          Apply
-        </button>
-      </form>
-
-      {/* Bulk toolbar */}
-      {selected.size > 0 ? (
-        <BulkToolbar ids={[...selected]} onDone={() => setSelected(new Set())} />
-      ) : null}
-
-      {/* Table / empty */}
-      {error ? (
-        <div className="mt-16 rounded-xl border border-red-500/30 bg-red-500/10 py-16 text-center">
-          <p className="text-sm text-red-300">{message(error)}</p>
-        </div>
-      ) : isPending ? (
-        <div className="mt-16 rounded-xl border border-dashed border-white/15 py-16 text-center">
-          <p className="text-sm text-white/50">Loading accounts…</p>
-        </div>
-      ) : accounts.length === 0 ? (
-        <div className="mt-16 rounded-xl border border-dashed border-white/15 py-16 text-center">
-          <p className="text-sm text-white/50">No accounts match these filters.</p>
-          {canWrite ? (
-            <button className={`${btn} mt-4`} onClick={() => setDialog({ type: 'create' })}>
-              Create the first account
-            </button>
-          ) : null}
-        </div>
-      ) : (
-        <div className="mt-6 overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-white/[0.03] text-xs uppercase tracking-wide text-white/40">
+          <DataTable caption="Accounts">
+            <DataTableHead>
               <tr>
-                <th className="w-8 px-3 py-3"></th>
-                <th className="px-3 py-3">Legal name</th>
-                <th className="px-3 py-3">Country</th>
-                <th className="px-3 py-3">Status</th>
-                <th className="px-3 py-3">Owner</th>
-                <th className="px-3 py-3">Created</th>
-                <th className="px-3 py-3"></th>
+                <DataTableHeaderCell className="w-8">
+                  <span className="sr-only">Select</span>
+                </DataTableHeaderCell>
+                <DataTableHeaderCell>Legal name</DataTableHeaderCell>
+                <DataTableHeaderCell>Country</DataTableHeaderCell>
+                <DataTableHeaderCell>Status</DataTableHeaderCell>
+                <DataTableHeaderCell>Owner</DataTableHeaderCell>
+                <DataTableHeaderCell>Created</DataTableHeaderCell>
+                <DataTableHeaderCell className="text-right">
+                  <span className="sr-only">Actions</span>
+                </DataTableHeaderCell>
               </tr>
-            </thead>
+            </DataTableHead>
             <tbody>
               {accounts.map((a) => (
-                <tr
-                  key={a.id}
-                  className={`border-t border-white/5 ${a.deletedAt ? 'opacity-50' : ''}`}
-                >
-                  <td className="px-3 py-3">
-                    <input
-                      type="checkbox"
+                <DataTableRow key={a.id} className={a.deletedAt ? 'opacity-60' : undefined}>
+                  <DataTableCell>
+                    <Checkbox
                       checked={selected.has(a.id)}
-                      onChange={() => toggle(a.id)}
+                      onCheckedChange={() => toggle(a.id)}
                       disabled={!!a.deletedAt}
+                      aria-label={`Select ${a.legalName}`}
                     />
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="font-medium text-white">{a.legalName}</div>
+                  </DataTableCell>
+                  <DataTableCell>
+                    <div className="font-medium text-content">{a.legalName}</div>
                     {a.displayName ? (
-                      <div className="text-xs text-white/40">{a.displayName}</div>
+                      <div className="text-xs text-content-subtle">{a.displayName}</div>
                     ) : null}
-                  </td>
-                  <td className="px-3 py-3 text-white/70">{a.country ?? '-'}</td>
-                  <td className="px-3 py-3">
-                    <span
-                      className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[a.relationshipStatus]}`}
-                    >
-                      {a.relationshipStatus}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-white/70">{a.owner?.name ?? '-'}</td>
-                  <td className="px-3 py-3 text-white/50">
+                  </DataTableCell>
+                  <DataTableCell className="text-content-muted">{a.country ?? '—'}</DataTableCell>
+                  <DataTableCell>
+                    <StatusBadge status={a.relationshipStatus} />
+                  </DataTableCell>
+                  <DataTableCell className="text-content-muted">
+                    {a.owner?.name ?? '—'}
+                  </DataTableCell>
+                  <DataTableCell className="text-content-muted">
                     {new Date(a.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-3 py-3 text-right">
+                  </DataTableCell>
+                  <DataTableCell className="text-right">
                     {canWrite ? (
                       a.deletedAt ? (
-                        <button
-                          className={ghost}
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => setDialog({ type: 'restore', account: a })}
                         >
                           Restore
-                        </button>
+                        </Button>
                       ) : (
-                        <div className="flex justify-end gap-2">
-                          <button
-                            className={ghost}
+                        <div className="flex justify-end gap-gap-xs">
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setDialog({ type: 'edit', account: a })}
                           >
                             Edit
-                          </button>
-                          <button
-                            className={ghost}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setDialog({ type: 'delete', account: a })}
                           >
                             Delete
-                          </button>
+                          </Button>
                         </div>
                       )
                     ) : null}
-                  </td>
-                </tr>
+                  </DataTableCell>
+                </DataTableRow>
               ))}
             </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination (cursor) */}
-      <div className="mt-4 flex items-center justify-between text-sm text-white/50">
-        <button className={ghost} onClick={() => setParam({ cursor: undefined })}>
-          First page
-        </button>
-        <button
-          className={ghost}
-          disabled={!nextCursor}
-          onClick={() => nextCursor && setParam({ cursor: nextCursor })}
-        >
-          Next
-        </button>
+          </DataTable>
+        </DataTableLayout>
       </div>
 
       {dialog?.type === 'create' ? (
@@ -309,27 +288,130 @@ export function AccountsView() {
           onClose={() => setDialog(null)}
         />
       ) : null}
-    </div>
+    </>
   )
 }
 
-function Modal({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * The filter row, still one submitted form.
+ *
+ * Deliberately not debounced or per-control: every field is read from FormData
+ * on Apply and pushed into the URL together, which is what keeps a filtered
+ * view linkable and the back button honest. Native controls throughout, because
+ * FormData is the contract.
+ */
+function Filters({
+  params,
+  onApply,
+}: {
+  params: URLSearchParams
+  onApply: (next: Record<string, string | undefined>) => void
+}) {
+  const ids = useId()
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-navy-elevated p-6">
-        <h2 className="text-lg font-semibold text-gold">{title}</h2>
-        <div className="mt-4">{children}</div>
+    <form
+      className="flex flex-wrap items-end gap-gap"
+      onSubmit={(e) => {
+        e.preventDefault()
+        const fd = new FormData(e.currentTarget)
+        onApply({
+          q: String(fd.get('q') ?? ''),
+          country: String(fd.get('country') ?? ''),
+          relationshipStatus: String(fd.get('relationshipStatus') ?? ''),
+          ownerId: String(fd.get('ownerId') ?? ''),
+          includeDeleted: fd.get('includeDeleted') ? 'true' : '',
+          cursor: undefined,
+        })
+      }}
+    >
+      <Input
+        name="q"
+        size="sm"
+        aria-label="Search name"
+        defaultValue={params.get('q') ?? ''}
+        placeholder="Search name"
+        className="w-48"
+      />
+      <Input
+        name="country"
+        size="sm"
+        aria-label="Country (ISO2)"
+        defaultValue={params.get('country') ?? ''}
+        placeholder="Country (ISO2)"
+        className="w-32"
+      />
+      {/* Width belongs on the wrapper, not the control: the chevron is
+          positioned against the wrapper, so sizing the `select` alone leaves it
+          stranded at the far edge of the toolbar. */}
+      <div className="w-40">
+        <NativeSelect
+          name="relationshipStatus"
+          size="sm"
+          aria-label="Relationship status"
+          defaultValue={params.get('relationshipStatus') ?? ''}
+        >
+          <option value="">Any status</option>
+          {RELATIONSHIP_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </NativeSelect>
       </div>
-    </div>
+      <Input
+        name="ownerId"
+        size="sm"
+        aria-label="Owner id"
+        defaultValue={params.get('ownerId') ?? ''}
+        placeholder="Owner id"
+        className="w-40"
+      />
+      <label
+        htmlFor={`${ids}-deleted`}
+        className="flex items-center gap-gap text-xs text-content-muted"
+      >
+        <Checkbox
+          id={`${ids}-deleted`}
+          name="includeDeleted"
+          defaultChecked={params.get('includeDeleted') === 'true'}
+        />
+        Include deleted
+      </label>
+      <Button type="submit" variant="secondary" size="sm">
+        Apply
+      </Button>
+    </form>
+  )
+}
+
+/** Shared dialog frame, so the four dialogs cannot drift apart. */
+function AccountDialog({
+  title,
+  onClose,
+  children,
+}: {
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        {children}
+      </DialogContent>
+    </Dialog>
   )
 }
 
 function CreateDialog({ onClose }: { onClose: () => void }) {
   const create = useCreateAccount()
+  const ids = useId()
   return (
-    <Modal title="New account">
+    <AccountDialog title="New account" onClose={onClose}>
       <form
-        className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault()
           const fd = new FormData(e.currentTarget)
@@ -345,30 +427,81 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
           )
         }}
       >
-        <input name="legalName" required placeholder="Legal name" className={field} />
-        <input name="displayName" placeholder="Display name (optional)" className={field} />
-        <input name="country" placeholder="Country (ISO2, optional)" className={field} />
-        <select name="relationshipStatus" defaultValue="PROSPECT" className={field}>
-          {RELATIONSHIP_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <input name="source" placeholder="Source (optional)" className={field} />
-        {create.error ? <p className="text-sm text-red-400">{message(create.error)}</p> : null}
-        <DialogButtons pending={create.isPending} onClose={onClose} submitLabel="Create" />
+        <DialogBody className="grid gap-gap-lg">
+          <div>
+            <Label htmlFor={`${ids}-legal`} required>
+              Legal name
+            </Label>
+            <Input
+              id={`${ids}-legal`}
+              name="legalName"
+              required
+              placeholder="Legal name"
+              className="mt-gap-xs"
+            />
+          </div>
+          <div>
+            <Label htmlFor={`${ids}-display`}>Display name</Label>
+            <Input
+              id={`${ids}-display`}
+              name="displayName"
+              placeholder="Display name (optional)"
+              className="mt-gap-xs"
+            />
+          </div>
+          <div>
+            <Label htmlFor={`${ids}-country`}>Country</Label>
+            <Input
+              id={`${ids}-country`}
+              name="country"
+              placeholder="Country (ISO2, optional)"
+              className="mt-gap-xs"
+            />
+          </div>
+          <div>
+            <Label htmlFor={`${ids}-status`}>Relationship status</Label>
+            <NativeSelect
+              id={`${ids}-status`}
+              name="relationshipStatus"
+              defaultValue="PROSPECT"
+              className="mt-gap-xs"
+            >
+              {RELATIONSHIP_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+          <div>
+            <Label htmlFor={`${ids}-source`}>Source</Label>
+            <Input
+              id={`${ids}-source`}
+              name="source"
+              placeholder="Source (optional)"
+              className="mt-gap-xs"
+            />
+          </div>
+          {create.error ? (
+            <p className="text-sm text-danger" role="alert">
+              {message(create.error)}
+            </p>
+          ) : null}
+        </DialogBody>
+        <DialogFooter>
+          <DialogButtons pending={create.isPending} onClose={onClose} submitLabel="Create" />
+        </DialogFooter>
       </form>
-    </Modal>
+    </AccountDialog>
   )
 }
 
 function EditDialog({ account, onClose }: { account: AccountRecord; onClose: () => void }) {
   const update = useUpdateAccount()
+  const ids = useId()
   return (
-    <Modal title="Edit account">
+    <AccountDialog title="Edit account" onClose={onClose}>
       <form
-        className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault()
           const fd = new FormData(e.currentTarget)
@@ -389,29 +522,57 @@ function EditDialog({ account, onClose }: { account: AccountRecord; onClose: () 
           )
         }}
       >
-        <input name="legalName" defaultValue={account.legalName} className={field} />
-        <input
-          name="displayName"
-          defaultValue={account.displayName ?? ''}
-          placeholder="Display name"
-          className={field}
-        />
-        <input
-          name="country"
-          defaultValue={account.country ?? ''}
-          placeholder="Country (ISO2)"
-          className={field}
-        />
-        <input
-          name="source"
-          defaultValue={account.source ?? ''}
-          placeholder="Source"
-          className={field}
-        />
-        {update.error ? <p className="text-sm text-red-400">{message(update.error)}</p> : null}
-        <DialogButtons pending={update.isPending} onClose={onClose} submitLabel="Save" />
+        <DialogBody className="grid gap-gap-lg">
+          <div>
+            <Label htmlFor={`${ids}-legal`}>Legal name</Label>
+            <Input
+              id={`${ids}-legal`}
+              name="legalName"
+              defaultValue={account.legalName}
+              className="mt-gap-xs"
+            />
+          </div>
+          <div>
+            <Label htmlFor={`${ids}-display`}>Display name</Label>
+            <Input
+              id={`${ids}-display`}
+              name="displayName"
+              defaultValue={account.displayName ?? ''}
+              placeholder="Display name"
+              className="mt-gap-xs"
+            />
+          </div>
+          <div>
+            <Label htmlFor={`${ids}-country`}>Country</Label>
+            <Input
+              id={`${ids}-country`}
+              name="country"
+              defaultValue={account.country ?? ''}
+              placeholder="Country (ISO2)"
+              className="mt-gap-xs"
+            />
+          </div>
+          <div>
+            <Label htmlFor={`${ids}-source`}>Source</Label>
+            <Input
+              id={`${ids}-source`}
+              name="source"
+              defaultValue={account.source ?? ''}
+              placeholder="Source"
+              className="mt-gap-xs"
+            />
+          </div>
+          {update.error ? (
+            <p className="text-sm text-danger" role="alert">
+              {message(update.error)}
+            </p>
+          ) : null}
+        </DialogBody>
+        <DialogFooter>
+          <DialogButtons pending={update.isPending} onClose={onClose} submitLabel="Save" />
+        </DialogFooter>
       </form>
-    </Modal>
+    </AccountDialog>
   )
 }
 
@@ -431,27 +592,35 @@ function ConfirmDialog({
   onClose: () => void
 }) {
   return (
-    <Modal title={title}>
+    <AccountDialog title={title} onClose={onClose}>
       <form
-        className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault()
           onConfirm()
         }}
       >
-        <p className="text-sm text-white/60">{body}</p>
-        {error ? <p className="text-sm text-red-400">{message(error)}</p> : null}
-        <DialogButtons pending={pending} onClose={onClose} submitLabel="Confirm" />
+        <DialogBody className="grid gap-gap">
+          <p className="text-base text-content-muted">{body}</p>
+          {error ? (
+            <p className="text-sm text-danger" role="alert">
+              {message(error)}
+            </p>
+          ) : null}
+        </DialogBody>
+        <DialogFooter>
+          <DialogButtons pending={pending} onClose={onClose} submitLabel="Confirm" />
+        </DialogFooter>
       </form>
-    </Modal>
+    </AccountDialog>
   )
 }
 
 function BulkToolbar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
   const bulk = useBulkAccountStatus()
+  const fieldId = useId()
   return (
     <form
-      className="mt-4 flex items-center gap-3 rounded-lg border border-gold/25 bg-gold/[0.06] px-4 py-2"
+      className="flex flex-wrap items-center gap-gap"
       onSubmit={(e) => {
         e.preventDefault()
         const fd = new FormData(e.currentTarget)
@@ -467,18 +636,27 @@ function BulkToolbar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
         )
       }}
     >
-      <span className="text-sm text-gold">{ids.length} selected</span>
-      <select name="relationshipStatus" defaultValue="ACTIVE" className={`${field} w-40`}>
-        {RELATIONSHIP_STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
-      <button className={ghost} disabled={bulk.isPending}>
+      <span className="text-base font-medium text-content">{ids.length} selected</span>
+      <Label htmlFor={fieldId} className="sr-only">
+        Relationship status
+      </Label>
+      <div className="w-40">
+        <NativeSelect id={fieldId} name="relationshipStatus" size="sm" defaultValue="ACTIVE">
+          {RELATIONSHIP_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </NativeSelect>
+      </div>
+      <Button type="submit" variant="secondary" size="sm" disabled={bulk.isPending}>
         Apply status
-      </button>
-      {bulk.error ? <span className="text-sm text-red-400">{message(bulk.error)}</span> : null}
+      </Button>
+      {bulk.error ? (
+        <span className="text-sm text-danger" role="alert">
+          {message(bulk.error)}
+        </span>
+      ) : null}
     </form>
   )
 }
@@ -493,13 +671,17 @@ function DialogButtons({
   submitLabel: string
 }) {
   return (
-    <div className="flex justify-end gap-2 pt-2">
-      <button type="button" className={ghost} onClick={onClose}>
+    <>
+      <Button type="button" variant="secondary" onClick={onClose} disabled={pending}>
         Cancel
-      </button>
-      <button type="submit" className={btn} disabled={pending}>
+      </Button>
+      {/* The pending label is kept verbatim rather than replaced by the spinner
+          alone: it is user-facing text this migration is not entitled to
+          change, and the accessible name changing on submit is existing
+          behaviour. */}
+      <Button type="submit" variant="primary" disabled={pending} loading={pending}>
         {pending ? 'Working...' : submitLabel}
-      </button>
-    </div>
+      </Button>
+    </>
   )
 }

@@ -51,6 +51,12 @@ describe('StatusBadge', () => {
       'IN_REVIEW',
       'VERIFIED',
       'EXPIRED',
+      // Account relationship
+      'PROSPECT',
+      'ACTIVE',
+      'PREFERRED',
+      'DORMANT',
+      'BLACKLISTED',
     ]
     const unmapped = statuses.filter((s) => !STATUS_TONE[s])
     expect(unmapped).toEqual([])
