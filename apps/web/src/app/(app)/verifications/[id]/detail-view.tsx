@@ -17,12 +17,8 @@ import {
   DialogTitle,
   Input,
   Label,
+  NativeSelect,
   PageHeader,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   StatusBadge,
   Textarea,
 } from '@triyara/ui'
@@ -451,20 +447,22 @@ export function VerificationDetail({
                     <Label htmlFor="assign-reviewer" required>
                       Reviewer
                     </Label>
-                    {/* Radix renders a hidden native <select> for `name`, so the
-                        FormData contract above is unchanged. */}
-                    <Select name="reviewerId" required>
-                      <SelectTrigger id="assign-reviewer">
-                        <SelectValue placeholder="Select reviewer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {reviewers.map((r) => (
-                          <SelectItem key={r.id} value={r.id}>
-                            {r.name} ({r.roleNames.join('/')})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {/* A real <select>, not the Radix listbox. Radix would work -
+                        it renders a hidden native element so the FormData
+                        contract holds - but it is the only thing that would pull
+                        the whole Select primitive into this route, and this page
+                        is already the heaviest in the module. A reviewer picker
+                        is a plain list of names; it does not need a combobox. */}
+                    <NativeSelect id="assign-reviewer" name="reviewerId" required defaultValue="">
+                      <option value="" disabled>
+                        Select reviewer
+                      </option>
+                      {reviewers.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name} ({r.roleNames.join('/')})
+                        </option>
+                      ))}
+                    </NativeSelect>
                   </>
                 ) : null}
 
