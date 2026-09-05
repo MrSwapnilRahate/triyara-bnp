@@ -76,7 +76,15 @@ export async function jwtCallback({
   }
 
   if (token.sub) {
+    const userLookupStartedAt = Date.now()
     const current = await userRepository.findById(token.sub)
+    const userLookupMs = Date.now() - userLookupStartedAt
+
+    if (Math.random() < 0.01) {
+      console.log('[JWT-PROFILE]', {
+        userLookupMs,
+      })
+    }
     if (!current) {
       // The account is gone. Strip the claims rather than leaving a token that
       // still asserts them.

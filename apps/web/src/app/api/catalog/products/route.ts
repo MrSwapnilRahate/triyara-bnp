@@ -8,9 +8,29 @@ import { productService } from '@/lib/catalog-service'
 // POST /api/catalog/products - create (ADMIN)
 export function GET(req: Request) {
   return route(req, async (requestId) => {
+    const startedAt = Date.now()
+
+    const authStartedAt = Date.now()
     const auth = await requireAuth()
+    const authMs = Date.now() - authStartedAt
+
     const query = parseQuery(new URL(req.url).searchParams, listProductsQuerySchema)
+
+    const listStartedAt = Date.now()
     const result = await productService.list({ ...auth, requestId }, query)
+    const listMs = Date.now() - listStartedAt
+
+    const totalMs = Date.now() - startedAt
+
+    // Sample only ~1% of requests so logging doesn't distort the load test.
+    if (Math.random() < 0.01) {
+      console.log('[LOAD-PROFILE]', {
+        authMs,
+        listMs,
+        totalMs,
+      })
+    }
+
     return ok(result.items, {
       requestId,
       meta: {

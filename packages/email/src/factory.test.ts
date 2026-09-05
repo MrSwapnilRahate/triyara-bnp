@@ -6,7 +6,16 @@ import { createEmailTransportFromEnv } from './factory'
 // with no key configured the app runs perfectly and nobody outside the team
 // ever hears back.
 
-const KEYS = ['NODE_ENV', 'NEXT_PHASE', 'RESEND_API_KEY', 'EMAIL_FROM'] as const
+const KEYS = [
+  'NODE_ENV',
+  'NEXT_PHASE',
+  'RESEND_API_KEY',
+  'EMAIL_FROM',
+  'EMAIL_TRANSPORT',
+  'VERCEL',
+  'VERCEL_ENV',
+  'VERCEL_URL',
+] as const
 
 const original = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]))
 
@@ -71,5 +80,60 @@ describe('createEmailTransportFromEnv', () => {
     // Someone testing real delivery locally should get real delivery.
     env({ NODE_ENV: 'development', RESEND_API_KEY: 're_key', EMAIL_FROM: 'TRIYARA <a@b.com>' })
     expect(createEmailTransportFromEnv(logger).name).toBe('resend')
+  })
+})
+
+// EMAIL_TRANSPORT=log exists so the production build can be run and benchmarked
+// on a laptop without real credentials. The thing worth testing is not that it
+// works - it is that it cannot reach a deployment.
+describe('EMAIL_TRANSPORT=log, the local production opt-in', () => {
+  it('logs instead of sending under `next start` when opted in explicitly', () => {
+    env({ NODE_ENV: 'production', EMAIL_TRANSPORT: 'log' })
+    expect(createEmailTransportFromEnv(logger).name).toBe('log')
+  })
+
+  it.each(['VERCEL', 'VERCEL_ENV', 'VERCEL_URL'] as const)(
+    'is ignored on a deployment, so %s alone restores the guard',
+    (marker) => {
+      env({ NODE_ENV: 'production', EMAIL_TRANSPORT: 'log', [marker]: '1' })
+      expect(() => createEmailTransportFromEnv(logger)).toThrow(/silently never arrive/i)
+    },
+  )
+
+  it('still names the missing variables when it is ignored on a deployment', () => {
+    env({ NODE_ENV: 'production', EMAIL_TRANSPORT: 'log', VERCEL_ENV: 'production' })
+    expect(() => createEmailTransportFromEnv(logger)).toThrow(/RESEND_API_KEY/)
+    expect(() => createEmailTransportFromEnv(logger)).toThrow(/EMAIL_FROM/)
+  })
+
+  it('does not engage on any value but the exact opt-in', () => {
+    // Truthiness would make EMAIL_TRANSPORT=resend disable the guard, which is
+    // the opposite of what that value asks for.
+    for (const value of ['', 'Log', 'LOG', 'true', '1', 'resend', 'none']) {
+      env({ NODE_ENV: 'production', EMAIL_TRANSPORT: value })
+      expect(() => createEmailTransportFromEnv(logger)).toThrow(/silently never arrive/i)
+    }
+  })
+
+  it('is not required in development, which already logs', () => {
+    env({ NODE_ENV: 'development' })
+    expect(createEmailTransportFromEnv(logger).name).toBe('log')
+  })
+
+  it('never overrides real credentials, locally or on a deployment', () => {
+    // Someone who configured Resend gets Resend; the opt-in only decides what
+    // happens when there is nothing to send with.
+    env({
+      NODE_ENV: 'production',
+      EMAIL_TRANSPORT: 'log',
+      RESEND_API_KEY: 're_key',
+      EMAIL_FROM: 'TRIYARA <a@b.com>',
+    })
+    expect(createEmailTransportFromEnv(logger).name).toBe('resend')
+  })
+
+  it('the guard is on by default: production with neither the opt-in nor a key throws', () => {
+    env({ NODE_ENV: 'production' })
+    expect(() => createEmailTransportFromEnv(logger)).toThrow(/silently never arrive/i)
   })
 })

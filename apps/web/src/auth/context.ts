@@ -32,16 +32,21 @@ import { auth } from './index'
  * sessions.
  */
 async function loadContext(): Promise<AuthContext> {
+  const authStartedAt = Date.now()
+
+  const sessionStartedAt = Date.now()
   const session = await auth()
+  const authJsMs = Date.now() - sessionStartedAt
+
   if (!session?.user) throw new UnauthenticatedError()
+
   const u = session.user
 
-  // No identifier, no check - and an unverifiable session is refused rather
-  // than waved through. A token predating the claim is adopted in the jwt
-  // callback and arrives here holding one; reaching this line means adoption
-  // failed, which is a reason to deny, not to trust.
   if (!u.sid) throw new UnauthenticatedError(SESSION_NO_LONGER_VALID)
+
+  const liveStartedAt = Date.now()
   await sessionService.assertLive(u.organizationId, u.sid)
+  const sessionLiveMs = Date.now() - liveStartedAt
 
   const authUser: AuthUser = {
     id: u.id,
@@ -51,9 +56,24 @@ async function loadContext(): Promise<AuthContext> {
     roles: u.roles,
     accountId: u.accountId ?? null,
   }
-  return resolveContext({ user: authUser })
-}
 
+  const contextStartedAt = Date.now()
+  const context = resolveContext({ user: authUser })
+  const contextMs = Date.now() - contextStartedAt
+
+  const totalAuthMs = Date.now() - authStartedAt
+
+  if (Math.random() < 0.01) {
+    console.log('[AUTH-PROFILE]', {
+      authJsMs,
+      sessionLiveMs,
+      contextMs,
+      totalAuthMs,
+    })
+  }
+
+  return context
+}
 export function requireAuth(): Promise<AuthContext> {
   return loadContext()
 }

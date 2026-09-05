@@ -325,6 +325,28 @@ link is still usable in development. It is refused when serving production —
 the same guard shape storage uses, and exempt during `next build` via
 `NEXT_PHASE`.
 
+### Running the production build locally
+
+`next start` sets `NODE_ENV=production` with no `NEXT_PHASE`, so the guard above
+fires and the server refuses to start — which is correct for a deployment and
+unhelpful when you want to benchmark the production build on a laptop.
+
+Set `EMAIL_TRANSPORT=log` for that, and nothing else:
+
+```bash
+EMAIL_TRANSPORT=log pnpm --filter @triyara/web start
+```
+
+Do **not** supply placeholder values for `RESEND_API_KEY` and `EMAIL_FROM`
+instead. Any non-empty pair selects the Resend transport, so the first message
+attempts a real network call with a bogus key — and if the values happen to be
+real, a load test sends real email to real people.
+
+`EMAIL_TRANSPORT` is not sufficient on its own. It is ignored whenever
+`VERCEL`, `VERCEL_ENV` or `VERCEL_URL` is present, which Vercel sets on every
+deployment, preview and production alike. Adding it to the project's
+environment therefore cannot disable the guard.
+
 Verify the sending domain in Resend before go-live. An unverified domain does
 not fail at startup; it fails per message, and the first person to notice is a
 supplier who never got a reply.
