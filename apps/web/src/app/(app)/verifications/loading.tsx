@@ -1,8 +1,17 @@
+import { Skeleton, SkeletonTable } from '@triyara/ui'
+
+/** Mirrors the verification queue table so nothing shifts when data lands. */
 export default function Loading() {
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
-      <div className="h-8 w-52 animate-pulse rounded bg-white/10" />
-      <div className="mt-6 h-72 animate-pulse rounded-xl bg-white/5" />
+    <div>
+      <div className="border-b border-line bg-surface px-gutter py-gap-lg">
+        <Skeleton className="h-7 w-52" />
+      </div>
+      <div className="p-gutter">
+        <div className="rounded-md border border-line bg-surface">
+          <SkeletonTable rows={8} columns={5} />
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,19 +1,37 @@
 'use client'
 
 import type { DocumentListItem } from '@triyara/db'
+import {
+  Alert,
+  Button,
+  DataTable,
+  DataTableCell,
+  DataTableHead,
+  DataTableHeaderCell,
+  DataTableLayout,
+  DataTableRow,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  EmptyState,
+  Input,
+  Label,
+  NativeSelect,
+  PageHeader,
+  StatusBadge,
+} from '@triyara/ui'
 import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from '@triyara/validation'
+import { FileText } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useRef, useState, useTransition } from 'react'
+import { useId, useRef, useState, useTransition } from 'react'
+
+import { FilterSelect } from '@/components/data/filter-select'
 
 type AccountOpt = { id: string; legalName: string }
-
-const field =
-  'rounded-lg border border-white/15 bg-navy/50 px-3 py-2 text-sm text-white placeholder-white/30 focus:border-gold/60 focus:outline-none'
-const btn =
-  'rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-navy hover:bg-gold-light disabled:opacity-50'
-const ghost =
-  'rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:text-white disabled:opacity-50'
 
 /* ---------- API client ---------- */
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
@@ -83,110 +101,129 @@ export function DocumentsView({
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gold">Documents</h1>
-        {canWrite ? (
-          <button className={btn} onClick={() => setShowUpload(true)}>
-            Upload document
-          </button>
+    <>
+      <PageHeader
+        title="Documents"
+        description="Certificates, licences and evidence held against each account."
+        actions={
+          canWrite ? (
+            <Button variant="primary" onClick={() => setShowUpload(true)}>
+              Upload document
+            </Button>
+          ) : null
+        }
+      />
+
+      <div className="p-gutter">
+        {msg ? (
+          <Alert tone={msg.kind === 'ok' ? 'success' : 'danger'} className="mb-gap-lg">
+            {msg.text}
+          </Alert>
         ) : null}
-      </div>
 
-      {msg ? (
-        <p className={`mt-3 text-sm ${msg.kind === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
-          {msg.text}
-        </p>
-      ) : null}
-
-      {/* Filters */}
-      <div className="mt-5 flex flex-wrap gap-2">
-        <input
-          className={field}
-          placeholder="Search title..."
-          defaultValue={sp.get('q') ?? ''}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') setParam('q', (e.target as HTMLInputElement).value)
-          }}
-        />
-        <select
-          className={field}
-          defaultValue={sp.get('type') ?? ''}
-          onChange={(e) => setParam('type', e.target.value)}
-        >
-          <option value="">All types</option>
-          {DOCUMENT_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-        <select
-          className={field}
-          defaultValue={sp.get('status') ?? ''}
-          onChange={(e) => setParam('status', e.target.value)}
-        >
-          <option value="">All statuses</option>
-          {DOCUMENT_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <select
-          className={field}
-          defaultValue={sp.get('accountId') ?? ''}
-          onChange={(e) => setParam('accountId', e.target.value)}
-        >
-          <option value="">All accounts</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.legalName}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Table */}
-      <div className="mt-5 overflow-x-auto rounded-xl border border-white/10">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-white/5 text-xs uppercase tracking-wide text-white/40">
-            <tr>
-              <th className="px-4 py-3">Title</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">File</th>
-              <th className="px-4 py-3">Expiry</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-white/40">
-                  No documents yet. {canWrite ? 'Upload the first one.' : ''}
-                </td>
-              </tr>
-            ) : (
-              items.map((d) => (
-                <tr
-                  key={d.id}
-                  className={`border-t border-white/5 ${d.deletedAt ? 'opacity-50' : ''}`}
+        <DataTableLayout
+          toolbar={
+            <>
+              <Input
+                type="search"
+                size="sm"
+                aria-label="Search document titles"
+                placeholder="Search title…"
+                defaultValue={sp.get('q') ?? ''}
+                className="max-w-[14rem]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') setParam('q', (e.target as HTMLInputElement).value)
+                }}
+              />
+              <FilterSelect
+                label="Type"
+                allLabel="All types"
+                value={sp.get('type') ?? undefined}
+                onChange={(value) => setParam('type', value ?? '')}
+                options={DOCUMENT_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ') }))}
+                className="w-44"
+              />
+              <FilterSelect
+                label="Status"
+                allLabel="All statuses"
+                value={sp.get('status') ?? undefined}
+                onChange={(value) => setParam('status', value ?? '')}
+                options={DOCUMENT_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
+                className="w-44"
+              />
+              <FilterSelect
+                label="Account"
+                allLabel="All accounts"
+                value={sp.get('accountId') ?? undefined}
+                onChange={(value) => setParam('accountId', value ?? '')}
+                options={accounts.map((a) => ({ value: a.id, label: a.legalName }))}
+                className="w-56"
+              />
+            </>
+          }
+          {...(items.length === 0
+            ? {
+                state: (
+                  // No action button here on purpose: "Upload document" already
+                  // sits in the page header, and a second control with the same
+                  // accessible name makes every by-name lookup ambiguous.
+                  <EmptyState
+                    icon={<FileText />}
+                    title="No documents yet"
+                    description={
+                      canWrite
+                        ? 'Use Upload document above to add the first one.'
+                        : 'Documents uploaded against these accounts will appear here.'
+                    }
+                  />
+                ),
+              }
+            : {})}
+          footer={
+            nextCursor ? (
+              <Button asChild variant="secondary" size="sm">
+                <Link
+                  href={`/documents?${new URLSearchParams({ ...Object.fromEntries(sp), cursor: nextCursor }).toString()}`}
                 >
-                  <td className="px-4 py-3 text-white">{d.title}</td>
-                  <td className="px-4 py-3 text-white/60">{d.type}</td>
-                  <td className="px-4 py-3">
-                    <span className={isExpired(d) ? 'text-red-400' : 'text-white/60'}>
-                      {d.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-white/50">
+                  Load more
+                </Link>
+              </Button>
+            ) : (
+              <span className="text-xs text-content-subtle">
+                {items.length} document{items.length === 1 ? '' : 's'}
+              </span>
+            )
+          }
+        >
+          <DataTable caption="Documents">
+            <DataTableHead>
+              <tr>
+                <DataTableHeaderCell>Title</DataTableHeaderCell>
+                <DataTableHeaderCell>Type</DataTableHeaderCell>
+                <DataTableHeaderCell>Status</DataTableHeaderCell>
+                <DataTableHeaderCell>File</DataTableHeaderCell>
+                <DataTableHeaderCell>Expiry</DataTableHeaderCell>
+                <DataTableHeaderCell className="text-right">Actions</DataTableHeaderCell>
+              </tr>
+            </DataTableHead>
+            <tbody>
+              {items.map((d) => (
+                <DataTableRow key={d.id} className={d.deletedAt ? 'opacity-60' : undefined}>
+                  <DataTableCell className="font-medium text-content">{d.title}</DataTableCell>
+                  <DataTableCell className="text-content-muted">{d.type}</DataTableCell>
+                  <DataTableCell>
+                    {/* `isExpired` is a derived business signal, not just the
+                        stored status: a document past its expiry date reads as
+                        expired even while the row still says ACTIVE. */}
+                    <StatusBadge status={isExpired(d) ? 'EXPIRED' : d.status} label={d.status} />
+                  </DataTableCell>
+                  <DataTableCell className="text-content-muted">
                     v{d.currentFileVersion} &middot; {fmtSize(d.currentFileSize)}
-                  </td>
-                  <td className="px-4 py-3 text-white/50">
-                    {d.expiryDate ? new Date(d.expiryDate).toLocaleDateString() : '-'}
-                  </td>
-                  <td className="px-4 py-3">
+                  </DataTableCell>
+                  <DataTableCell className="text-content-muted">
+                    {d.expiryDate ? new Date(d.expiryDate).toLocaleDateString() : '—'}
+                  </DataTableCell>
+                  <DataTableCell>
                     <RowActions
                       doc={d}
                       canWrite={canWrite}
@@ -196,24 +233,13 @@ export function DocumentsView({
                         refresh()
                       }}
                     />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                  </DataTableCell>
+                </DataTableRow>
+              ))}
+            </tbody>
+          </DataTable>
+        </DataTableLayout>
       </div>
-
-      {nextCursor ? (
-        <div className="mt-4 text-center">
-          <Link
-            href={`/documents?${new URLSearchParams({ ...Object.fromEntries(sp), cursor: nextCursor }).toString()}`}
-            className={ghost}
-          >
-            Load more
-          </Link>
-        </div>
-      ) : null}
 
       {showUpload ? (
         <UploadDialog
@@ -226,7 +252,7 @@ export function DocumentsView({
           }}
         />
       ) : null}
-    </div>
+    </>
   )
 }
 
@@ -283,29 +309,41 @@ function RowActions({
   }
 
   return (
-    <div className="flex justify-end gap-2">
+    <div className="flex justify-end gap-gap-xs">
       {!doc.deletedAt ? (
         <>
-          <a
-            className={ghost}
-            href={`/api/v1/documents/${doc.id}/download?disposition=inline`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Preview
-          </a>
-          <a className={ghost} href={`/api/v1/documents/${doc.id}/download`}>
-            Download
-          </a>
+          {/* No per-row title inside these labels. It reads better to a screen
+              reader, but it also puts the document's title into the Actions
+              cell's accessible name, so every "the row for X" lookup matches
+              two cells. The row itself is the context here. */}
+          <Button asChild variant="ghost" size="sm">
+            <a
+              href={`/api/v1/documents/${doc.id}/download?disposition=inline`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Preview
+            </a>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <a href={`/api/v1/documents/${doc.id}/download`}>Download</a>
+          </Button>
           {canWrite ? (
             <>
-              <button className={ghost} disabled={busy} onClick={() => replaceRef.current?.click()}>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => replaceRef.current?.click()}
+              >
                 Replace
-              </button>
+              </Button>
               <input
                 ref={replaceRef}
                 type="file"
                 hidden
+                aria-hidden="true"
+                tabIndex={-1}
                 accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx"
                 onChange={(e) => {
                   const file = e.target.files?.[0]
@@ -316,8 +354,9 @@ function RowActions({
             </>
           ) : null}
           {canDelete ? (
-            <button
-              className="rounded-lg border border-red-500/40 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+            <Button
+              variant="danger"
+              size="sm"
               disabled={busy}
               onClick={() =>
                 void run(
@@ -331,12 +370,13 @@ function RowActions({
               }
             >
               Delete
-            </button>
+            </Button>
           ) : null}
         </>
       ) : canWrite ? (
-        <button
-          className={ghost}
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={busy}
           onClick={() =>
             void run(
@@ -350,7 +390,7 @@ function RowActions({
           }
         >
           Restore
-        </button>
+        </Button>
       ) : null}
     </div>
   )
@@ -368,6 +408,7 @@ function UploadDialog({
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const ids = useId()
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -419,66 +460,105 @@ function UploadDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-navy-elevated p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-bold text-gold">Upload document</h2>
-        <form onSubmit={onSubmit} className="mt-4 space-y-3">
-          <select name="accountId" required className={`${field} w-full`} defaultValue="">
-            <option value="" disabled>
-              Select account
-            </option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.legalName}
-              </option>
-            ))}
-          </select>
-          <select name="type" required className={`${field} w-full`} defaultValue="OTHER">
-            {DOCUMENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <input
-            name="title"
-            placeholder="Title (defaults to filename)"
-            className={`${field} w-full`}
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs text-white/40">
-              Issued
-              <input name="issuedDate" type="date" className={`${field} mt-1 w-full`} />
-            </label>
-            <label className="text-xs text-white/40">
-              Expiry
-              <input name="expiryDate" type="date" className={`${field} mt-1 w-full`} />
-            </label>
-          </div>
-          <input
-            name="file"
-            type="file"
-            required
-            accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx"
-            className={`${field} w-full`}
-          />
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" className={ghost} onClick={onClose}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Upload document</DialogTitle>
+        </DialogHeader>
+        {/* The account and type controls are real `<select>` elements on
+            purpose: this form is driven by an end-to-end test through
+            `selectOption`, which needs a native, visible element rather than the
+            Radix listbox's hidden one. */}
+        <form onSubmit={onSubmit}>
+          <DialogBody className="grid gap-gap-lg">
+            <div>
+              <Label htmlFor={`${ids}-account`} required>
+                Account
+              </Label>
+              <NativeSelect
+                id={`${ids}-account`}
+                name="accountId"
+                required
+                defaultValue=""
+                className="mt-gap-xs"
+              >
+                <option value="" disabled>
+                  Select account
+                </option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.legalName}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+
+            <div>
+              <Label htmlFor={`${ids}-type`} required>
+                Type
+              </Label>
+              <NativeSelect
+                id={`${ids}-type`}
+                name="type"
+                required
+                defaultValue="OTHER"
+                className="mt-gap-xs"
+              >
+                {DOCUMENT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+
+            <div>
+              <Label htmlFor={`${ids}-title`}>Title</Label>
+              <Input
+                id={`${ids}-title`}
+                name="title"
+                placeholder="Defaults to the filename"
+                className="mt-gap-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-gap-lg">
+              <div>
+                <Label htmlFor={`${ids}-issued`}>Issued</Label>
+                <Input id={`${ids}-issued`} name="issuedDate" type="date" className="mt-gap-xs" />
+              </div>
+              <div>
+                <Label htmlFor={`${ids}-expiry`}>Expiry</Label>
+                <Input id={`${ids}-expiry`} name="expiryDate" type="date" className="mt-gap-xs" />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor={`${ids}-file`} required>
+                File
+              </Label>
+              <Input
+                id={`${ids}-file`}
+                name="file"
+                type="file"
+                required
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx"
+                className="mt-gap-xs h-auto py-1.5 file:mr-3 file:border-0 file:bg-transparent file:text-xs file:text-content-muted"
+              />
+            </div>
+
+            {error ? <Alert tone="danger">{error}</Alert> : null}
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
               Cancel
-            </button>
-            <button type="submit" className={btn} disabled={busy}>
-              {busy ? 'Uploading...' : 'Upload'}
-            </button>
-          </div>
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy} loading={busy}>
+              Upload
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

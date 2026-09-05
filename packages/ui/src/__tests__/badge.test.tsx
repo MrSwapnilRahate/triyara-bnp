@@ -45,6 +45,12 @@ describe('StatusBadge', () => {
       'DECLINED',
       'SUBMITTED',
       'NO_RESPONSE',
+      // Verification
+      'DOCUMENTS_REQUESTED',
+      'SUSPENDED',
+      'IN_REVIEW',
+      'VERIFIED',
+      'EXPIRED',
     ]
     const unmapped = statuses.filter((s) => !STATUS_TONE[s])
     expect(unmapped).toEqual([])

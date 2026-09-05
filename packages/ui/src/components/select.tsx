@@ -126,3 +126,53 @@ export const SelectSeparator = forwardRef<
     />
   )
 })
+
+/**
+ * A real `<select>`, styled to match `SelectTrigger`.
+ *
+ * WHY THIS EXISTS ALONGSIDE THE RADIX SELECT: the Radix one is the default and
+ * the better control - it is searchable, it portals, and its listbox is styled.
+ * But it renders its native element visually hidden and `aria-hidden`, purely so
+ * a surrounding form serialises. Anything that has to *drive* the element rather
+ * than read it - `page.selectOption` in a browser test, an autofill heuristic, a
+ * screen reader on a platform that prefers the OS picker - needs the real thing,
+ * visible and focusable.
+ *
+ * Use `SelectTrigger` by default. Reach for this when a native element is part
+ * of the contract, and note which one at the call site.
+ *
+ * `appearance-none` plus an explicit chevron rather than the platform arrow, so
+ * the two selects are indistinguishable on screen.
+ */
+export const NativeSelect = forwardRef<
+  HTMLSelectElement,
+  Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> & {
+    size?: keyof typeof SIZES
+    invalid?: boolean
+  }
+>(function NativeSelect({ className, size = 'md', invalid, children, ...props }, ref) {
+  return (
+    <div className="relative w-full">
+      <select
+        ref={ref}
+        aria-invalid={invalid || undefined}
+        className={cn(
+          'focus-ring border-line flex w-full appearance-none items-center rounded-sm border',
+          'bg-surface text-content duration-fast py-0 pr-8 pl-2.5 transition-colors',
+          'hover:border-line-strong',
+          'disabled:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-60',
+          'aria-[invalid=true]:border-danger',
+          SIZES[size],
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        aria-hidden="true"
+        className="text-content-subtle pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2"
+      />
+    </div>
+  )
+})
