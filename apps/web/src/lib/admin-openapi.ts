@@ -411,7 +411,10 @@ export const adminOpenApiDocument = {
           id: { type: 'string', description: 'cuid.' },
           name: { type: 'string' },
           email: { type: 'string', format: 'email' },
-          avatarUrl: { type: ['string', 'null'], format: 'uri' },
+          // `uri-reference`, not `uri`: an uploaded photo is stored as this
+          // application's own avatar path, which is relative. Absolute URLs
+          // remain valid and are still what an externally hosted avatar is.
+          avatarUrl: { type: ['string', 'null'], format: 'uri-reference' },
           status: { type: 'string', enum: USER_STATUSES },
           roles: {
             type: 'array',

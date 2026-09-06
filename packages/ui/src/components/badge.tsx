@@ -90,6 +90,11 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   PENDING_APPROVAL: 'warning',
   PENDING_REVIEW: 'warning',
   PENDING: 'warning',
+  // Verification. Both mean "somebody must act before this can settle", which is
+  // what `warning` says everywhere else on the platform. SUSPENDED is not
+  // `danger`: a suspended verification is recoverable, a rejected one is not.
+  DOCUMENTS_REQUESTED: 'warning',
+  SUSPENDED: 'warning',
   UNDER_NEGOTIATION: 'warning',
   IN_PROGRESS: 'info',
   EVALUATING: 'info',
@@ -98,6 +103,17 @@ export const STATUS_TONE: Record<string, StatusTone> = {
   INVITED: 'info',
   VIEWED: 'info',
   SUBMITTED: 'info',
+
+  // Account relationship (TRY-BNP-ACCOUNT). The whole enum is mapped rather
+  // than the part that happens to be missing: an unmapped member falls back to
+  // neutral, and a blacklisted counterparty rendering the same grey as a
+  // prospect is the one confusion this map exists to prevent. PREFERRED is
+  // `accent` rather than a second `success` so it stays distinguishable from
+  // ACTIVE, which it outranks.
+  PROSPECT: 'neutral',
+  PREFERRED: 'accent',
+  DORMANT: 'warning',
+  BLACKLISTED: 'danger',
 
   // Settled, good
   APPROVED: 'success',

@@ -233,5 +233,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Dependency review
-        if: github.event_name == 'pull_request'
+        # Needs Dependency graph together with GitHub Advanced Security, which
+        # on a private repository is a paid add-on. Without it the action does
+        # not skip, it hard-errors ("Dependency review is not supported on this
+        # repository"), so this job has failed on every pull request since it
+        # was added while passing on main - the step only runs on
+        # pull_request, so a push had nothing to fail. A check that cannot pass
+        # is worse than no check: it teaches everyone to merge through red.
+        #
+        # Dependabot alerts already cover the same dependencies; what is given
+        # up meanwhile is blocking a vulnerable one at pull-request time.
+        # Gated rather than deleted so it starts working on its own if the
+        # repository is made public or Advanced Security is enabled.
+        if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
         uses: actions/dependency-review-action@v4

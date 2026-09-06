@@ -64,9 +64,16 @@ test.describe('verification workflow', () => {
     await (
       await interactive(page.locator('form').getByRole('button', { name: /^approve$/i }))
     ).click()
-    // The status line, not the word wherever it appears: the history entry
-    // records the same transition, so a bare text match finds two and the
+    // The status badge, not the word wherever it appears: the history entry
+    // records the same transition, so a loose text match finds two and the
     // assertion dies of strict mode rather than proving the outcome.
-    await expect(page.getByText(/Status\s+VERIFIED/)).toBeVisible()
+    //
+    // This used to read /Status\s+VERIFIED/, against a hand-written line that
+    // said "Status VERIFIED". The header now carries the shared StatusBadge,
+    // which humanises the value - so the badge says "Verified" while the
+    // history entry still prints the raw "VERIFIED". An exact, case-sensitive
+    // match therefore separates the two more strictly than the old regex did,
+    // and still proves the same thing: the workflow reached VERIFIED.
+    await expect(page.getByText('Verified', { exact: true })).toBeVisible()
   })
 })

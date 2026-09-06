@@ -1,4 +1,6 @@
+import { PageHeader } from '@triyara/ui'
 import { listActivitiesQuerySchema } from '@triyara/validation'
+import { ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 
 import { requireAuth } from '@/auth/context'
@@ -33,17 +35,34 @@ export default async function AccountActivityPage({
   ])
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/accounts" className="text-xs text-white/40 hover:text-gold">
-        &larr; Accounts
-      </Link>
-      <h1 className="mb-1 mt-2 text-2xl font-bold text-gold">{account.legalName}</h1>
-      <p className="mb-6 text-sm text-white/40">Account timeline</p>
-      <ActivityFeed
-        initialItems={result.items}
-        initialCursor={result.nextCursor}
-        fetchBase={`/api/v1/accounts/${id}/activities`}
+    <>
+      {/* This route still sits under the Accounts segment, which keeps its
+          dark-theme pin until that module is migrated. Tokens resolve correctly
+          under the pin, so this renders properly either way and needs no second
+          change when the pin goes. */}
+      <PageHeader
+        title={account.legalName}
+        description="Account timeline"
+        breadcrumb={
+          <Link
+            href="/accounts"
+            className="focus-ring inline-flex items-center gap-gap-xs text-xs text-content-muted hover:text-content"
+          >
+            <ChevronLeft aria-hidden="true" className="size-3.5" />
+            Accounts
+          </Link>
+        }
       />
-    </div>
+
+      <div className="p-gutter">
+        <div className="mx-auto max-w-3xl">
+          <ActivityFeed
+            initialItems={result.items}
+            initialCursor={result.nextCursor}
+            fetchBase={`/api/v1/accounts/${id}/activities`}
+          />
+        </div>
+      </div>
+    </>
   )
 }

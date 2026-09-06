@@ -27,6 +27,7 @@ function storageSpy() {
     }),
     createDownloadUrl: async () => 'https://storage.example/get',
     stat: statFor,
+    readObject: async () => null,
     delete: async () => undefined,
   }
   return { provider, statFor }

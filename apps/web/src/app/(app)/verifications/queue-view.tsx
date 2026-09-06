@@ -1,25 +1,33 @@
 'use client'
 
 import type { VerificationListItem } from '@triyara/db'
+import {
+  Alert,
+  Button,
+  DataTable,
+  DataTableCell,
+  DataTableHead,
+  DataTableHeaderCell,
+  DataTableLayout,
+  DataTableRow,
+  EmptyState,
+  PageHeader,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  StatusBadge,
+} from '@triyara/ui'
 import { VERIFICATION_STATUSES } from '@triyara/validation'
+import { ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { useId, useState } from 'react'
+
+import { FilterSelect } from '@/components/data/filter-select'
 
 type AccountOpt = { id: string; legalName: string }
-
-const field =
-  'rounded-lg border border-white/15 bg-navy/50 px-3 py-2 text-sm text-white focus:border-gold/60 focus:outline-none'
-const btn =
-  'rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-navy hover:bg-gold-light disabled:opacity-50'
-
-const STATUS_COLOR: Record<string, string> = {
-  VERIFIED: 'text-green-400',
-  REJECTED: 'text-red-400',
-  EXPIRED: 'text-red-400',
-  SUSPENDED: 'text-amber-400',
-  DOCUMENTS_REQUESTED: 'text-amber-400',
-}
 
 export function VerificationQueue({
   items,
@@ -38,6 +46,8 @@ export function VerificationQueue({
   const sp = useSearchParams()
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const createPanelId = useId()
+  const accountLabelId = useId()
 
   function setStatus(value: string) {
     const next = new URLSearchParams(sp.toString())
@@ -65,108 +75,129 @@ export function VerificationQueue({
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gold">Verification queue</h1>
-        {canCreate ? (
-          <button className={btn} onClick={() => setCreating((v) => !v)}>
-            Start verification
-          </button>
+    <>
+      <PageHeader
+        title="Verification queue"
+        description="Supplier verifications awaiting review, and the decisions already recorded."
+        actions={
+          canCreate ? (
+            <Button
+              variant="primary"
+              onClick={() => setCreating((v) => !v)}
+              aria-expanded={creating}
+              aria-controls={createPanelId}
+            >
+              Start verification
+            </Button>
+          ) : null
+        }
+      />
+
+      <div className="p-gutter">
+        {error ? (
+          <Alert tone="danger" className="mb-gap-lg">
+            {error}
+          </Alert>
         ) : null}
-      </div>
-      {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
 
-      {creating ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-white/10 p-4">
-          <span className="text-sm text-white/50">Account:</span>
-          <select
-            className={field}
-            defaultValue=""
-            onChange={(e) => e.target.value && void create(e.target.value)}
+        {creating ? (
+          <div
+            id={createPanelId}
+            className="mb-gap-lg flex flex-wrap items-center gap-gap rounded-md border border-line bg-surface p-gap-lg"
           >
-            <option value="" disabled>
-              Select account
-            </option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.legalName}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
+            <span id={accountLabelId} className="text-base text-content-muted">
+              Account
+            </span>
+            <Select onValueChange={(value) => value && void create(value)}>
+              <SelectTrigger size="sm" aria-labelledby={accountLabelId} className="w-64">
+                <SelectValue placeholder="Select account" />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.legalName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
 
-      <div className="mt-5">
-        <select
-          className={field}
-          defaultValue={sp.get('status') ?? ''}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          <option value="">All statuses</option>
-          {VERIFICATION_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="mt-5 overflow-x-auto rounded-xl border border-white/10">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-white/5 text-xs uppercase tracking-wide text-white/40">
-            <tr>
-              <th className="px-4 py-3">Supplier</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Decision</th>
-              <th className="px-4 py-3">Submitted</th>
-              <th className="px-4 py-3 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-white/40">
-                  No verifications yet.
-                </td>
-              </tr>
+        <DataTableLayout
+          toolbar={
+            <FilterSelect
+              label="Status"
+              allLabel="All statuses"
+              value={sp.get('status') ?? undefined}
+              onChange={(value) => setStatus(value ?? '')}
+              options={VERIFICATION_STATUSES.map((s) => ({
+                value: s,
+                label: s.replace(/_/g, ' '),
+              }))}
+              className="w-56"
+            />
+          }
+          {...(items.length === 0
+            ? {
+                state: (
+                  <EmptyState
+                    icon={<ShieldCheck />}
+                    title="No verifications yet"
+                    description="Verifications appear here once one is started for a supplier account."
+                  />
+                ),
+              }
+            : {})}
+          footer={
+            nextCursor ? (
+              <Button asChild variant="secondary" size="sm">
+                <Link
+                  href={`/verifications?${new URLSearchParams({ ...Object.fromEntries(sp), cursor: nextCursor }).toString()}`}
+                >
+                  Load more
+                </Link>
+              </Button>
             ) : (
-              items.map((v) => (
-                <tr key={v.id} className="border-t border-white/5">
-                  <td className="px-4 py-3 text-white">
+              <span className="text-xs text-content-subtle">
+                {items.length} verification{items.length === 1 ? '' : 's'}
+              </span>
+            )
+          }
+        >
+          <DataTable caption="Verification queue">
+            <DataTableHead>
+              <tr>
+                <DataTableHeaderCell>Supplier</DataTableHeaderCell>
+                <DataTableHeaderCell>Status</DataTableHeaderCell>
+                <DataTableHeaderCell>Decision</DataTableHeaderCell>
+                <DataTableHeaderCell>Submitted</DataTableHeaderCell>
+                <DataTableHeaderCell className="text-right">Action</DataTableHeaderCell>
+              </tr>
+            </DataTableHead>
+            <tbody>
+              {items.map((v) => (
+                <DataTableRow key={v.id}>
+                  <DataTableCell className="font-medium text-content">
                     {accountNames[v.accountId] ?? v.accountId}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={STATUS_COLOR[v.status] ?? 'text-white/60'}>{v.status}</span>
-                  </td>
-                  <td className="px-4 py-3 text-white/50">{v.decision ?? '-'}</td>
-                  <td className="px-4 py-3 text-white/50">
-                    {v.submittedAt ? new Date(v.submittedAt).toLocaleDateString() : '-'}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/verifications/${v.id}`}
-                      className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:text-white"
-                    >
-                      Review
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                  </DataTableCell>
+                  <DataTableCell>
+                    <StatusBadge status={v.status} />
+                  </DataTableCell>
+                  <DataTableCell className="text-content-muted">{v.decision ?? '—'}</DataTableCell>
+                  <DataTableCell className="text-content-muted">
+                    {v.submittedAt ? new Date(v.submittedAt).toLocaleDateString() : '—'}
+                  </DataTableCell>
+                  <DataTableCell className="text-right">
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/verifications/${v.id}`}>Review</Link>
+                    </Button>
+                  </DataTableCell>
+                </DataTableRow>
+              ))}
+            </tbody>
+          </DataTable>
+        </DataTableLayout>
       </div>
-
-      {nextCursor ? (
-        <div className="mt-4 text-center">
-          <Link
-            href={`/verifications?${new URLSearchParams({ ...Object.fromEntries(sp), cursor: nextCursor }).toString()}`}
-            className="text-sm text-white/60 hover:text-gold"
-          >
-            Load more
-          </Link>
-        </div>
-      ) : null}
-    </div>
+    </>
   )
 }

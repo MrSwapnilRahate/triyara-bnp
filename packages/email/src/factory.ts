@@ -50,6 +50,32 @@ function isLocalLogTransportOptIn(): boolean {
 }
 
 /**
+ * Whether this is a Vercel preview deployment rather than the production one.
+ *
+ * `VERCEL_ENV` is a system variable set to 'production', 'preview' or
+ * 'development' on every deployment. Only 'production' is the deployment a
+ * buyer or supplier ever reaches, and only there does a missing key mean mail
+ * that silently never arrives - the failure the guard below exists to prevent.
+ *
+ * A preview is built from a branch, thrown away, and reached by the team alone,
+ * so requiring real credentials there protected nobody. It did the opposite:
+ * the transport is constructed at module scope, so an unconfigured preview did
+ * not merely disable email, it threw while the module was being imported.
+ * `@/lib/email` is imported by the auth server actions and, through a shared
+ * chunk, by the NextAuth route handler - so sign-in, password reset and the
+ * session endpoint all answered 500 on any preview without a key.
+ *
+ * Giving previews a live Resend key would be the wrong way to fix that: every
+ * open branch would then send real mail to real addresses.
+ *
+ * If `VERCEL_ENV` is absent - system variables can be turned off - this returns
+ * false and the guard still applies, which is the safe direction to be wrong in.
+ */
+function isPreviewDeployment(): boolean {
+  return process.env.VERCEL_ENV === 'preview'
+}
+
+/**
  * Selects the transport from env. Default is the log transport, so local
  * development needs no key and no network.
  *
@@ -57,6 +83,9 @@ function isLocalLogTransportOptIn(): boolean {
  * Email is the only channel that reaches a supplier or buyer at all - they
  * have no account and no inbox in the product - so silently not sending is
  * indistinguishable, from their side, from never having registered.
+ *
+ * "Production" there means the production deployment, not merely NODE_ENV:
+ * preview deployments log instead. See `isPreviewDeployment`.
  *
  * `EMAIL_TRANSPORT=log` opts back into logging for a production build running
  * locally, and only there. See `isLocalLogTransportOptIn`.
@@ -67,7 +96,7 @@ export function createEmailTransportFromEnv(logger: EmailLogger): EmailTransport
 
   if (apiKey && from) return createResendTransport({ apiKey, from })
 
-  if (isServingProduction() && !isLocalLogTransportOptIn()) {
+  if (isServingProduction() && !isPreviewDeployment() && !isLocalLogTransportOptIn()) {
     const missing = [
       ['RESEND_API_KEY', apiKey],
       ['EMAIL_FROM', from],
