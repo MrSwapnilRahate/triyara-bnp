@@ -1,8 +1,12 @@
+import { Skeleton } from '@triyara/ui'
+
 export default function Loading() {
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      <div className="h-8 w-56 animate-pulse rounded bg-white/10" />
-      <div className="mt-6 h-64 animate-pulse rounded-xl bg-white/5" />
+    <div className="p-gutter">
+      <div className="mx-auto max-w-3xl space-y-gap-lg">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-64 w-full" />
+      </div>
     </div>
   )
 }
