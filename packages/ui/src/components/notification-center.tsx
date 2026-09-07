@@ -57,7 +57,7 @@ export function NotificationCenter({
           {unreadCount > 0 ? (
             <span
               aria-hidden="true"
-              className="bg-danger text-2xs absolute -top-0.5 -right-0.5 flex min-w-4 items-center justify-center rounded-full px-1 leading-4 font-semibold text-white"
+              className="bg-danger text-2xs text-content-inverted absolute -top-0.5 -right-0.5 flex min-w-4 items-center justify-center rounded-full px-1 leading-4 font-semibold"
             >
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
