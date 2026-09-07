@@ -25,7 +25,7 @@ export default function BuyerRequirementPage() {
           aria-hidden="true"
           strokeWidth={1.5}
         />
-        <h1 className="mt-gap-lg text-center text-md font-semibold tracking-tight text-content">
+        <h1 className="mt-gap-lg text-center font-serif text-xl font-semibold text-content">
           Tell us what you need
         </h1>
         <div className="mt-gap space-y-gap-lg text-base leading-relaxed text-content-muted">
@@ -40,7 +40,7 @@ export default function BuyerRequirementPage() {
           </p>
         </div>
         <div className="mt-gutter rounded-md border border-line bg-surface-sunken p-gutter">
-          <p className="text-2xs font-semibold uppercase tracking-[0.15em] text-content-subtle">
+          <p className="text-2xs font-semibold uppercase tracking-[0.15em] text-content-muted">
             Email your requirement
           </p>
           <a
@@ -51,7 +51,7 @@ export default function BuyerRequirementPage() {
           </a>
         </div>
       </Card>
-      <p className="mt-gutter text-2xs text-content-subtle">Triyara Exports LLP</p>
+      <p className="mt-gutter text-2xs text-content-muted">Triyara Exports LLP</p>
     </div>
   )
 }

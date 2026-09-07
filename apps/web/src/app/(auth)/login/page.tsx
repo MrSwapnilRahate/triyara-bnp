@@ -1,11 +1,12 @@
 'use client'
 
+import { Button, Input } from '@triyara/ui'
 import Link from 'next/link'
 import { useActionState } from 'react'
 
 import { loginAction } from '@/auth/actions'
 
-import { AuthShell, buttonClass, inputClass } from '../auth-shell'
+import { AuthField, authLinkClass, AuthMessage, AuthShell } from '../auth-shell'
 
 /**
  * Carries the requested destination into the form.
@@ -34,31 +35,80 @@ function fillCallbackFromUrl(el: HTMLInputElement | null) {
   }
 }
 
+const ERROR_ID = 'login-error'
+
 export default function LoginPage() {
   const [error, formAction, pending] = useActionState(loginAction, null)
 
   return (
-    <AuthShell title="Sign in" subtitle="Triyara Business Network Platform">
-      <form action={formAction} className="space-y-4">
+    <AuthShell
+      title="Sign in"
+      subtitle="Triyara Business Network Platform"
+      footer={
+        <>
+          <p>
+            <Link className={authLinkClass} href="/forgot-password">
+              Forgot password?
+            </Link>
+          </p>
+          {/* Registration is the thing most people arriving here actually need,
+              and until now this page offered no route to it at all - a supplier
+              who followed "Sign in" from the public site had to find their way
+              back by hand. Both sides, because we do not know which they are. */}
+          <p>
+            New to Triyara?{' '}
+            <Link className={authLinkClass} href="/register/supplier">
+              Register as a supplier
+            </Link>{' '}
+            or{' '}
+            <Link className={authLinkClass} href="/register/buyer">
+              as a buyer
+            </Link>
+            .
+          </p>
+        </>
+      }
+    >
+      <form action={formAction} className="space-y-gap-lg">
         <input type="hidden" name="callbackUrl" defaultValue="" ref={fillCallbackFromUrl} />
-        <input name="email" type="email" required placeholder="Email" className={inputClass} />
-        <input
-          name="password"
-          type="password"
-          required
-          placeholder="Password"
-          className={inputClass}
-        />
-        {error ? <p className="text-sm text-red-400">{error}</p> : null}
-        <button type="submit" disabled={pending} className={buttonClass}>
+
+        {/* `aria-describedby` and `aria-invalid` go on both controls: the server
+            answers "Invalid email or password" on purpose, without saying which,
+            so neither field can claim the failure alone. */}
+        <AuthField id="login-email" label="Email">
+          <Input
+            aria-describedby={error ? ERROR_ID : undefined}
+            autoComplete="email"
+            id="login-email"
+            invalid={Boolean(error)}
+            name="email"
+            placeholder="Email"
+            required
+            size="lg"
+            type="email"
+          />
+        </AuthField>
+
+        <AuthField id="login-password" label="Password">
+          <Input
+            aria-describedby={error ? ERROR_ID : undefined}
+            autoComplete="current-password"
+            id="login-password"
+            invalid={Boolean(error)}
+            name="password"
+            placeholder="Password"
+            required
+            size="lg"
+            type="password"
+          />
+        </AuthField>
+
+        {error ? <AuthMessage id={ERROR_ID}>{error}</AuthMessage> : null}
+
+        <Button disabled={pending} fullWidth size="lg" type="submit" variant="primary">
           {pending ? 'Signing in...' : 'Sign in'}
-        </button>
+        </Button>
       </form>
-      <p className="mt-4 text-center text-xs text-white/40">
-        <Link href="/forgot-password" className="hover:text-gold">
-          Forgot password?
-        </Link>
-      </p>
     </AuthShell>
   )
 }
