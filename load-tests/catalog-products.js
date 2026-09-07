@@ -1,7 +1,28 @@
 import http from 'k6/http'
 import { check } from 'k6'
 
-const BASE_URL = 'http://localhost:3000'
+import { login, requestHeaders } from './lib/session.js'
+
+/**
+ * The target, supplied by the environment.
+ *
+ * Deliberately no default. `http://localhost:3000` was hardcoded here, which
+ * meant this script could only ever measure a laptop - and a default naming any
+ * other host would be worse: a load generator that picks its own target when
+ * you forget to say is how the wrong environment gets hammered.
+ *
+ * Thrown from the init context, so every VU fails immediately rather than the
+ * run starting and reporting connection errors as if they were results.
+ */
+const BASE_URL = __ENV.BASE_URL
+
+if (!BASE_URL) {
+  throw new Error(
+    'BASE_URL is not set. Name the target explicitly, e.g. `k6 run ' +
+      '-e BASE_URL=https://… -e LOADTEST_EMAIL=… -e LOADTEST_PASSWORD=… ' +
+      'load-tests/catalog-products.js`.',
+  )
+}
 
 export const options = {
   vus: 50,
@@ -9,70 +30,27 @@ export const options = {
 }
 
 export function setup() {
-  // 1. Get CSRF token.
-  const csrfRes = http.get(`${BASE_URL}/api/auth/csrf`)
-
-  check(csrfRes, {
-    'CSRF status is 200': (r) => r.status === 200,
-  })
-
-  const csrfToken = csrfRes.json('csrfToken')
-
-  if (!csrfToken) {
-    throw new Error('CSRF token was not returned')
-  }
-
-  // 2. Login.
-  const loginRes = http.post(
-    `${BASE_URL}/api/auth/callback/credentials`,
-    {
-      csrfToken,
-      email: 'loadtest-readonly@triyara.test',
-      password: 'LoadTest!123456',
-      callbackUrl: `${BASE_URL}/dashboard`,
-      json: 'true',
-    },
-    {
-      redirects: 0,
-    },
-  )
-
-  console.log('LOGIN STATUS:', loginRes.status)
-  console.log('LOGIN LOCATION:', loginRes.headers.Location || '')
-
-  check(loginRes, {
-    'login returned redirect': (r) => r.status === 302 || r.status === 303,
-  })
-
-  // 3. Extract only the Auth.js session cookie.
-  // Regex avoids problems caused by commas inside Expires=... attributes.
+  // 1. Sign in, through the same helper mixed/soak/stress-ramp use.
   //
-  // The name differs by environment: development sets `authjs.session-token`,
-  // production sets `__Host-authjs.session-token`. The whole `name=value` pair
-  // is captured so the name Auth.js actually set is the one sent back - the
-  // bare name matches as a substring of the prefixed one, so rebuilding the
-  // cookie from a fixed name yields a valid value under a name production is
-  // not looking for, and every request is silently unauthenticated.
-  const setCookie = loginRes.headers['Set-Cookie'] || ''
+  // This replaces a near-identical copy of the flow that used to live here.
+  // The duplicate mattered: the helper carries the reason the WHOLE cookie
+  // `name=value` pair is captured rather than rebuilt from a fixed name -
+  // development sets `authjs.session-token`, production sets the `__Host-`
+  // prefixed one, and getting that wrong leaves every request silently
+  // unauthenticated. One copy of that subtlety is the right number.
+  //
+  // It throws on a missing CSRF token or a missing session cookie, which aborts
+  // setup rather than letting the run proceed unauthenticated - stricter than
+  // the two `check()` calls it replaces, which recorded a failure and carried on.
+  const sessionCookie = login(BASE_URL)
 
-  const match = setCookie.match(/(?:__Host-)?authjs\.session-token=[^;]+/)
-
-  if (!match) {
-    throw new Error(
-      'No Auth.js session cookie in Set-Cookie. Expected authjs.session-token ' +
-        `or __Host-authjs.session-token. Received: ${setCookie || '(empty)'}`,
-    )
-  }
-
-  const sessionCookie = match[0]
-
-  console.log('SESSION COOKIE FOUND:', sessionCookie.split('=')[0])
-
-  // 4. Verify the cookie before starting the load test.
+  // 2. Verify the cookie before starting the load test.
+  //
+  // Same headers as every other request: the session cookie AND the Vercel
+  // protection bypass. Without the bypass this would measure the SSO page,
+  // which answers 200 - so the check below would pass while proving nothing.
   const verifyRes = http.get(`${BASE_URL}/api/catalog/products?limit=25&sort=-createdAt`, {
-    headers: {
-      Cookie: sessionCookie,
-    },
+    headers: requestHeaders(BASE_URL, sessionCookie),
   })
 
   console.log('SETUP API STATUS:', verifyRes.status)
@@ -88,9 +66,7 @@ export function setup() {
 
 export default function (data) {
   const res = http.get(`${BASE_URL}/api/catalog/products?limit=25&sort=-createdAt`, {
-    headers: {
-      Cookie: data.sessionCookie,
-    },
+    headers: requestHeaders(BASE_URL, data.sessionCookie),
   })
 
   check(res, {

@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo dist",
     "test": "vitest run",
-    "db:bootstrap-admin": "tsx prisma/bootstrap-admin.ts"
+    "db:bootstrap-admin": "tsx prisma/bootstrap-admin.ts",
+    "db:seed-loadtest": "tsx prisma/seed-loadtest.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
