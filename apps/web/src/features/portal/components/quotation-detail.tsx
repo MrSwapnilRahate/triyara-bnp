@@ -1,5 +1,5 @@
 import type { BuyerQuotationDetailView } from '@triyara/core'
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, Separator } from '@triyara/ui'
+import { Badge, EmptyState, PageHeader, Separator } from '@triyara/ui'
 import Link from 'next/link'
 
 /**
@@ -15,196 +15,202 @@ import Link from 'next/link'
  * Read-only by construction. There is no control here to accept, reject or
  * negotiate an offer: those are conversations with a TRIYARA contact, not
  * buttons.
+ *
+ * Set as one document. The three sections were three bordered boxes, which made
+ * the lines, the price and the terms read as three records rather than three
+ * parts of one offer.
  */
 export function QuotationDetail({ quotation }: { quotation: BuyerQuotationDetailView }) {
   const q = quotation
 
-  return (
-    <div className="space-y-gap-lg">
-      <div className="space-y-2">
-        <Link href="/portal/quotations" className="text-sm text-content-muted hover:underline">
-          &larr; All quotations
-        </Link>
-        <h1 className="text-2xl font-semibold text-content">
-          {q.title ?? `Quotation ${q.quotationNumber}`}
-        </h1>
-        <div className="flex flex-wrap items-center gap-gap">
-          <span className="text-sm text-content-muted">
-            {q.quotationNumber} &middot; revision {q.revisionNumber}
-          </span>
-          <Badge>{humanise(q.status)}</Badge>
-          <Badge>{humanise(q.type)} offer</Badge>
-        </div>
-      </div>
+  // The price components, in the order they are shown, with the ones we do not
+  // hold already removed. Gathered before rendering so the rule above the total
+  // can be drawn only when there is something above it to rule off - with a
+  // sparsely priced offer it was drawing a line under nothing.
+  const components: Array<{ key: string; label: string; value: string; negative: boolean }> = []
+  const push = (key: string, label: string, value: string | null, negative = false) => {
+    if (value === null || Number(value) === 0) return
+    components.push({ key, label, value, negative })
+  }
 
-      <Card>
-        <CardHeader>
-          <CardTitle as="h2">What we quoted</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {q.lines.length === 0 ? (
+  push('subtotal', 'Subtotal', q.subtotal)
+  q.charges.forEach((charge, index) => {
+    push(
+      `${charge.type}-${index}`,
+      charge.label ?? humanise(charge.type),
+      charge.amount,
+      charge.isDeduction,
+    )
+  })
+  // Only when nothing was broken out line by line: otherwise the same money
+  // would be presented twice.
+  if (q.charges.length === 0) {
+    push('charges', 'Charges', q.chargesTotal)
+    push('discount', 'Discount', q.discountTotal, true)
+  }
+  push('tax', 'Tax', q.taxTotal)
+
+  return (
+    <>
+      <PageHeader
+        // The title is the buyer's own requirement wording where we carried it
+        // through, so it wraps rather than being cut off.
+        className="-mx-gutter mb-section [&_h1]:overflow-visible [&_h1]:whitespace-normal"
+        title={q.title ?? `Quotation ${q.quotationNumber}`}
+        // Only when the offer has a title of its own. Without one the heading
+        // is already `Quotation <number>`, and the chip would print the number
+        // a second time three centimetres to its right.
+        identifier={q.title ? q.quotationNumber : undefined}
+        status={
+          <>
+            <span className="text-sm text-content-muted">revision {q.revisionNumber}</span>
+            <Badge>{humanise(q.status)}</Badge>
+            <Badge>{humanise(q.type)} offer</Badge>
+          </>
+        }
+        breadcrumb={
+          <Link
+            href="/portal/quotations"
+            className="focus-ring inline-flex min-h-6 items-center text-sm text-content-muted hover:text-content"
+          >
+            &larr; All quotations
+          </Link>
+        }
+      />
+
+      <section aria-labelledby="quotation-lines">
+        <h2 id="quotation-lines" className="text-md font-semibold text-content">
+          What we quoted
+        </h2>
+        {q.lines.length === 0 ? (
+          <div className="mt-gap-lg">
             <EmptyState
               title="No lines recorded"
               description="Your TRIYARA contact can talk you through what this offer covers."
             />
-          ) : (
-            <ul className="space-y-gap">
-              {q.lines.map((line, index) => (
-                <li key={line.lineNumber} className="space-y-2">
-                  {index > 0 ? <Separator /> : null}
-                  <div className="pt-2">
-                    <div className="flex flex-wrap items-baseline justify-between gap-gap">
-                      <p className="font-medium text-content">
-                        {line.productName ?? 'Unnamed line'}
-                      </p>
-                      <p className="font-medium text-content">
-                        {formatMoney(line.lineSubtotal, q.currency)}
-                      </p>
-                    </div>
-                    <dl className="mt-2 grid gap-gap-lg sm:grid-cols-3">
-                      <Field label="Quantity">
-                        {line.quantity} {line.unit}
-                      </Field>
-                      <Field label="Unit price">{formatMoney(line.unitPrice, q.currency)}</Field>
-                      {line.leadTimeDays !== null ? (
-                        <Field label="Lead time">{line.leadTimeDays} days</Field>
-                      ) : null}
-                      {line.packaging ? <Field label="Packaging">{line.packaging}</Field> : null}
-                      {line.countryOfOrigin ? (
-                        <Field label="Origin">{line.countryOfOrigin}</Field>
-                      ) : null}
-                      {line.hsCode ? <Field label="HS code">{line.hsCode}</Field> : null}
-                      {line.requiredCertifications.length > 0 ? (
-                        <Field label="Certifications">
-                          {line.requiredCertifications.map(humanise).join(', ')}
-                        </Field>
-                      ) : null}
-                    </dl>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle as="h2">The price</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* The components are shown so the total can be checked rather than
-              taken on trust. They are all our price to the buyer; what the
-              goods cost us is not on this page and is never fetched. */}
-          <dl className="space-y-2">
-            <Amount label="Subtotal" value={q.subtotal} currency={q.currency} />
-
-            {q.charges.map((charge, index) => (
-              <Amount
-                key={`${charge.type}-${index}`}
-                label={charge.label ?? humanise(charge.type)}
-                value={charge.amount}
-                currency={q.currency}
-                negative={charge.isDeduction}
-              />
+          </div>
+        ) : (
+          <ul className="mt-gap-lg divide-y divide-line">
+            {q.lines.map((line) => (
+              <li key={line.lineNumber} className="py-gap-lg first:pt-0">
+                <div className="flex flex-wrap items-baseline justify-between gap-gap">
+                  <p className="font-medium text-content">{line.productName ?? 'Unnamed line'}</p>
+                  <p className="font-medium tabular-nums text-content">
+                    {formatMoney(line.lineSubtotal, q.currency)}
+                  </p>
+                </div>
+                <dl className="mt-gap flex flex-wrap gap-x-section gap-y-gap-lg">
+                  <Field label="Quantity">
+                    {line.quantity} {line.unit}
+                  </Field>
+                  <Field label="Unit price">{formatMoney(line.unitPrice, q.currency)}</Field>
+                  {line.leadTimeDays !== null ? (
+                    <Field label="Lead time">{line.leadTimeDays} days</Field>
+                  ) : null}
+                  {line.packaging ? <Field label="Packaging">{line.packaging}</Field> : null}
+                  {line.countryOfOrigin ? (
+                    <Field label="Origin">{line.countryOfOrigin}</Field>
+                  ) : null}
+                  {line.hsCode ? (
+                    <Field label="HS code">
+                      <span className="font-mono">{line.hsCode}</span>
+                    </Field>
+                  ) : null}
+                  {line.requiredCertifications.length > 0 ? (
+                    <Field label="Certifications">
+                      {line.requiredCertifications.map(humanise).join(', ')}
+                    </Field>
+                  ) : null}
+                </dl>
+              </li>
             ))}
+          </ul>
+        )}
+      </section>
 
-            {/* Only when nothing was broken out line by line: otherwise the
-                same money would be presented twice. */}
-            {q.charges.length === 0 ? (
-              <>
-                <Amount label="Charges" value={q.chargesTotal} currency={q.currency} />
-                <Amount label="Discount" value={q.discountTotal} currency={q.currency} negative />
-              </>
-            ) : null}
-
-            <Amount label="Tax" value={q.taxTotal} currency={q.currency} />
-          </dl>
+      <section
+        aria-labelledby="quotation-price"
+        className="mt-section border-t border-line pt-section"
+      >
+        <h2 id="quotation-price" className="text-md font-semibold text-content">
+          The price
+        </h2>
+        {/* The components are shown so the total can be checked rather than
+            taken on trust. They are all our price to the buyer; what the
+            goods cost us is not on this page and is never fetched. */}
+        <div className="ml-auto mt-gap-lg max-w-sm">
+          {components.length > 0 ? (
+            <dl className="space-y-2">
+              {components.map((c) => (
+                <div key={c.key} className="flex items-baseline justify-between">
+                  <dt className="text-sm text-content-muted">{c.label}</dt>
+                  <dd className="text-sm tabular-nums text-content">
+                    {c.negative ? '−' : ''}
+                    {formatMoney(c.value, q.currency)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
 
           {/* Outside the list above, and its own list below. A `dl` may hold
               only dt/dd groups, and a wrapper that pairs nothing is a
               violation - so the rule separates two lists rather than sitting
-              inside one. */}
-          <Separator className="my-3" />
+              inside one. Drawn only when there is a list above it. */}
+          {components.length > 0 ? <Separator className="my-3" /> : null}
 
           <dl className="flex items-baseline justify-between">
             <dt className="font-medium text-content">Total</dt>
-            <dd className="text-lg font-semibold text-content">
+            <dd className="text-lg font-semibold tabular-nums text-content">
               {q.grandTotal ? formatMoney(q.grandTotal, q.currency) : 'Pricing in progress'}
             </dd>
           </dl>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle as="h2">Terms and shipment</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid gap-gap-lg sm:grid-cols-3">
-            {q.sentAt ? <Field label="Sent">{formatDate(q.sentAt)}</Field> : null}
-            {q.validFrom ? <Field label="Valid from">{formatDate(q.validFrom)}</Field> : null}
-            {q.validUntil ? <Field label="Valid until">{formatDate(q.validUntil)}</Field> : null}
-            {/* "Accepted on" rather than "Accepted": the status badge above
-                already reads Accepted, and two identical labels on one page
-                are ambiguous to read and to announce. */}
-            {q.acceptedAt ? <Field label="Accepted on">{formatDate(q.acceptedAt)}</Field> : null}
-            {q.rejectedAt ? <Field label="Declined on">{formatDate(q.rejectedAt)}</Field> : null}
-            {q.incoterm ? (
-              <Field label="Incoterm">{[q.incoterm, q.namedPlace].filter(Boolean).join(' ')}</Field>
-            ) : null}
-            {q.destinationCountry ? (
-              <Field label="Destination">
-                {[q.destinationPort, q.destinationCountry].filter(Boolean).join(', ')}
-              </Field>
-            ) : null}
-            {q.leadTimeDays !== null ? (
-              <Field label="Lead time">{q.leadTimeDays} days</Field>
-            ) : null}
-            {q.paymentTermsText ? <Field label="Payment terms">{q.paymentTermsText}</Field> : null}
-            {q.packingSummary ? <Field label="Packing">{q.packingSummary}</Field> : null}
-            {q.samplingTerms ? <Field label="Sampling">{q.samplingTerms}</Field> : null}
-          </dl>
-        </CardContent>
-      </Card>
+      <section
+        aria-labelledby="quotation-terms"
+        className="mt-section border-t border-line pt-section"
+      >
+        <h2 id="quotation-terms" className="text-md font-semibold text-content">
+          Terms and shipment
+        </h2>
+        <dl className="mt-gap-lg flex flex-wrap gap-x-section gap-y-gap-lg">
+          {q.sentAt ? <Field label="Sent">{formatDate(q.sentAt)}</Field> : null}
+          {q.validFrom ? <Field label="Valid from">{formatDate(q.validFrom)}</Field> : null}
+          {q.validUntil ? <Field label="Valid until">{formatDate(q.validUntil)}</Field> : null}
+          {/* "Accepted on" rather than "Accepted": the status badge above
+              already reads Accepted, and two identical labels on one page
+              are ambiguous to read and to announce. */}
+          {q.acceptedAt ? <Field label="Accepted on">{formatDate(q.acceptedAt)}</Field> : null}
+          {q.rejectedAt ? <Field label="Declined on">{formatDate(q.rejectedAt)}</Field> : null}
+          {q.incoterm ? (
+            <Field label="Incoterm">{[q.incoterm, q.namedPlace].filter(Boolean).join(' ')}</Field>
+          ) : null}
+          {q.destinationCountry ? (
+            <Field label="Destination">
+              {[q.destinationPort, q.destinationCountry].filter(Boolean).join(', ')}
+            </Field>
+          ) : null}
+          {q.leadTimeDays !== null ? <Field label="Lead time">{q.leadTimeDays} days</Field> : null}
+          {q.paymentTermsText ? <Field label="Payment terms">{q.paymentTermsText}</Field> : null}
+          {q.packingSummary ? <Field label="Packing">{q.packingSummary}</Field> : null}
+          {q.samplingTerms ? <Field label="Sampling">{q.samplingTerms}</Field> : null}
+        </dl>
+      </section>
 
-      <p className="text-sm text-content-muted">
+      <p className="mt-section text-sm text-content-muted">
         Your TRIYARA contact can take you through this offer or prepare a revision.
       </p>
-    </div>
+    </>
   )
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
+    <div className="min-w-0 space-y-1">
       <dt className="text-sm text-content-muted">{label}</dt>
-      <dd className="font-medium text-content">{children}</dd>
-    </div>
-  )
-}
-
-/** One row of the price breakdown. Rendered only when we hold the figure. */
-function Amount({
-  label,
-  value,
-  currency,
-  negative = false,
-}: {
-  label: string
-  value: string | null
-  currency: string
-  negative?: boolean
-}) {
-  if (value === null || Number(value) === 0) return null
-
-  return (
-    <div className="flex items-baseline justify-between">
-      <dt className="text-sm text-content-muted">{label}</dt>
-      <dd className="text-sm text-content">
-        {negative ? '−' : ''}
-        {formatMoney(value, currency)}
-      </dd>
+      <dd className="text-base font-medium text-content">{children}</dd>
     </div>
   )
 }

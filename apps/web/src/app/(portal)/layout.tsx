@@ -32,24 +32,49 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   requireExternalAccountContext(ctx)
 
   return (
-    <div className="bg-background text-foreground min-h-screen">
+    // `bg-canvas` and `text-content`, not `bg-background`/`text-foreground`.
+    // The latter two are not colour keys in the Tailwind preset, so they
+    // produced no rule at all: the shell was transparent and inherited its text
+    // colour from the body. It looked correct only because `globals.css`
+    // already paints the body.
+    <div className="min-h-screen bg-canvas text-content">
       {/* Before the navigation, so a keyboard user reaches it on the first tab
           rather than after every link on every page. */}
       <SkipToContent />
-      <header className="border-b">
-        <div className="mx-auto max-w-3xl px-6 py-4">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold">TRIYARA Partner Portal</span>
-            <form action={logoutAction}>
+      {/* `bg-surface` so the chrome reads as chrome. A transparent header
+          separated from the page by a single hairline does not. */}
+      <header className="border-b border-line bg-surface">
+        <div className="mx-auto max-w-3xl px-gutter py-4">
+          <div className="flex items-center justify-between gap-gap-lg">
+            {/* The display face, because this is the one place the portal says
+                whose it is. No gold rule here: `PageHeader` carries the one
+                identity mark per screen, and two would make it decoration. */}
+            <span className="font-serif text-md font-semibold text-content">
+              TRIYARA Partner Portal
+            </span>
+            {/* `SignOutButton` is shared with the staff shell, where it sits
+                inside a menu and its danger tint reads as a menu item. Bare in
+                this header it was the loudest thing on every portal page, for
+                an act that is not destructive. The component takes no
+                `className`, so the portal restates the tone from outside
+                rather than editing a component the staff application also
+                uses. Behaviour, markup and accessible name are untouched. */}
+            <form
+              action={logoutAction}
+              className="[&_button:hover]:bg-transparent [&_button:hover]:text-content [&_button]:text-content-muted"
+            >
               <SignOutButton />
             </form>
           </div>
-          <div className="mt-3">
+          <div className="mt-gap-lg">
             <PortalNav />
           </div>
         </div>
       </header>
-      <main id="main-content" className="mx-auto max-w-3xl px-6 py-10">
+      {/* No top padding: each screen opens with a `PageHeader` that bleeds to
+          the edges of this column, so the header band sits flush under the
+          chrome the way it does in the staff application. */}
+      <main id="main-content" className="mx-auto max-w-3xl px-gutter pb-section-lg">
         {children}
       </main>
     </div>

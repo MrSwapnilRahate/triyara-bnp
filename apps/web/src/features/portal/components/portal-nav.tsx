@@ -13,11 +13,10 @@ import { usePathname } from 'next/navigation'
  * boundary: every href below is inside `/portal`, and `authorized()` sends any
  * internal session that reaches for one back to `/dashboard`.
  *
- * Three entries, because there are three screens. Orders, shipments, messages,
- * documents and anything supplier-shaped are absent rather than disabled - a
- * link that 404s teaches a buyer only that something exists they cannot have,
- * and the whole point of this portal is that the supplier side is not theirs to
- * reach.
+ * Four entries, because there are four screens. Orders, shipments, messages and
+ * anything supplier-shaped are absent rather than disabled - a link that 404s
+ * teaches a buyer only that something exists they cannot have, and the whole
+ * point of this portal is that the supplier side is not theirs to reach.
  *
  * No counts and no badges. A number here would need a portal-scoped read model
  * that does not exist, and the overview page already records why an invented
@@ -78,10 +77,13 @@ export function PortalNav() {
                 // `undefined` rather than `'false'`: the attribute is absent on
                 // every other item, which is what the ARIA contract asks for.
                 aria-current={active ? 'page' : undefined}
+                // `py-1` rather than `pb-1`: the row measured 22px tall, two
+                // short of the 24px minimum target. The extra padding grows the
+                // box upwards, so the underline stays where it was.
                 className={
                   active
-                    ? 'border-b-2 border-content pb-1 text-sm font-medium text-content'
-                    : 'border-b-2 border-transparent pb-1 text-sm text-content-muted hover:text-content'
+                    ? 'focus-ring inline-block border-b-2 border-content py-1 text-sm font-medium text-content'
+                    : 'focus-ring inline-block border-b-2 border-transparent py-1 text-sm text-content-muted hover:text-content'
                 }
               >
                 {item.label}

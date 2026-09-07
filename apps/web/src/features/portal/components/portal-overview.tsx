@@ -1,5 +1,5 @@
 import type { BuyerPortalSummary } from '@triyara/core'
-import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@triyara/ui'
+import { Badge, PageHeader } from '@triyara/ui'
 import Link from 'next/link'
 
 /**
@@ -33,6 +33,21 @@ export interface PortalOverviewView {
   readonly signedInAs: string
 }
 
+/**
+ * The first screen of the portal.
+ *
+ * Composed as a masthead and then a standing position, rather than a row of
+ * equal tiles. The four tiles this replaced gave a count, a count, a count and
+ * a sentence the same weight and the same box, which said that starting a new
+ * requirement is a fourth measurement and that three unequal facts are peers.
+ * On a phone it became four tall boxes holding one word and one digit each,
+ * which is a lot of scrolling to learn very little.
+ *
+ * The counts stay - they are honest and they are the way in to each page - but
+ * they are set as an index, not as figures worth reading on their own. The one
+ * thing here that can actually need a buyer's attention is
+ * `pendingRequirements`, so it is the only line allowed to qualify a row.
+ */
 export function PortalOverview({
   view,
   summary,
@@ -41,19 +56,51 @@ export function PortalOverview({
   summary: BuyerPortalSummary
 }) {
   return (
-    <div className="space-y-gap-lg">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-content">Your TRIYARA portal</h1>
-        <p className="text-content-muted">
-          You&rsquo;re signed in as {view.signedInAs}. Here is what you have with us.
-        </p>
-      </div>
+    <>
+      {/* `-mx-gutter` cancels the padding of the portal's content column, so
+          the header band runs to the column's edges the way it does under the
+          staff application's chrome. */}
+      <PageHeader
+        className="-mx-gutter mb-section"
+        title="Your TRIYARA portal"
+        description={`You’re signed in as ${view.signedInAs}. Here is what you have with us.`}
+      />
+
+      {/* Whose portal this is. It was the last thing on the page, inside a
+          card, below three counts; it is the one fact that makes the screen
+          theirs rather than anybody's. */}
+      <section aria-labelledby="portal-company" className="border-b border-line pb-gap-lg">
+        <div className="flex flex-wrap items-baseline justify-between gap-gap-lg">
+          <h2 id="portal-company" className="text-lg font-semibold text-content">
+            {view.companyName}
+          </h2>
+          <dl className="flex flex-wrap items-baseline gap-x-section gap-y-gap">
+            <div className="flex items-baseline gap-gap">
+              <dt className="text-sm text-content-muted">Account type</dt>
+              <dd>
+                <Badge>{view.partyTypeLabel}</Badge>
+              </dd>
+            </div>
+            {/* Rendered only when we actually hold a country. An empty row would
+                claim we know something about the company that we do not. */}
+            {view.country ? (
+              <div className="flex items-baseline gap-gap">
+                <dt className="text-sm text-content-muted">Country</dt>
+                {/* An ISO 3166-1 code is a reference, not prose. */}
+                <dd className="font-mono text-sm text-content">{view.country}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+      </section>
 
       {/* A way in to each page, carrying the one fact a summary can honestly
           give: how many. Every figure is counted with the same scope its page
-          uses, so a tile and the page behind it cannot disagree. */}
-      <ul className="grid gap-gap sm:grid-cols-2 lg:grid-cols-4">
-        <Tile
+          uses, so a row and the page behind it cannot disagree. Label and
+          figure sit inside one link, so a reader who lands on either has the
+          other. */}
+      <ul aria-label="What you have with us" className="divide-y divide-line">
+        <StandingRow
           href="/portal/requirements"
           label="Requirements"
           count={summary.requirements}
@@ -63,81 +110,59 @@ export function PortalOverview({
               : undefined
           }
         />
-        <Tile href="/portal/quotations" label="Quotations" count={summary.quotations} />
-        <Tile href="/portal/documents" label="Documents" count={summary.documents} />
-        <Tile
-          href="/portal/requirements/new"
-          label="New requirement"
-          action="Tell us what you need"
-        />
+        <StandingRow href="/portal/quotations" label="Quotations" count={summary.quotations} />
+        <StandingRow href="/portal/documents" label="Documents" count={summary.documents} />
       </ul>
 
-      <Card>
-        <CardHeader>
-          <CardTitle as="h2">{view.companyName}</CardTitle>
-          <CardDescription>The company this portal is showing you.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid gap-gap-lg sm:grid-cols-2">
-            <div className="space-y-1">
-              <dt className="text-sm text-content-muted">Account type</dt>
-              <dd>
-                <Badge>{view.partyTypeLabel}</Badge>
-              </dd>
-            </div>
-            {/* Rendered only when we actually hold a country. An empty row would
-                claim we know something about the company that we do not. */}
-            {view.country ? (
-              <div className="space-y-1">
-                <dt className="text-sm text-content-muted">Country</dt>
-                <dd className="font-medium text-content">{view.country}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </CardContent>
-      </Card>
+      {/* Below the rule, because it is an act rather than a standing figure. */}
+      <div className="mt-section border-t border-line pt-gap-lg">
+        <Link
+          href="/portal/requirements/new"
+          className="focus-ring inline-flex min-h-6 items-center text-md font-medium text-accent hover:text-accent-hover"
+        >
+          New requirement
+        </Link>
+        <p className="mt-gap-xs text-base text-content-muted">Tell us what you need.</p>
+      </div>
 
-      <p className="text-sm text-content-muted">
+      <p className="mt-section text-sm text-content-muted">
         Your TRIYARA contact remains the best way to reach us in the meantime.
       </p>
-    </div>
+    </>
   )
 }
 
 /**
- * One way in to a page, with the count that page will show.
+ * One line of the standing position: what it is, how many, and the page.
  *
  * A link rather than a figure on its own. A number the buyer cannot act on is
- * an interruption; the point of the tile is the page behind it.
+ * an interruption; the point of the row is the page behind it.
  */
-function Tile({
+function StandingRow({
   href,
   label,
   count,
   hint,
-  action,
 }: {
   href: string
   label: string
-  count?: number
+  count: number
   hint?: string
-  action?: string
 }) {
   return (
     <li>
       <Link
         href={href}
-        className="focus-ring block h-full rounded-md border border-line bg-surface p-gutter transition-colors hover:border-accent"
+        className="focus-ring group flex items-baseline justify-between gap-gap-lg py-gap-lg"
       >
-        <p className="text-2xs font-semibold uppercase tracking-[0.15em] text-content-subtle">
-          {label}
-        </p>
-        {action ? (
-          <p className="mt-gap-xs text-base font-medium text-content">{action}</p>
-        ) : (
-          <p className="mt-gap-xs text-2xl font-semibold text-content">{count}</p>
-        )}
-        {hint ? <p className="mt-1 text-sm text-content-muted">{hint}</p> : null}
+        <span className="text-md font-medium text-content group-hover:underline">{label}</span>
+        <span className="flex items-baseline gap-gap-lg">
+          {hint ? <span className="text-sm text-content-muted">{hint}</span> : null}
+          {/* Tabular and monospaced so the column reads as a column. */}
+          <span className="w-8 text-right font-mono text-lg tabular-nums text-content">
+            {count}
+          </span>
+        </span>
       </Link>
     </li>
   )
