@@ -19,6 +19,9 @@
 :root {
   /* ---- Typography ---- */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Marketing display only. The application is set in --font-sans throughout;
+     a serif in a data table would be a costume, not a system. */
+  --font-serif: 'Newsreader', ui-serif, Georgia, 'Times New Roman', serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* ---- Radius. Restrained: an ERP is not a consumer app. ---- */
@@ -81,6 +84,16 @@
   --accent-subtle: 214 95% 96%; /* blue-50   */
   --accent-fg: 0 0% 100%;
 
+  /* ---- Brand identity, NOT an interactive colour ----
+     Triyara's own gold, promoted out of the legacy marketing palette where it
+     had been left stranded. The division is the whole point: --accent is what
+     you can click, --brand is who this is. Gold is a rule, a mark, an active
+     indicator - never a fill. At this lightness a gold button fails contrast in
+     light mode and looks cheap in dark; as a 2px rule it reads as letterpress.
+     Both values are the existing official palette (#c9a227 / #e0c05a), not new
+     colours: the lifted one is what the brand already uses on dark. */
+  --brand: 46 68% 47%; /* #c9a227 */
+
   --success: 142 71% 33%;
   --success-subtle: 138 76% 96%;
   --success-fg: 143 64% 20%;
@@ -111,6 +124,10 @@
 [data-theme='dark'] {
   color-scheme: dark;
   --shadow-color: 0 0% 0%;
+
+  /* The brand's own lifted gold (#e0c05a) - a 47%-lightness rule disappears
+     against a 7%-lightness canvas. */
+  --brand: 46 68% 62%;
 
   --canvas: 222 47% 7%;
   --surface: 222 40% 10%;
@@ -159,6 +176,10 @@
   :root:not([data-theme]) {
     color-scheme: dark;
     --shadow-color: 0 0% 0%;
+
+    /* The brand's own lifted gold (#e0c05a) - a 47%-lightness rule disappears
+       against a 7%-lightness canvas. */
+    --brand: 46 68% 62%;
     --canvas: 222 47% 7%;
     --surface: 222 40% 10%;
     --surface-raised: 217 33% 14%;

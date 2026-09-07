@@ -32,9 +32,14 @@ export const CONTACT: {
 }
 
 export const HERO = {
-  eyebrow: 'Verified sourcing for global trade',
+  /**
+   * Sits under the gold rule, above the headline. Sentence case on purpose:
+   * this replaced an uppercase letter-spaced eyebrow, which is decoration
+   * pretending to be information. It says what the page is, and stops.
+   */
+  label: 'Export sourcing, verified',
   headline: 'Indian suppliers, verified. Buyers, matched.',
-  body: 'TRIYARA verifies export-ready Indian suppliers and connects them with buyers who need what they make. Register once — we handle the checks, the shortlisting and the paperwork.',
+  body: 'TRIYARA verifies export-ready Indian suppliers and connects them with buyers who need what they make. Register once; we handle the checks, the shortlisting and the paperwork.',
   supplierCta: 'Register as Supplier',
   buyerCta: 'Register as Buyer',
   note: 'Registration takes about two minutes. No account or password needed.',
