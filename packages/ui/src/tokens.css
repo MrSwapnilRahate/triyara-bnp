@@ -72,7 +72,14 @@
 
   --content: 222 47% 11%; /* slate-900 - primary text */
   --content-muted: 215 16% 40%; /* slate-600 - secondary text */
-  --content-subtle: 215 14% 57%; /* slate-400 - placeholders, meta */
+  /* Darkened from 57%, which measured 3.28:1 on --surface, 3.14:1 on --canvas
+     and 3.01:1 on --surface-sunken - a WCAG 1.4.3 AA failure on every light
+     background the system has, across 140 genuine text usages. 45% clears 4.5:1
+     on all three. It sits closer to --content-muted than it did, which is the
+     unavoidable consequence of the constraint: between 4.5:1 and muted's 6.1:1
+     there is only so much room, and the quietest readable grey has to live
+     inside it. */
+  --content-subtle: 215 14% 45%; /* placeholders, meta */
   --content-inverted: 0 0% 100%;
 
   --line: 214 20% 90%; /* slate-200 */
@@ -137,7 +144,10 @@
 
   --content: 210 20% 96%;
   --content-muted: 215 16% 68%;
-  --content-subtle: 215 14% 52%;
+  /* Lifted from 52%. Dark passed on --surface, --canvas and --surface-sunken,
+     but measured 4.13:1 on --surface-overlay - the menus, selects, popovers
+     and the command palette all sit on it. 57% clears 4.5:1 there too. */
+  --content-subtle: 215 14% 57%;
   --content-inverted: 222 47% 11%;
 
   --line: 215 20% 20%;
@@ -187,7 +197,8 @@
     --surface-sunken: 222 47% 8%;
     --content: 210 20% 96%;
     --content-muted: 215 16% 68%;
-    --content-subtle: 215 14% 52%;
+    /* Kept in step with the [data-theme='dark'] block above. */
+    --content-subtle: 215 14% 57%;
     --content-inverted: 222 47% 11%;
     --line: 215 20% 20%;
     --line-strong: 215 18% 28%;
