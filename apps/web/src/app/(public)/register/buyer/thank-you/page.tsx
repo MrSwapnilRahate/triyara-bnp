@@ -19,7 +19,7 @@ export default function BuyerThankYouPage() {
           aria-hidden="true"
           strokeWidth={1.5}
         />
-        <h1 className="mt-gap-lg text-md font-semibold tracking-tight text-content">Thank you.</h1>
+        <h1 className="mt-gap-lg font-serif text-xl font-semibold text-content">Thank you.</h1>
         <div className="mt-gap space-y-gap-xs text-base leading-relaxed text-content-muted">
           <p>Your enquiry has been submitted successfully.</p>
           <p>Our team will review your requirement.</p>
@@ -35,7 +35,7 @@ export default function BuyerThankYouPage() {
           </Link>
         </Button>
       </Card>
-      <p className="mt-gutter text-2xs text-content-subtle">Triyara Exports LLP</p>
+      <p className="mt-gutter text-2xs text-content-muted">Triyara Exports LLP</p>
     </div>
   )
 }

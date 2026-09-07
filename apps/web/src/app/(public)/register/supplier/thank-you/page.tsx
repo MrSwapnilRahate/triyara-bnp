@@ -19,14 +19,14 @@ export default function RegistrationThankYouPage() {
           aria-hidden="true"
           strokeWidth={1.5}
         />
-        <h1 className="mt-gap-lg text-md font-semibold tracking-tight text-content">Thank you.</h1>
+        <h1 className="mt-gap-lg font-serif text-xl font-semibold text-content">Thank you.</h1>
         <div className="mt-gap space-y-gap-xs text-base leading-relaxed text-content-muted">
           <p>Your company has been submitted successfully.</p>
           <p>Our verification team will review your application.</p>
           <p>We will contact you after verification.</p>
         </div>
       </Card>
-      <p className="mt-gutter text-2xs text-content-subtle">Triyara Exports LLP</p>
+      <p className="mt-gutter text-2xs text-content-muted">Triyara Exports LLP</p>
     </div>
   )
 }

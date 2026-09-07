@@ -2,6 +2,7 @@
 
 import { Alert, Button, Card, Progress } from '@triyara/ui'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -16,6 +17,10 @@ import {
   type BuyerPatch,
   BuyerRequirementStep,
 } from './buyer-steps'
+
+/** Footnote links under the wizard. Same treatment on both registration paths. */
+const FOOTNOTE_LINK =
+  'focus-ring rounded-xs underline underline-offset-4 transition-colors duration-fast hover:text-content'
 
 const STEPS = [
   { id: 'company', title: 'Your company', blurb: 'Who you are and where you are.' },
@@ -152,7 +157,11 @@ export function BuyerRegistrationWizard() {
     <div className="mx-auto w-full max-w-3xl space-y-gutter px-gutter py-section">
       <header className="space-y-gap">
         <div>
-          <h1 className="text-md font-semibold tracking-tight text-content sm:text-lg">
+          {/* The public site's identity mark, and its display face on the page
+              title. The form below stays in Inter: a serif label on a field is
+              a costume, and this is a form somebody has to finish. */}
+          <div aria-hidden="true" className="h-0.5 w-7 bg-brand" />
+          <h1 className="mt-gap-lg font-serif text-xl font-semibold text-content">
             Tell us what you are looking to buy
           </h1>
           <p className="mt-gap-xs text-xs text-content-muted">
@@ -252,6 +261,30 @@ export function BuyerRegistrationWizard() {
           )}
         </div>
       </Card>
+
+      {/* Under the form, not inside it: none of this changes what is submitted.
+          The cross-link exists because a supplier who followed the wrong button
+          had no way across except the browser's back button, and the legal links
+          because this page collects company details and had no route to either
+          policy. Plain links, no landmark - a footnote. */}
+      <div className="space-y-gap text-center text-2xs text-content-muted">
+        <p>
+          Registering as a supplier instead?{' '}
+          <Link className={FOOTNOTE_LINK} href="/register/supplier">
+            Register as a supplier
+          </Link>
+          .
+        </p>
+        <p>
+          <Link className={FOOTNOTE_LINK} href="/privacy">
+            Privacy
+          </Link>
+          {' · '}
+          <Link className={FOOTNOTE_LINK} href="/terms">
+            Terms
+          </Link>
+        </p>
+      </div>
     </div>
   )
 }
