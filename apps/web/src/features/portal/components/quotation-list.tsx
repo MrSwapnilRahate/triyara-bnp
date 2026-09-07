@@ -1,13 +1,5 @@
 import type { BuyerQuotationList } from '@triyara/core'
-import {
-  Badge,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-} from '@triyara/ui'
+import { Badge, EmptyState, PageHeader } from '@triyara/ui'
 import Link from 'next/link'
 
 /**
@@ -20,88 +12,87 @@ import Link from 'next/link'
  *
  * Read-only. Accepting or negotiating an offer is a conversation with a TRIYARA
  * contact, not a button here.
+ *
+ * The amount leads each row, because that is what a buyer is scanning for, and
+ * it is set in tabular figures so a column of offers lines up as a column.
  */
 export function QuotationList({ list }: { list: BuyerQuotationList }) {
   if (list.items.length === 0) {
     return (
-      <div className="space-y-gap-lg">
+      <>
         <Header />
         <EmptyState
           title="No quotations yet"
           description="When we have priced one of your requirements, the offer will appear here."
         />
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="space-y-gap-lg">
+    <>
       <Header />
 
-      <ul className="space-y-gap">
+      <ul className="divide-y divide-line">
         {list.items.map((q) => (
-          <li key={`${q.quotationNumber}-${q.revisionNumber}`}>
-            <Card>
-              <CardHeader>
-                <CardTitle as="h2">
-                  {q.grandTotal ? formatMoney(q.grandTotal, q.currency) : 'Pricing in progress'}
-                </CardTitle>
-                <CardDescription>
-                  {/* Linked by number, not id. `quotationNumber` is already on
-                      this DTO and is what the detail route matches on; the row
-                      id stays out of every buyer-facing projection. The number
-                      names a revision family rather than one row, so the detail
-                      resolves to whichever revision is currently standing. */}
-                  <Link
-                    href={`/portal/quotations/${encodeURIComponent(q.quotationNumber)}`}
-                    className="hover:underline"
-                  >
-                    {q.quotationNumber}
-                  </Link>{' '}
-                  &middot; revision {q.revisionNumber}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid gap-gap-lg sm:grid-cols-3">
-                  <Field label="Status">
-                    <Badge>{humanise(q.status)}</Badge>
-                  </Field>
-                  {q.sentAt ? <Field label="Sent">{formatDate(q.sentAt)}</Field> : null}
-                  {/* Only rendered when we actually gave the offer an expiry.
-                      An empty row would imply a deadline that does not exist. */}
-                  {q.validUntil ? (
-                    <Field label="Valid until">{formatDate(q.validUntil)}</Field>
-                  ) : null}
-                </dl>
-              </CardContent>
-            </Card>
+          <li key={`${q.quotationNumber}-${q.revisionNumber}`} className="py-gap-lg">
+            <div className="flex flex-wrap items-baseline justify-between gap-gap-lg">
+              <h2 className="text-md font-medium tabular-nums text-content">
+                {q.grandTotal ? formatMoney(q.grandTotal, q.currency) : 'Pricing in progress'}
+              </h2>
+              <p className="flex flex-wrap items-baseline gap-gap text-sm text-content-muted">
+                {/* Linked by number, not id. `quotationNumber` is already on
+                    this DTO and is what the detail route matches on; the row
+                    id stays out of every buyer-facing projection. The number
+                    names a revision family rather than one row, so the detail
+                    resolves to whichever revision is currently standing. */}
+                <Link
+                  href={`/portal/quotations/${encodeURIComponent(q.quotationNumber)}`}
+                  className="focus-ring font-mono hover:underline"
+                >
+                  {q.quotationNumber}
+                </Link>
+                <span>revision {q.revisionNumber}</span>
+              </p>
+            </div>
+            <dl className="mt-gap flex flex-wrap gap-x-section gap-y-gap">
+              <Field label="Status">
+                <Badge>{humanise(q.status)}</Badge>
+              </Field>
+              {q.sentAt ? <Field label="Sent">{formatDate(q.sentAt)}</Field> : null}
+              {/* Only rendered when we actually gave the offer an expiry.
+                  An empty row would imply a deadline that does not exist. */}
+              {q.validUntil ? <Field label="Valid until">{formatDate(q.validUntil)}</Field> : null}
+            </dl>
           </li>
         ))}
       </ul>
 
       {list.hasMore ? (
-        <p className="text-sm text-content-muted">
+        <p className="mt-gap-lg text-sm text-content-muted">
           Showing your most recent quotations. Your TRIYARA contact can give you the full history.
         </p>
       ) : null}
-    </div>
+    </>
   )
 }
 
 function Header() {
   return (
-    <div className="space-y-2">
-      <h1 className="text-2xl font-semibold text-content">Your quotations</h1>
-      <p className="text-content-muted">The offers we have prepared against your requirements.</p>
-    </div>
+    <PageHeader
+      className="-mx-gutter mb-gap-lg"
+      title="Your quotations"
+      description="The offers we have prepared against your requirements."
+    />
   )
 }
 
+/** One fact about an offer: what it is, then what it says. */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
+    <div className="flex items-baseline gap-gap">
       <dt className="text-sm text-content-muted">{label}</dt>
-      <dd className="font-medium text-content">{children}</dd>
+      <dd className="text-base font-medium text-content">{children}</dd>
     </div>
   )
 }

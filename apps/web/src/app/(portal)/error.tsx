@@ -22,9 +22,14 @@ export default function Error({ error }: { error: Error & { digest?: string } })
   useEffect(() => reportClientError(error), [error])
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-16 text-center">
-      <h2 className="text-lg font-semibold">Portal unavailable</h2>
-      <p className="text-muted-foreground mt-2 text-sm">
+    <div className="mx-auto max-w-3xl px-gutter py-section-lg text-center">
+      {/* `h1`, not `h2`. This boundary replaces the whole page, so the page had
+          no first-level heading at all while it was showing. */}
+      <h1 className="font-serif text-xl font-semibold text-content">Portal unavailable</h1>
+      {/* `text-content-muted`. `text-muted-foreground` is not a colour key in
+          the preset, so this sentence was rendering at full content contrast -
+          the muting was never applied. */}
+      <p className="mt-gap text-base text-content-muted">
         We couldn&rsquo;t open the portal for your account. Please contact your TRIYARA
         representative.
       </p>

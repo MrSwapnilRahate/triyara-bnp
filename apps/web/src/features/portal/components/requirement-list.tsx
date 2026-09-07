@@ -1,13 +1,5 @@
 import type { BuyerPendingRequirementList, BuyerRequirementList } from '@triyara/core'
-import {
-  Badge,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-} from '@triyara/ui'
+import { Badge, EmptyState, PageHeader } from '@triyara/ui'
 import Link from 'next/link'
 
 /**
@@ -21,6 +13,11 @@ import Link from 'next/link'
  * no supplier name, no awarded supplier, no sourcing status beyond the RFQ's own
  * status, because TRIYARA sits between the two and the screen must not quietly
  * stop doing so.
+ *
+ * Set as a ledger rather than a stack of cards. Seven requirements were seven
+ * identical bordered boxes on a page that is already a list of one kind of
+ * thing; the border was repeating what the spacing already said. Hairlines
+ * separate the rows and the containers are gone.
  */
 export function RequirementList({
   list,
@@ -31,95 +28,90 @@ export function RequirementList({
 }) {
   if (list.items.length === 0 && pending.items.length === 0) {
     return (
-      <div className="space-y-gap-lg">
+      <>
         <Header />
         <EmptyState
           title="No requirements yet"
           description="Tell us what you need and our sourcing team will take it from there."
         />
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="space-y-gap-lg">
+    <>
       <Header />
 
       {/* Submitted first, and newest anyway. Something the buyer sent minutes
           ago belongs above work that has been running for weeks. */}
       {pending.items.length > 0 ? (
-        <ul className="space-y-gap">
+        <ul className="divide-y divide-line border-b border-line">
           {pending.items.map((p) => (
-            <li key={p.reference}>
-              <Card>
-                <CardHeader>
-                  {/* Not a link. There is no detail page for an enquiry nobody
-                      has looked at yet, and a link to a fuller version of what
-                      they just typed would promise one. */}
-                  <CardTitle as="h2">{p.product}</CardTitle>
-                  <CardDescription>
-                    {p.reference} &middot; sent {formatDate(p.submittedAt)}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <dl className="grid gap-gap-lg sm:grid-cols-3">
-                    <Field label="Status">
-                      {/* A different variant from the RFQ badge, deliberately.
-                          These two things are at different stages and must not
-                          read as the same kind of row. */}
-                      <Badge variant="outline">Submitted — under review</Badge>
-                    </Field>
-                    <Field label="Quantity">{p.quantity}</Field>
-                  </dl>
-                </CardContent>
-              </Card>
+            <li key={p.reference} className="py-gap-lg">
+              <div className="flex flex-wrap items-baseline justify-between gap-gap-lg">
+                {/* Not a link. There is no detail page for an enquiry nobody
+                    has looked at yet, and a link to a fuller version of what
+                    they just typed would promise one. */}
+                <h2 className="text-md font-medium text-content">{p.product}</h2>
+                <p className="flex flex-wrap items-baseline gap-gap text-sm text-content-muted">
+                  <span className="font-mono">{p.reference}</span>
+                  <span>sent {formatDate(p.submittedAt)}</span>
+                </p>
+              </div>
+              <dl className="mt-gap flex flex-wrap gap-x-section gap-y-gap">
+                <Field label="Status">
+                  {/* A different variant from the RFQ badge, deliberately.
+                      These two things are at different stages and must not
+                      read as the same kind of row. */}
+                  <Badge variant="outline">Submitted — under review</Badge>
+                </Field>
+                <Field label="Quantity">{p.quantity}</Field>
+              </dl>
             </li>
           ))}
         </ul>
       ) : null}
 
-      <ul className="space-y-gap">
+      <ul className="divide-y divide-line">
         {list.items.map((r) => (
-          <li key={r.rfqNumber}>
-            <Card>
-              <CardHeader>
-                <CardTitle as="h2">
-                  {/* Linked by number, not id. `rfqNumber` is already on this
-                      DTO and is what the detail route matches on; the row id
-                      stays out of every buyer-facing projection. */}
-                  <Link
-                    href={`/portal/requirements/${encodeURIComponent(r.rfqNumber)}`}
-                    className="hover:underline"
-                  >
-                    {r.title}
-                  </Link>
-                </CardTitle>
-                <CardDescription>
-                  {r.rfqNumber} &middot; raised {formatDate(r.createdAt)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid gap-gap-lg sm:grid-cols-3">
-                  <Field label="Status">
-                    <Badge>{humanise(r.status)}</Badge>
-                  </Field>
-                  <Field label="Priority">{humanise(r.priority)}</Field>
-                  {r.quotationDeadline ? (
-                    <Field label="Quotes needed by">{formatDate(r.quotationDeadline)}</Field>
-                  ) : null}
-                  {r.destinationCountry ? (
-                    <Field label="Destination">
-                      {[r.destinationPort, r.destinationCountry].filter(Boolean).join(', ')}
-                    </Field>
-                  ) : null}
-                  {r.incoterm ? <Field label="Incoterm">{r.incoterm}</Field> : null}
-                  {r.currency ? <Field label="Currency">{r.currency}</Field> : null}
-                  {r.expectedShipmentDate ? (
-                    <Field label="Expected shipment">{formatDate(r.expectedShipmentDate)}</Field>
-                  ) : null}
-                </dl>
-              </CardContent>
-            </Card>
+          <li key={r.rfqNumber} className="py-gap-lg">
+            <div className="flex flex-wrap items-baseline justify-between gap-gap-lg">
+              <h2 className="text-md font-medium text-content">
+                {/* Linked by number, not id. `rfqNumber` is already on this
+                    DTO and is what the detail route matches on; the row id
+                    stays out of every buyer-facing projection. */}
+                <Link
+                  href={`/portal/requirements/${encodeURIComponent(r.rfqNumber)}`}
+                  className="focus-ring hover:underline"
+                >
+                  {r.title}
+                </Link>
+              </h2>
+              <p className="flex flex-wrap items-baseline gap-gap text-sm text-content-muted">
+                {/* A reference, not prose. */}
+                <span className="font-mono">{r.rfqNumber}</span>
+                <span>raised {formatDate(r.createdAt)}</span>
+              </p>
+            </div>
+            <dl className="mt-gap flex flex-wrap gap-x-section gap-y-gap">
+              <Field label="Status">
+                <Badge>{humanise(r.status)}</Badge>
+              </Field>
+              <Field label="Priority">{humanise(r.priority)}</Field>
+              {r.quotationDeadline ? (
+                <Field label="Quotes needed by">{formatDate(r.quotationDeadline)}</Field>
+              ) : null}
+              {r.destinationCountry ? (
+                <Field label="Destination">
+                  {[r.destinationPort, r.destinationCountry].filter(Boolean).join(', ')}
+                </Field>
+              ) : null}
+              {r.incoterm ? <Field label="Incoterm">{r.incoterm}</Field> : null}
+              {r.currency ? <Field label="Currency">{r.currency}</Field> : null}
+              {r.expectedShipmentDate ? (
+                <Field label="Expected shipment">{formatDate(r.expectedShipmentDate)}</Field>
+              ) : null}
+            </dl>
           </li>
         ))}
       </ul>
@@ -128,38 +120,42 @@ export function RequirementList({
           more requirements than fit should be told so rather than shown a
           silently truncated set. */}
       {list.hasMore ? (
-        <p className="text-sm text-content-muted">
+        <p className="mt-gap-lg text-sm text-content-muted">
           Showing your most recent requirements. Your TRIYARA contact can give you the full history.
         </p>
       ) : null}
-    </div>
+    </>
   )
 }
 
 function Header() {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-gap">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-content">Your requirements</h1>
-        <p className="text-content-muted">
-          What you have asked us to source, and where each one has got to.
-        </p>
-      </div>
-      <Link
-        href="/portal/requirements/new"
-        className="focus-ring text-on-accent rounded-md bg-accent px-gap py-gap-xs text-sm font-medium"
-      >
-        New requirement
-      </Link>
-    </div>
+    <PageHeader
+      className="-mx-gutter mb-gap-lg"
+      title="Your requirements"
+      description="What you have asked us to source, and where each one has got to."
+      actions={
+        // A link, not a Button: this navigates. `text-accent-fg` rather than
+        // the `text-on-accent` that was here - the latter is not a colour key
+        // in the preset, so the label was inheriting the page's near-black and
+        // sitting on saturated blue at 3.5:1.
+        <Link
+          href="/portal/requirements/new"
+          className="focus-ring rounded-md bg-accent px-gap py-gap-xs text-sm font-medium text-accent-fg hover:bg-accent-hover"
+        >
+          New requirement
+        </Link>
+      }
+    />
   )
 }
 
+/** One fact about a requirement: what it is, then what it says. */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
+    <div className="flex items-baseline gap-gap">
       <dt className="text-sm text-content-muted">{label}</dt>
-      <dd className="font-medium text-content">{children}</dd>
+      <dd className="text-base font-medium text-content">{children}</dd>
     </div>
   )
 }

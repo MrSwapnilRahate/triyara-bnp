@@ -1,6 +1,6 @@
 'use client'
 
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Textarea } from '@triyara/ui'
+import { Button, Input, PageHeader, Textarea } from '@triyara/ui'
 import Link from 'next/link'
 import { useActionState } from 'react'
 
@@ -32,29 +32,27 @@ export function RequirementForm() {
   if (state.reference) return <Submitted state={state} />
 
   return (
-    <div className="space-y-gap-lg">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-content">Tell us what you need</h1>
-        <p className="text-content-muted">
-          Send us the details and our sourcing team will come back to you. The more you can tell us,
-          the faster we can shortlist suppliers.
-        </p>
-      </div>
+    <>
+      <PageHeader
+        className="-mx-gutter mb-section"
+        title="Tell us what you need"
+        description="Send us the details and our sourcing team will come back to you. The more you can tell us, the faster we can shortlist suppliers."
+      />
 
-      <form action={formAction} className="space-y-gap-lg">
+      <form action={formAction}>
         {state.error ? (
           // `alert` so it is announced: a validation failure that only changes
           // colour is invisible to anyone not looking at that part of the page.
-          <p role="alert" className="text-sm font-medium text-danger">
+          <p role="alert" className="mb-gap-lg text-sm font-medium text-danger">
             {state.error}
           </p>
         ) : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle as="h2">The goods</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-gap-lg">
+        <section aria-labelledby="requirement-goods">
+          <h2 id="requirement-goods" className="text-md font-semibold text-content">
+            The goods
+          </h2>
+          <div className="mt-gap-lg space-y-gap-lg">
             <Field
               name="product"
               label="Product"
@@ -82,14 +80,17 @@ export function RequirementForm() {
               placeholder="25kg PP bags, printed"
               error={state.fieldErrors?.packaging}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle as="h2">Commercial terms</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-gap-lg">
+        <section
+          aria-labelledby="requirement-commercial"
+          className="mt-section border-t border-line pt-section"
+        >
+          <h2 id="requirement-commercial" className="text-md font-semibold text-content">
+            Commercial terms
+          </h2>
+          <div className="mt-gap-lg space-y-gap-lg">
             <Field
               name="targetPrice"
               label="Target price"
@@ -116,54 +117,59 @@ export function RequirementForm() {
               multiline
               error={state.fieldErrors?.requirements}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <div className="flex items-center gap-gap">
+        <div className="mt-section flex items-center gap-gap-lg">
           <Button type="submit" disabled={pending}>
             {pending ? 'Sending…' : 'Send requirement'}
           </Button>
-          <Link href="/portal/requirements" className="focus-ring text-sm text-content-muted">
+          <Link
+            href="/portal/requirements"
+            className="focus-ring inline-flex min-h-6 items-center text-sm text-content-muted hover:text-content"
+          >
             Cancel
           </Link>
         </div>
       </form>
-    </div>
+    </>
   )
 }
 
 function Submitted({ state }: { state: SubmitRequirementState }) {
   return (
-    <div className="space-y-gap-lg">
+    <>
       {/* `status` rather than `alert`: this is a successful outcome, and the
           politer live region does not interrupt what a screen reader is saying. */}
-      <div role="status" className="space-y-2">
-        <h1 className="text-2xl font-semibold text-content">
-          {state.alreadySubmitted ? 'We already have this one' : 'Thank you — we have it'}
-        </h1>
-        <p className="text-content-muted">
-          {state.alreadySubmitted
-            ? 'It looks like you sent this a moment ago, so we have not created a second copy.'
-            : 'Our sourcing team will review your requirement and come back to you.'}
+      <div role="status">
+        <PageHeader
+          className="-mx-gutter mb-section"
+          title={state.alreadySubmitted ? 'We already have this one' : 'Thank you — we have it'}
+          description={
+            state.alreadySubmitted
+              ? 'It looks like you sent this a moment ago, so we have not created a second copy.'
+              : 'Our sourcing team will review your requirement and come back to you.'
+          }
+        />
+      </div>
+
+      <div className="border-y border-line py-gap-lg">
+        <p className="text-sm text-content-muted">Your reference</p>
+        {/* The one string the buyer may need to read back to us over the
+            phone, so it is set in the face that distinguishes a 0 from an O. */}
+        <p className="mt-gap-xs font-mono text-lg font-semibold text-content">{state.reference}</p>
+        <p className="mt-gap text-sm text-content-muted">
+          Quote this if you get in touch with us about it.
         </p>
       </div>
 
-      <Card>
-        <CardContent className="space-y-gap">
-          <p className="text-2xs font-semibold uppercase tracking-[0.15em] text-content-subtle">
-            Your reference
-          </p>
-          <p className="text-xl font-semibold text-content">{state.reference}</p>
-          <p className="text-sm text-content-muted">
-            Quote this if you get in touch with us about it.
-          </p>
-        </CardContent>
-      </Card>
-
-      <Link href="/portal/requirements" className="focus-ring inline-block text-sm text-content">
+      <Link
+        href="/portal/requirements"
+        className="focus-ring mt-section inline-flex min-h-6 items-center text-base font-medium text-accent hover:text-accent-hover"
+      >
         Back to your requirements
       </Link>
-    </div>
+    </>
   )
 }
 
