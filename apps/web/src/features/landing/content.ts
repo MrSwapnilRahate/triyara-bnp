@@ -45,6 +45,20 @@ export const HERO = {
   note: 'Registration takes about two minutes. No account or password needed.',
 } as const
 
+/**
+ * Framing copy for the two-journey section.
+ *
+ * The audience labels are sentence case, not the uppercase letter-spaced form
+ * they used to carry: that treatment was removed from the hero for being
+ * decoration standing in for information, and it was no more informative here.
+ */
+export const PROCESS = {
+  heading: 'How it works',
+  body: 'Two paths into the same network. Whichever side you are on, the first step is the same form.',
+  supplier: { label: 'For suppliers', title: 'From registration to orders' },
+  buyer: { label: 'For buyers', title: 'From requirement to shipment' },
+} as const
+
 export const SUPPLIER_JOURNEY = [
   {
     title: 'Register',
@@ -82,6 +96,15 @@ export const BUYER_JOURNEY = [
   { title: 'Select your supplier', body: 'Choose, and we coordinate the order through to export.' },
 ] as const
 
+export const WHY_SECTION = { heading: 'Why TRIYARA' } as const
+
+/**
+ * Six reasons, each independent.
+ *
+ * They are not a taxonomy and no grouping is implied: every entry stands on its
+ * own, and the section renders them as six equal rows rather than inventing
+ * categories the business has not agreed.
+ */
 export const WHY = [
   {
     title: 'Verified suppliers',
@@ -108,6 +131,29 @@ export const WHY = [
     body: 'Indian manufacturing matched to buyers across the Gulf, Europe, Africa and South-East Asia.',
   },
 ] as const
+
+export const REGISTER = {
+  heading: 'Join the network',
+  /**
+   * Deliberately a reference, not a copy. The closing section says the same
+   * thing the hero says about how little registering costs a visitor, and two
+   * literals that must stay in step are two literals that eventually do not.
+   */
+  note: HERO.note,
+  supplierCta: 'Become a Supplier',
+  buyerCta: 'Become a Buyer',
+} as const
+
+export const FAQ = {
+  heading: 'Questions',
+  supplierLabel: 'For suppliers',
+  buyerLabel: 'For buyers',
+} as const
+
+export const CONTACT_SECTION = {
+  heading: 'Talk to us',
+  body: 'Questions before registering? Reach us directly; we answer in English and Hindi.',
+} as const
 
 export const SUPPLIER_FAQ = [
   {
