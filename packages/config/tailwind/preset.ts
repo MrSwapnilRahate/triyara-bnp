@@ -44,6 +44,10 @@ const preset = {
           strong: 'hsl(var(--line-strong) / <alpha-value>)',
         },
 
+        // ---- Brand identity (gold). NOT interactive: rules, marks and active
+        // indicators only. `accent` below is what a person can click. ----
+        brand: 'hsl(var(--brand) / <alpha-value>)',
+
         // ---- Brand accent (blue) ----
         accent: {
           DEFAULT: 'hsl(var(--accent) / <alpha-value>)',
@@ -103,6 +107,8 @@ const preset = {
 
       fontFamily: {
         sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Marketing display only - see --font-serif in tokens.css.
+        serif: ['var(--font-serif)', 'ui-serif', 'Georgia', 'serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
 
@@ -116,6 +122,18 @@ const preset = {
         xl: ['1.375rem', { lineHeight: '1.875rem' }], // 22 - page title
         '2xl': ['1.75rem', { lineHeight: '2.25rem' }], // 28
         '3xl': ['2.25rem', { lineHeight: '2.75rem' }], // 36
+        // The one tier above the application scale, for marketing display type.
+        //
+        // Added because the landing hero was reaching for arbitrary values
+        // (`text-[2.75rem]`) to get past `3xl`, which is a page-title size - so
+        // every future headline would either invent its own number or look
+        // undersized. Tighter leading and negative tracking because display type
+        // set at body proportions reads as a large paragraph, not a headline.
+        // 44 rather than 48: measured against the actual headline, 48px broke
+        // "Indian suppliers, verified. Buyers, matched." across three lines and
+        // orphaned the last word. 44 lets it break once, at the sentence, which
+        // is where a person would have broken it.
+        display: ['2.75rem', { lineHeight: '1.1', letterSpacing: '-0.02em' }], // 44
       },
 
       boxShadow: {

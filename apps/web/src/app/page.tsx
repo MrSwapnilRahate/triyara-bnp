@@ -6,6 +6,7 @@ import { Hero } from '@/features/landing/components/hero'
 import { Process } from '@/features/landing/components/process'
 import { RegisterCta } from '@/features/landing/components/register-cta'
 import { SiteFooter } from '@/features/landing/components/site-footer'
+import { SiteHeader } from '@/features/landing/components/site-header'
 import { Why } from '@/features/landing/components/why'
 
 export const metadata: Metadata = {
@@ -23,14 +24,17 @@ export const metadata: Metadata = {
  */
 export default function HomePage() {
   return (
-    <main>
-      <Hero />
-      <Process />
-      <Why />
-      <RegisterCta />
-      <Faq />
-      <Contact />
+    <>
+      <SiteHeader />
+      <main>
+        <Hero />
+        <Process />
+        <Why />
+        <RegisterCta />
+        <Faq />
+        <Contact />
+      </main>
       <SiteFooter />
-    </main>
+    </>
   )
 }
