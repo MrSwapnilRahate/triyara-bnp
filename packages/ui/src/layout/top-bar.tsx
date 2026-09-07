@@ -40,7 +40,10 @@ export function TopBar({
     <header
       className={cn(
         'z-sticky gap-gap-lg sticky top-0 flex h-[--topbar-height] shrink-0 items-center',
-        'border-line bg-surface/95 px-gap-lg border-b backdrop-blur',
+        // Solid, not translucent. A blurred bar over scrolling content is the
+        // clearest single tell of a template, and it costs legibility for
+        // nothing - the same reason the public site's header is solid.
+        'border-line bg-surface px-gap-lg border-b',
         className,
       )}
     >

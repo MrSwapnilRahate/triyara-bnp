@@ -21,6 +21,19 @@ export interface PageHeaderProps extends React.HTMLAttributes<HTMLElement> {
  * The standard top of every screen. Consistent placement matters more than
  * flexibility here: an approver should never hunt for the Approve button because
  * one screen put it somewhere else.
+ *
+ * WHERE THE PRODUCT SAYS WHOSE IT IS. Measured across sixteen rendered
+ * authenticated states, the application used the display face zero times and the
+ * brand gold zero times, while the public site and the sign-in screens had both.
+ * The two surfaces read as different companies. This component is where that is
+ * cheapest to correct: one gold rule and one serif title reach every screen that
+ * already uses it, and nothing else on any page changes.
+ *
+ * Restrained on purpose. The title stays at the application's own `xl`, not the
+ * marketing `display` tier - a page header is a label on a working screen, not a
+ * headline - and the gold is a 28px rule, the same mark the hero and the auth
+ * card open on. Everything below the title stays in Inter, because a serif on a
+ * field label is a costume.
  */
 export function PageHeader({
   title,
@@ -41,10 +54,15 @@ export function PageHeader({
     >
       {breadcrumb ? <div className="mb-gap">{breadcrumb}</div> : null}
 
-      <div className="gap-gap-lg flex flex-wrap items-start justify-between">
+      {/* Identity, not decoration: gold marks who this is and appears nowhere
+          else on the screen. Decorative, so it is hidden from assistive
+          technology - it carries no information a heading does not. */}
+      <div aria-hidden="true" className="bg-brand h-0.5 w-7" />
+
+      <div className="gap-gap-lg mt-gap flex flex-wrap items-start justify-between">
         <div className="min-w-0">
           <div className="gap-gap flex flex-wrap items-center">
-            <h1 className="text-content truncate text-xl font-semibold tracking-tight">{title}</h1>
+            <h1 className="text-content truncate font-serif text-xl font-semibold">{title}</h1>
             {identifier ? (
               <span className="bg-surface-sunken text-content-muted rounded-sm px-1.5 py-0.5 font-mono text-xs">
                 {identifier}
