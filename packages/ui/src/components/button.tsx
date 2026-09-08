@@ -21,7 +21,7 @@ const buttonVariants = cva(
         secondary:
           'border border-line bg-surface text-content hover:bg-surface-sunken active:bg-surface-sunken',
         ghost: 'text-content-muted hover:bg-surface-sunken hover:text-content',
-        danger: 'bg-danger text-white hover:opacity-90 active:opacity-80',
+        danger: 'bg-danger text-content-inverted hover:opacity-90 active:opacity-80',
         link: 'text-accent underline-offset-4 hover:underline',
       },
       size: {

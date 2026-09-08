@@ -114,7 +114,7 @@ export function Sidebar({
                     {item.badge && item.badge > 0 ? (
                       <span
                         className={cn(
-                          'bg-danger text-2xs rounded-full px-1.5 leading-4 font-semibold text-white',
+                          'bg-danger text-2xs text-content-inverted rounded-full px-1.5 leading-4 font-semibold',
                           collapsed && 'absolute top-1 right-1 min-w-[0.875rem] px-0.5 text-center',
                         )}
                       >
