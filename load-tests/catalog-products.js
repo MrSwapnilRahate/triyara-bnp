@@ -24,9 +24,20 @@ if (!BASE_URL) {
   )
 }
 
+const LOADTEST_VUS = Number(__ENV.LOADTEST_VUS || 50)
+const LOADTEST_DURATION = __ENV.LOADTEST_DURATION || '30s'
+
+if (!Number.isInteger(LOADTEST_VUS) || LOADTEST_VUS <= 0) {
+  throw new Error('LOADTEST_VUS must be a positive integer.')
+}
+
+if (!LOADTEST_DURATION.trim()) {
+  throw new Error('LOADTEST_DURATION must be a non-empty string.')
+}
+
 export const options = {
-  vus: 50,
-  duration: '30s',
+  vus: LOADTEST_VUS,
+  duration: LOADTEST_DURATION,
 }
 
 export function setup() {
@@ -64,12 +75,16 @@ export function setup() {
   }
 }
 
-export default function (data) {
-  const res = http.get(`${BASE_URL}/api/catalog/products?limit=25&sort=-createdAt`, {
-    headers: requestHeaders(BASE_URL, data.sessionCookie),
+export default function ({ sessionCookie }) {
+  const response = http.get(`${BASE_URL}/api/catalog/products?limit=25&sort=-createdAt`, {
+    headers: requestHeaders(BASE_URL, sessionCookie),
   })
 
-  check(res, {
+  if (response.status !== 200) {
+    console.log(`LOAD_FAIL status=${response.status} body=${response.body?.slice(0, 200)}`)
+  }
+
+  check(response, {
     'catalog products status is 200': (r) => r.status === 200,
   })
 }
