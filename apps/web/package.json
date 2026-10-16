@@ -26,7 +26,7 @@
     "@triyara/ui": "workspace:*",
     "@triyara/validation": "workspace:*",
     "lucide-react": "^1.37.0",
-    "next": "^15.5.24",
+    "next": "^15.5.27",
     "next-auth": "5.0.0-beta.32",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
