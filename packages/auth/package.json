@@ -15,7 +15,7 @@
     "clean": "rm -rf .turbo dist coverage"
   },
   "dependencies": {
-    "@casl/ability": "^6.7.2",
+    "@casl/ability": "^6.8.3",
     "@triyara/lib": "workspace:*",
     "bcryptjs": "^2.4.3"
   },
